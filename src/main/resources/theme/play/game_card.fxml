@@ -22,45 +22,50 @@
         <RowConstraints minHeight="10.0"/>
         <RowConstraints minHeight="10.0"/>
         <RowConstraints minHeight="10.0"/>
-        <RowConstraints minHeight="10.0" vgrow="SOMETIMES" />
+        <RowConstraints minHeight="10.0" vgrow="SOMETIMES"/>
     </rowConstraints>
-    <children>
-        <AnchorPane GridPane.rowSpan="2147483647" GridPane.valignment="TOP">
-            <children>
-                <ImageView fx:id="mapImageView" fitHeight="140.0" fitWidth="140.0" preserveRatio="true" />
-                <Region fx:id="lockIconLabel" layoutX="10.0" layoutY="10.0" styleClass="lock-icon,icon" AnchorPane.leftAnchor="10.0" AnchorPane.topAnchor="10.0" />
-                <VBox alignment="BOTTOM_LEFT" styleClass="image-dimmer" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0">
-                    <children>
-                        <Label fx:id="gameMapLabel" maxWidth="1.7976931348623157E308" minWidth="0.0" styleClass="card-subtitle" text="&lt;Game Map&gt;" />
-                    </children>
-                </VBox>
-            </children>
-        </AnchorPane>
-        <Label fx:id="gameTitleLabel" maxWidth="1.7976931348623157E308" minWidth="0.0" styleClass="card-title" text="&lt;Very long game title to see if wrapping works&gt;" wrapText="true" GridPane.columnIndex="1" GridPane.columnSpan="2147483647" GridPane.rowIndex="0">
-         <padding>
-            <Insets top="5.0" />
-         </padding>
-        </Label>
-        <Label fx:id="gameTypeLabel" minWidth="0.0" styleClass="card-featured-mod" text="&lt;Game Type&gt;" GridPane.columnIndex="1" GridPane.columnSpan="2147483647" GridPane.rowIndex="1" />
-          <Label fx:id="numberOfPlayersLabel" minWidth="0.0" styleClass="card-info" text="&lt;Number of Players&gt;" GridPane.columnIndex="1" GridPane.rowIndex="2">
-              <graphic>
-                  <Region styleClass="icon,players-icon" />
-              </graphic>
-          </Label>
-          <Label fx:id="avgRatingLabel" minWidth="0.0" styleClass="card-info" text="&lt;Avg&gt;" GridPane.columnIndex="2" GridPane.rowIndex="2">
-              <graphic>
-                  <Region styleClass="icon,statistics-icon" />
-              </graphic>
-          </Label>
-        <Label fx:id="hostLabel" maxHeight="1.7976931348623157E308" minWidth="0.0" styleClass="card-info" text="&lt;Host&gt;" GridPane.columnIndex="1" GridPane.rowIndex="3">
-            <graphic>
-                <Region styleClass="icon,host-icon" />
-            </graphic>
-        </Label>
-        <Label fx:id="modsLabel" maxWidth="1.7976931348623157E308" minWidth="0.0" styleClass="card-mod-list" text="&lt;Mods&gt;" wrapText="true" GridPane.columnIndex="1" GridPane.columnSpan="2147483647" GridPane.rowIndex="4" GridPane.valignment="TOP">
-            <graphic>
-                <Region styleClass="icon,mods-icon" />
-            </graphic>
-        </Label>
-    </children>
+    <AnchorPane GridPane.rowSpan="2147483647" GridPane.valignment="TOP">
+        <ImageView fx:id="mapImageView" fitHeight="140.0" fitWidth="140.0" preserveRatio="true"/>
+        <Region fx:id="lockIconLabel" layoutX="10.0" layoutY="10.0" styleClass="lock-icon,icon"
+                AnchorPane.leftAnchor="10.0" AnchorPane.topAnchor="10.0"/>
+        <VBox alignment="BOTTOM_LEFT" styleClass="image-dimmer" AnchorPane.bottomAnchor="0.0"
+              AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0">
+            <Label fx:id="gameMapLabel" maxWidth="1.7976931348623157E308" minWidth="0.0"
+                   styleClass="card-subtitle" text="&lt;Game Map&gt;"/>
+        </VBox>
+    </AnchorPane>
+    <Label fx:id="gameTitleLabel" maxWidth="1.7976931348623157E308" minWidth="0.0" styleClass="card-title"
+           text="&lt;Very long game title to see if wrapping works&gt;" wrapText="true" GridPane.columnIndex="1"
+           GridPane.columnSpan="2147483647" GridPane.rowIndex="0">
+        <padding>
+            <Insets top="5.0"/>
+        </padding>
+    </Label>
+    <Label fx:id="gameTypeLabel" minWidth="0.0" styleClass="card-featured-mod" text="&lt;Game Type&gt;"
+           GridPane.columnIndex="1" GridPane.columnSpan="2147483647" GridPane.rowIndex="1"/>
+    <Label fx:id="numberOfPlayersLabel" minWidth="0.0" styleClass="card-info" text="&lt;Number of Players&gt;"
+           GridPane.columnIndex="1" GridPane.rowIndex="2">
+        <graphic>
+            <Region styleClass="icon,players-icon"/>
+        </graphic>
+    </Label>
+    <Label fx:id="avgRatingLabel" minWidth="0.0" styleClass="card-info" text="&lt;Avg&gt;" GridPane.columnIndex="2"
+           GridPane.rowIndex="2">
+        <graphic>
+            <Region styleClass="icon,statistics-icon"/>
+        </graphic>
+    </Label>
+    <Label fx:id="hostLabel" maxHeight="1.7976931348623157E308" minWidth="0.0" styleClass="card-info"
+           text="&lt;Host&gt;" GridPane.columnIndex="1" GridPane.rowIndex="3">
+        <graphic>
+            <Region styleClass="icon,host-icon"/>
+        </graphic>
+    </Label>
+    <Label fx:id="modsLabel" maxWidth="1.7976931348623157E308" minWidth="0.0" styleClass="card-mod-list"
+           text="&lt;Mods&gt;" wrapText="true" GridPane.columnIndex="1" GridPane.columnSpan="2147483647"
+           GridPane.rowIndex="4" GridPane.valignment="TOP">
+        <graphic>
+            <Region styleClass="icon,mods-icon"/>
+        </graphic>
+    </Label>
 </GridPane>

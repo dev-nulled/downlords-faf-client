@@ -56,6 +56,7 @@ public class GameDetailController implements Controller<Pane> {
   public Label gameTitleLabel;
   public Node joinButton;
   public WatchButtonController watchButtonController;
+  public Node watchButton;
   private final ReadOnlyObjectWrapper<Game> game;
   @SuppressWarnings("FieldCanBeLocal")
   private final InvalidationListener teamsInvalidationListener;
@@ -63,7 +64,6 @@ public class GameDetailController implements Controller<Pane> {
   private final InvalidationListener gameStatusInvalidationListener;
   private final WeakInvalidationListener weakTeamListener;
   private final WeakInvalidationListener weakGameStatusListener;
-  private Node watchButton;
 
   @SuppressWarnings("FieldCanBeLocal")
   private InvalidationListener featuredModInvalidationListener;

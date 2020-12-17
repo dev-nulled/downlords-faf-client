@@ -125,7 +125,7 @@ public class OnlineReplayVaultController extends VaultEntityController<Replay> {
     searchController.addTextFilter("name", i18n.get("game.title"));
     searchController.addTextFilter("id", i18n.get("game.id"));
 
-    CategoryFilterController featuredModFilterController = uiService.loadFxml("theme/vault/search/categoryFilter.fxml");
+    CategoryFilterController featuredModFilterController = uiService.loadFxml("theme/vault/search/category_filter.fxml");
     featuredModFilterController.setTitle(i18n.get("featuredMod.displayName"));
     featuredModFilterController.setPropertyName("featuredMod.displayName");
     searchController.addFilterNode(featuredModFilterController);

@@ -35,7 +35,7 @@ public class BinaryFilterControllerTest extends AbstractPlainJavaFxTest {
   public void setUp() throws Exception {
     instance = new BinaryFilterController();
 
-    loadFxml("theme/vault/search/binaryFilter.fxml", clazz -> instance);
+    loadFxml("theme/vault/search/binary_filter.fxml", clazz -> instance);
 
     instance.setPropertyName(propertyName);
     instance.setOptions(firstLabel, firstValue, secondLabel, secondValue);

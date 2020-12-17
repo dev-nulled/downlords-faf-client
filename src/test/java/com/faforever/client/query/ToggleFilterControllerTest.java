@@ -32,7 +32,7 @@ public class ToggleFilterControllerTest extends AbstractPlainJavaFxTest {
   public void setUp() throws Exception {
     instance = new ToggleFilterController();
 
-    loadFxml("theme/vault/search/toggleFilter.fxml", clazz -> instance);
+    loadFxml("theme/vault/search/toggle_filter.fxml", clazz -> instance);
 
     instance.setPropertyName(propertyName);
     instance.setValue(value);

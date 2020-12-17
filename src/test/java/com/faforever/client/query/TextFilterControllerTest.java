@@ -32,7 +32,7 @@ public class TextFilterControllerTest extends AbstractPlainJavaFxTest {
   public void setUp() throws Exception {
     instance = new TextFilterController();
 
-    loadFxml("theme/vault/search/textFilter.fxml", clazz -> instance);
+    loadFxml("theme/vault/search/text_filter.fxml", clazz -> instance);
 
     instance.setPropertyName(propertyName);
   }

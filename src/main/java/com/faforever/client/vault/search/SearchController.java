@@ -291,7 +291,7 @@ public class SearchController implements Controller<Pane> {
   }
 
   public void addTextFilter(String propertyName, String title) {
-    TextFilterController textFilterController = uiService.loadFxml("theme/vault/search/textFilter.fxml");
+    TextFilterController textFilterController = uiService.loadFxml("theme/vault/search/text_filter.fxml");
     textFilterController.setPropertyName(propertyName);
     textFilterController.setTitle(title);
     textFilterController.setOnAction(this::onSearchButtonClicked);
@@ -299,7 +299,7 @@ public class SearchController implements Controller<Pane> {
   }
 
   public void addCategoryFilter(String propertyName, String title, List<String> items) {
-    CategoryFilterController categoryFilterController = uiService.loadFxml("theme/vault/search/categoryFilter.fxml");
+    CategoryFilterController categoryFilterController = uiService.loadFxml("theme/vault/search/category_filter.fxml");
     categoryFilterController.setPropertyName(propertyName);
     categoryFilterController.setTitle(title);
     categoryFilterController.setItems(items);
@@ -307,7 +307,7 @@ public class SearchController implements Controller<Pane> {
   }
 
   public void addCategoryFilter(String propertyName, String title, LinkedHashMap<String, String> items) {
-    CategoryFilterController categoryFilterController = uiService.loadFxml("theme/vault/search/categoryFilter.fxml");
+    CategoryFilterController categoryFilterController = uiService.loadFxml("theme/vault/search/category_filter.fxml");
     categoryFilterController.setPropertyName(propertyName);
     categoryFilterController.setTitle(title);
     categoryFilterController.setItems(items);
@@ -315,7 +315,7 @@ public class SearchController implements Controller<Pane> {
   }
 
   public void addRangeFilter(String propertyName, String title, double min, double max, double tickUnit) {
-    RangeFilterController rangeFilterController = uiService.loadFxml("theme/vault/search/rangeFilter.fxml");
+    RangeFilterController rangeFilterController = uiService.loadFxml("theme/vault/search/range_filter.fxml");
     rangeFilterController.setTitle(title);
     rangeFilterController.setPropertyName(propertyName);
     rangeFilterController.setMin(min);
@@ -327,7 +327,7 @@ public class SearchController implements Controller<Pane> {
   }
 
   public void addDateRangeFilter(String propertyName, String title, int initialYearsBefore) {
-    DateRangeFilterController dateRangeFilterController = uiService.loadFxml("theme/vault/search/dateRangeFilter.fxml");
+    DateRangeFilterController dateRangeFilterController = uiService.loadFxml("theme/vault/search/date_range_filter.fxml");
     dateRangeFilterController.setTitle(title);
     dateRangeFilterController.setPropertyName(propertyName);
     if (initialYearsBefore != 0) {
@@ -337,7 +337,7 @@ public class SearchController implements Controller<Pane> {
   }
 
   public void addToggleFilter(String propertyName, String title, String value) {
-    ToggleFilterController toggleFilterController = uiService.loadFxml("theme/vault/search/toggleFilter.fxml");
+    ToggleFilterController toggleFilterController = uiService.loadFxml("theme/vault/search/toggle_filter.fxml");
     toggleFilterController.setTitle(title);
     toggleFilterController.setPropertyName(propertyName);
     toggleFilterController.setValue(value);
@@ -345,7 +345,7 @@ public class SearchController implements Controller<Pane> {
   }
 
   public void addBinaryFilter(String propertyName, String title, String firstValue, String secondValue, String firstLabel, String secondLabel) {
-    BinaryFilterController binaryFilterController = uiService.loadFxml("theme/vault/search/binaryFilter.fxml");
+    BinaryFilterController binaryFilterController = uiService.loadFxml("theme/vault/search/binary_filter.fxml");
     binaryFilterController.setTitle(title);
     binaryFilterController.setPropertyName(propertyName);
     binaryFilterController.setOptions(firstLabel, firstValue, secondLabel, secondValue);

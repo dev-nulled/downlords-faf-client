@@ -10,24 +10,18 @@
 <Tab xmlns:fx="http://javafx.com/fxml/1" fx:id="privateChatTabRoot" xmlns="http://javafx.com/javafx/8.0.111"
      fx:controller="com.faforever.client.chat.PrivateChatTabController" styleClass="private-channel-tab">
     <VBox maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" minHeight="0.0" minWidth="0.0">
-        <children>
-            <SplitPane dividerPositions="0.8" maxWidth="1.7976931348623157E308" VBox.vgrow="ALWAYS">
-                <items>
-                    <AnchorPane>
-                        <WebView fx:id="messagesWebView" minHeight="100.0" minWidth="100.0" prefHeight="-1.0"
-                                 prefWidth="-1.0" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0"
-                                 AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0"/>
-                    </AnchorPane>
-                    <ScrollPane fx:id="gameDetailScrollPane" fitToWidth="true" maxHeight="1.7976931348623157E308"
-                                maxWidth="1.7976931348623157E308" SplitPane.resizableWithParent="false">
-                        <content>
-                            <fx:include fx:id="privateUserInfo" source="private_user_info.fxml"/>
-                        </content>
-                    </ScrollPane>
-                </items>
-            </SplitPane>
-            <TextField fx:id="messageTextField" maxWidth="1.7976931348623157E308" onAction="#onSendMessage"
-                          promptText="%chat.messagePrompt"/>
-        </children>
+        <SplitPane dividerPositions="0.8" maxWidth="1.7976931348623157E308" VBox.vgrow="ALWAYS">
+            <AnchorPane>
+                <WebView fx:id="messagesWebView" minHeight="100.0" minWidth="100.0" prefHeight="-1.0"
+                         prefWidth="-1.0" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0"
+                         AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0"/>
+            </AnchorPane>
+            <ScrollPane fx:id="gameDetailScrollPane" fitToWidth="true" maxHeight="1.7976931348623157E308"
+                        maxWidth="1.7976931348623157E308" SplitPane.resizableWithParent="false">
+                <fx:include fx:id="privateUserInfo" source="private_user_info.fxml"/>
+            </ScrollPane>
+        </SplitPane>
+        <TextField fx:id="messageTextField" maxWidth="1.7976931348623157E308" onAction="#onSendMessage"
+                   promptText="%chat.messagePrompt"/>
     </VBox>
 </Tab>

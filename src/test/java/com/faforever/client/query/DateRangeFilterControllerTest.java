@@ -45,7 +45,7 @@ public class DateRangeFilterControllerTest extends AbstractPlainJavaFxTest {
   public void setUp() throws Exception {
     instance = new DateRangeFilterController(i18n, timeService);
 
-    loadFxml("theme/vault/search/dateRangeFilter.fxml", clazz -> instance);
+    loadFxml("theme/vault/search/date_range_filter.fxml", clazz -> instance);
 
     instance.setPropertyName(propertyName);
   }
