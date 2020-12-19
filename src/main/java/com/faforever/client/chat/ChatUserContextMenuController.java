@@ -338,9 +338,8 @@ public class ChatUserContextMenuController implements Controller<ContextMenu> {
     actionEvent.consume();
     Alert<?> dialog = new Alert<>(getRoot().getOwnerWindow());
 
-    BanDialogController controller = uiService.<BanDialogController>loadFxml("theme/moderator/ban_dialog.fxml")
-        .setPlayer(getPlayer())
-        .setCloseListener(dialog::close);
+    BanDialogController controller = uiService.loadFxml("theme/moderator/ban_dialog.fxml");
+    controller.setPlayer(getPlayer()).setCloseListener(dialog::close);
 
     dialog.setContent(controller.getDialogLayout());
     dialog.setAnimation(AlertAnimation.TOP_ANIMATION);

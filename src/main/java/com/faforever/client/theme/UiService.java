@@ -5,6 +5,8 @@ import ch.micheljung.waitomo.WaitomoTheme;
 import com.faforever.client.config.CacheNames;
 import com.faforever.client.fx.Controller;
 import com.faforever.client.fx.JavaFxUtil;
+import com.faforever.client.fxml.FxObject;
+import com.faforever.client.fxml.utils.StringUtils;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.preferences.PreferencesService;
 import com.faforever.client.ui.dialog.Dialog;
@@ -48,6 +50,8 @@ import java.io.Reader;
 import java.lang.invoke.MethodHandles;
 import java.lang.ref.Reference;
 import java.lang.ref.WeakReference;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
 import java.nio.file.ClosedWatchServiceException;
 import java.nio.file.DirectoryStream;
@@ -114,15 +118,13 @@ public class UiService implements InitializingBean, DisposableBean {
   public static final String CYBRAN_STYLE_CLASS = "cybran-icon";
   public static final String SERAPHIM_STYLE_CLASS = "seraphim-icon";
   public static final String UEF_STYLE_CLASS = "uef-icon";
-
-  public static Theme DEFAULT_THEME = new Theme("Default", "Downlord", 1, "1");
-
   private static final Logger logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
   /**
    * This value needs to be updated whenever theme-breaking changes were made to the client.
    */
   private static final int THEME_VERSION = 1;
   private static final String METADATA_FILE_NAME = "theme.properties";
+  public static Theme DEFAULT_THEME = new Theme("Default", "Downlord", 1, "1");
   private final Set<Scene> scenes;
   private final Set<WeakReference<WebView>> webViews;
 
@@ -132,12 +134,11 @@ public class UiService implements InitializingBean, DisposableBean {
   private final MessageSource messageSource;
   private final ApplicationContext applicationContext;
   private final I18n i18n;
-
-  private WatchService watchService;
   private final ObservableMap<String, Theme> themesByFolderName;
   private final Map<Theme, String> folderNamesByTheme;
   private final Map<Path, WatchKey> watchKeys;
   private final ObjectProperty<Theme> currentTheme;
+  private WatchService watchService;
   private Path currentTempStyleSheet;
   private MessageSourceResourceBundle resources;
 
@@ -415,6 +416,20 @@ public class UiService implements InitializingBean, DisposableBean {
    * context, so its scope (which should always be "prototype") depends on the bean definition.
    */
   public <T extends Controller<?>> T loadFxml(String relativePath) {
+    Class<FxObject<? extends Controller<?>>> javaClass = fxmlToJavaClass(relativePath);
+    if (javaClass != null) {
+      Constructor<?> constructor = javaClass.getConstructors()[0];
+      Class<?>[] parameterTypes = constructor.getParameterTypes();
+      Object[] parameters = new Object[parameterTypes.length];
+      for (int i = 0; i < parameterTypes.length; i++) {
+        parameters[i] = applicationContext.getBean(parameterTypes[i]);
+      }
+      try {
+        return ((FxObject<T>) constructor.newInstance(parameters)).getController();
+      } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
+        logger.warn("Failed to load compiled FXML", e);
+      }
+    }
     FXMLLoader loader = new FXMLLoader();
     loader.setControllerFactory(applicationContext::getBean);
     loader.setLocation(getThemeFileUrl(relativePath));
@@ -431,6 +446,15 @@ public class UiService implements InitializingBean, DisposableBean {
     loader.setResources(resources);
     noCatch((NoCatchRunnable) loader::load);
     return loader.getController();
+  }
+
+  private <T extends FxObject<? extends Controller<?>>> Class<T> fxmlToJavaClass(String relativePath) {
+    Path path = Path.of(relativePath);
+    try {
+      return (Class<T>) ClassLoader.getSystemClassLoader().loadClass("com.faforever.client.fxml.compiled.Fx" + StringUtils.snakeToCapitalize(path.getFileName().toString().replace(".fxml", "")));
+    } catch (ClassNotFoundException e) {
+      return null;
+    }
   }
 
   private Path getThemeDirectory(Theme theme) {
