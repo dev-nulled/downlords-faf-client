@@ -425,7 +425,7 @@ public class UiService implements InitializingBean, DisposableBean {
         parameters[i] = applicationContext.getBean(parameterTypes[i]);
       }
       try {
-        return ((FxObject<T>) constructor.newInstance(parameters)).getController();
+        return ((FxObject<T>) constructor.newInstance(parameters)).controller;
       } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
         logger.warn("Failed to load compiled FXML", e);
       }
