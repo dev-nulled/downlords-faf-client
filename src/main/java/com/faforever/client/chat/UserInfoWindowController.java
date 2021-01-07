@@ -193,7 +193,7 @@ public class UserInfoWindowController implements Controller<Node> {
     Platform.runLater(children::clear);
 
     achievementDefinitions.forEach(achievementDefinition -> {
-      AchievementItemController controller = uiService.loadFxml("theme/achievement_item.fxml");
+      AchievementItemController controller = uiService.loadFxml("theme/achievements/achievement_item.fxml");
       controller.setAchievementDefinition(achievementDefinition);
       achievementDefinitionById.put(achievementDefinition.getId(), achievementDefinition);
       achievementItemById.put(achievementDefinition.getId(), controller);

@@ -10,11 +10,12 @@ import com.faforever.client.preferences.PreferencesService;
 import com.faforever.client.task.TaskService;
 import com.faforever.client.user.event.LoggedInEvent;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.eventbus.EventBus;
+import com.google.common.eventbus.Subscribe;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.context.annotation.Profile;
-import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -44,6 +45,7 @@ public class ClientUpdateServiceImpl implements ClientUpdateService {
   private final PlatformService platformService;
   private final ApplicationContext applicationContext;
   private final PreferencesService preferencesService;
+  private final EventBus eventBus;
 
   private final CompletableFuture<UpdateInfo> updateInfoFuture;
   private final CompletableFuture<UpdateInfo> updateInfoBetaFuture;
@@ -63,13 +65,15 @@ public class ClientUpdateServiceImpl implements ClientUpdateService {
       I18n i18n,
       PlatformService platformService,
       ApplicationContext applicationContext,
-      PreferencesService preferencesService) {
+      PreferencesService preferencesService,
+      EventBus eventBus) {
     this.taskService = taskService;
     this.notificationService = notificationService;
     this.i18n = i18n;
     this.platformService = platformService;
     this.applicationContext = applicationContext;
     this.preferencesService = preferencesService;
+    this.eventBus = eventBus;
 
     currentVersion = defaultString(Version.getCurrentVersion(), DEVELOPMENT_VERSION_STRING);
     log.info("Current version: {}", currentVersion);
@@ -79,6 +83,11 @@ public class ClientUpdateServiceImpl implements ClientUpdateService {
 
     CheckForBetaUpdateTask betaTask = applicationContext.getBean(CheckForBetaUpdateTask.class);
     this.updateInfoBetaFuture = taskService.submitTask(betaTask).getFuture();
+  }
+
+  @Override
+  public void afterPropertiesSet() {
+    eventBus.register(this);
   }
 
   /**
@@ -98,7 +107,7 @@ public class ClientUpdateServiceImpl implements ClientUpdateService {
     }
   }
 
-  @EventListener
+  @Subscribe
   public void onLoggedInEvent(LoggedInEvent loggedInEvent) {
     checkForUpdateInBackground();
   }
@@ -182,5 +191,10 @@ public class ClientUpdateServiceImpl implements ClientUpdateService {
         });
 
     return task;
+  }
+
+  @Override
+  public void destroy() {
+    //empty
   }
 }

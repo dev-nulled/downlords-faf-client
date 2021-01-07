@@ -14,6 +14,10 @@ import java.util.concurrent.CompletableFuture;
 public class MockClientUpdateService implements ClientUpdateService {
 
   @Override
+  public void afterPropertiesSet() {
+  }
+
+  @Override
   public CompletableFuture<UpdateInfo> getNewestUpdate() {
     return CompletableFuture.completedFuture(null);
   }
@@ -31,5 +35,10 @@ public class MockClientUpdateService implements ClientUpdateService {
   @Override
   public DownloadUpdateTask downloadAndInstallInBackground(UpdateInfo updateInfo) {
     return null;
+  }
+
+  @Override
+  public void destroy() {
+
   }
 }

@@ -27,6 +27,7 @@ public class ReplayController extends AbstractViewController<Node> {
   public LocalReplayVaultController localReplayVaultController;
   public Tab onlineReplayVaultTab;
   public Tab localReplayVaultTab;
+  public Tab liveReplayVaultTab;
   private boolean isHandlingEvent;
   private AbstractViewController<?> lastTabController;
   private Tab lastTab;

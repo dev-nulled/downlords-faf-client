@@ -77,7 +77,7 @@ public class UserInfoWindowControllerTest extends AbstractPlainJavaFxTest {
     instance = new UserInfoWindowController(statisticsService, countryFlagService, achievementService, eventService,
         i18n, uiService, timeService, playerService, notificationService, leaderboardService);
 
-    when(uiService.loadFxml("theme/achievement_item.fxml")).thenReturn(achievementItemController);
+    when(uiService.loadFxml("theme/achievements/achievement_item.fxml")).thenReturn(achievementItemController);
     when(achievementItemController.getRoot()).thenReturn(new HBox());
     when(playerService.getPlayersByIds(any())).thenReturn(CompletableFuture.completedFuture(Collections.emptyList()));
     when(leaderboardService.getEntryForPlayer(eq(PLAYER_ID))).thenReturn(CompletableFuture.completedFuture(new LeaderboardEntry()));
@@ -94,7 +94,7 @@ public class UserInfoWindowControllerTest extends AbstractPlainJavaFxTest {
     when(achievementService.getAchievementDefinitions()).thenReturn(CompletableFuture.completedFuture(singletonList(
         AchievementDefinitionBuilder.create().defaultValues().get()
     )));
-    when(uiService.loadFxml("theme/achievement_item.fxml")).thenReturn(achievementItemController);
+    when(uiService.loadFxml("theme/achievements/achievement_item.fxml")).thenReturn(achievementItemController);
     when(achievementService.getPlayerAchievements(PLAYER_ID)).thenReturn(CompletableFuture.completedFuture(
         singletonList(PlayerAchievementBuilder.create().defaultValues().get())
     ));
@@ -121,7 +121,7 @@ public class UserInfoWindowControllerTest extends AbstractPlainJavaFxTest {
         AchievementDefinitionBuilder.create().id("foo-bar").get(),
         AchievementDefinitionBuilder.create().defaultValues().get()
     )));
-    when(uiService.loadFxml("theme/achievement_item.fxml")).thenReturn(achievementItemController);
+    when(uiService.loadFxml("theme/achievements/achievement_item.fxml")).thenReturn(achievementItemController);
     when(achievementService.getPlayerAchievements(PLAYER_ID)).thenReturn(CompletableFuture.completedFuture(asList(
         PlayerAchievementBuilder.create().defaultValues().achievementId("foo-bar").state(AchievementState.UNLOCKED).get(),
         PlayerAchievementBuilder.create().defaultValues().get()

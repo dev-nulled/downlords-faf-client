@@ -2,26 +2,33 @@ package com.faforever.client.discord;
 
 import com.faforever.client.config.ClientProperties;
 import com.faforever.client.fx.PlatformService;
+import com.google.common.eventbus.EventBus;
+import com.google.common.eventbus.Subscribe;
 import com.sun.jna.Platform;
 import com.sun.jna.platform.win32.Advapi32Util;
 import com.sun.jna.platform.win32.WinReg;
-import lombok.RequiredArgsConstructor;
-import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 
 @Component
-@RequiredArgsConstructor
 public class JoinDiscordEventHandler {
 
   private static final String COMMAND_KEY = "Discord\\shell\\open\\command";
 
   private final ClientProperties clientProperties;
   private final PlatformService platformService;
+  private final EventBus eventBus;
 
-  @EventListener(value = JoinDiscordEvent.class)
-  public void onJoin() throws IOException {
+  public JoinDiscordEventHandler(ClientProperties clientProperties, PlatformService platformService, EventBus eventBus) {
+    this.clientProperties = clientProperties;
+    this.platformService = platformService;
+    this.eventBus = eventBus;
+    eventBus.register(this);
+  }
+
+  @Subscribe
+  public void onJoin(JoinDiscordEvent joinDiscordEvent) throws IOException {
     String joinUrl = clientProperties.getDiscord().getJoinUrl();
     if (canJoinViaDiscord()) {
       joinViaDiscord(joinUrl);
