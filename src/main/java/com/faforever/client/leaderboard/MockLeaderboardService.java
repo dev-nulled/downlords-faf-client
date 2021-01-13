@@ -47,7 +47,7 @@ public class MockLeaderboardService implements LeaderboardService {
   }
 
   @Override
-  public CompletableFuture<List<Division>> getDivisions(LeaderboardController.League leagueType) {
+  public CompletableFuture<List<Division>> getDivisions(String leagueTechnicalName) {
     return CompletableFuture.completedFuture(Collections.emptyList());
   }
 
@@ -72,8 +72,8 @@ public class MockLeaderboardService implements LeaderboardService {
   }
 
   @Override
-  public CompletableFuture<LeagueEntry> getLeagueEntryForPlayer(int playerId, LeaderboardController.League leagueType) {
-    return null;
+  public CompletableFuture<LeagueEntry> getLeagueEntryForPlayer(int playerId, String leagueTechnicalName) {
+    return CompletableFuture.completedFuture(null);
   }
 
   @Override

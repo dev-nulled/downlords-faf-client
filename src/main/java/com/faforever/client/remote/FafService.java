@@ -305,8 +305,8 @@ public class FafService {
   }
 
   @Async
-  public CompletableFuture<List<Division>> getDivisions(String leagueType) {
-    return CompletableFuture.completedFuture(fafApiAccessor.getDivisions(leagueType));
+  public CompletableFuture<List<Division>> getDivisions(String leagueTechnicalName) {
+    return CompletableFuture.completedFuture(fafApiAccessor.getDivisions(leagueTechnicalName));
   }
 
   @Async

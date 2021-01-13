@@ -97,7 +97,7 @@ public class LeaderboardServiceImpl implements LeaderboardService {
   }
 
   @Override
-  public CompletableFuture<LeagueEntry> getLeagueEntryForPlayer(int playerId, LeaderboardController.League leagueType) {
+  public CompletableFuture<LeagueEntry> getLeagueEntryForPlayer(int playerId, String leagueTechnicalName) {
     LeagueEntry entry = new LeagueEntry();
     entry.setSubDivisionIndex(4);
     entry.setMajorDivisionIndex(2);
@@ -110,7 +110,7 @@ public class LeaderboardServiceImpl implements LeaderboardService {
       return CompletableFuture.failedFuture(noEntry);
     else
       return CompletableFuture.completedFuture(entry);
-    //return fafService.getLeagueEntryForPlayer(playerId, leagueType.toString());
+    //return fafService.getLeagueEntryForPlayer(playerId, leagueTechnicalName);
   }
 
   @Override
@@ -119,21 +119,21 @@ public class LeaderboardServiceImpl implements LeaderboardService {
   }
 
   @Override
-  public CompletableFuture<List<Division>> getDivisions(LeaderboardController.League leagueType) {
+  public CompletableFuture<List<Division>> getDivisions(String leagueTechnicalName) {
     DivisionName[] subnames = {V, IV, III, II, I};
     DivisionName[] majornames = {BRONZE, SILVER, GOLD, DIAMOND, MASTER};
     List<Division> divisions = new LinkedList<Division>();
     for (int k=1; k<6; k++) {
       for (int i=1; i<6; i++) {
-        Division div = new Division(1, k, i, majornames[k-1], subnames[i-1], 10, leagueType);
+        Division div = new Division(1, k, i, majornames[k-1], subnames[i-1], 10);
         //if (k!=5 || i!=5)
         divisions.add(div);
       }
     }
-    Division div2 = new Division(1, 6, 1, COMMANDER, NONE, 10, leagueType);
+    Division div2 = new Division(1, 6, 1, COMMANDER, NONE, 10);
     divisions.add(div2);
     return CompletableFuture.completedFuture(divisions);
-    //return fafService.getDivisions(leagueType.toString());
+    //return fafService.getDivisions(leagueTechnicalName);
   }
 
   @Override

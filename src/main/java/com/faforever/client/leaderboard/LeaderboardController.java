@@ -73,7 +73,7 @@ public class LeaderboardController extends AbstractViewController<Node> {
   public TabPane subDivisionTabPane;
   public ImageView playerDivisionImageView;
   public CategoryAxis rankNumber;
-  private League leagueType;
+  private String leagueTechnicalName;
   private InvalidationListener playerLeagueScoreListener;
 
   @Override
@@ -126,7 +126,7 @@ public class LeaderboardController extends AbstractViewController<Node> {
 
   private void searchInAllDivisions(String searchText) {
     playerService.getPlayerForUsername(searchText).ifPresent(player -> {
-      leaderboardService.getLeagueEntryForPlayer(player.getId(), leagueType).thenAccept(leaderboardEntry -> {
+      leaderboardService.getLeagueEntryForPlayer(player.getId(), leagueTechnicalName).thenAccept(leaderboardEntry -> {
         majorDivisionPicker.getItems().stream()
             .filter(item -> item.getMajorDivisionIndex() == leaderboardEntry.getMajorDivisionIndex())
             .findFirst().ifPresent(item -> majorDivisionPicker.getSelectionModel().select(item));
@@ -144,10 +144,10 @@ public class LeaderboardController extends AbstractViewController<Node> {
 
   @Override
   protected void onDisplay(NavigateEvent navigateEvent) {
-    Assert.checkNullIllegalState(leagueType, "leagueType must not be null");
+    Assert.checkNullIllegalState(leagueTechnicalName, "leagueName must not be null");
 
     contentPane.setVisible(false);
-    leaderboardService.getDivisions(leagueType).thenAccept(divisions -> Platform.runLater(() -> {
+    leaderboardService.getDivisions(leagueTechnicalName).thenAccept(divisions -> Platform.runLater(() -> {
       majorDivisionPicker.getItems().clear();
 
       majorDivisionPicker.getItems().addAll(
@@ -165,8 +165,8 @@ public class LeaderboardController extends AbstractViewController<Node> {
     return leaderboardRoot;
   }
 
-  public void setLeagueType(League leagueType) {
-    this.leagueType = leagueType;
+  public void setLeagueTechnicalName(String leagueTechnicalName) {
+    this.leagueTechnicalName = leagueTechnicalName;
   }
 
   private void setCurrentPlayer(Player player) {
@@ -179,8 +179,8 @@ public class LeaderboardController extends AbstractViewController<Node> {
 
   private void updateStats(Player player) {
 
-    leaderboardService.getLeagueEntryForPlayer(player.getId(), leagueType).thenAccept(leaderboardEntry -> Platform.runLater(() -> {
-      leaderboardService.getDivisions(leagueType).thenAccept(divisions -> {
+    leaderboardService.getLeagueEntryForPlayer(player.getId(), leagueTechnicalName).thenAccept(leaderboardEntry -> Platform.runLater(() -> {
+      leaderboardService.getDivisions(leagueTechnicalName).thenAccept(divisions -> {
         divisions.forEach(division -> {
           if (division.getMajorDivisionIndex() == leaderboardEntry.getMajorDivisionIndex()
               && division.getSubDivisionIndex() == leaderboardEntry.getSubDivisionIndex()) {
@@ -304,7 +304,7 @@ public class LeaderboardController extends AbstractViewController<Node> {
 
   public void onMajorDivisionChanged(ActionEvent actionEvent) {
     subDivisionTabPane.getTabs().clear();
-    leaderboardService.getDivisions(leagueType).thenAccept(divisions ->
+    leaderboardService.getDivisions(leagueTechnicalName).thenAccept(divisions ->
       divisions.stream()
           .filter(division -> division.getMajorDivisionIndex() == majorDivisionPicker.getValue().getMajorDivisionIndex())
           .forEach(division -> {
@@ -318,9 +318,5 @@ public class LeaderboardController extends AbstractViewController<Node> {
     Platform.runLater(() -> subDivisionTabPane.setTabMinWidth(subDivisionTabPane.getWidth() / subDivisionTabPane.getTabs().size() - 45.0));
     Platform.runLater(() -> subDivisionTabPane.setTabMaxWidth(subDivisionTabPane.getWidth() / subDivisionTabPane.getTabs().size() - 45.0));
     // Todo: sometimes when starting the client the tabs have no text and still have default width
-  }
-  
-  public enum League {
-    RANKED1V1, RANKED2V2, TEAM;
   }
 }

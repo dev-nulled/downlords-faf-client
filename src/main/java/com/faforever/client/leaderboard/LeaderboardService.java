@@ -20,13 +20,13 @@ public interface LeaderboardService {
 
   CompletableFuture<List<RatingStat>> getLeaderboardStats(String leaderboardTechnicalName);
 
-  CompletableFuture<LeagueEntry> getLeagueEntryForPlayer(int playerId, LeaderboardController.League leagueType);
+  CompletableFuture<LeagueEntry> getLeagueEntryForPlayer(int playerId, String leagueTechnicalName);
 
   CompletableFuture<List<LeagueEntry>> getEntries(Division division);
 
   CompletableFuture<List<DivisionStat>> getDivisionStats();
 
-  CompletableFuture<List<Division>> getDivisions(LeaderboardController.League leagueType);
+  CompletableFuture<List<Division>> getDivisions(String leagueTechnicalName);
 
   CompletableFuture<List<LeagueEntry>> getDivisionEntries(Division division);
 }

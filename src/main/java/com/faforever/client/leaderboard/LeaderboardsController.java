@@ -1,7 +1,6 @@
 package com.faforever.client.leaderboard;
 
 import com.faforever.client.fx.AbstractViewController;
-import com.faforever.client.leaderboard.LeaderboardController.League;
 import com.faforever.client.main.event.NavigateEvent;
 import com.faforever.client.main.event.OpenRanked1v1LeaderboardEvent;
 import com.faforever.client.main.event.OpenRanked2v2LeaderboardEvent;
@@ -44,9 +43,9 @@ public class LeaderboardsController extends AbstractViewController<Node> {
   public void initialize() {
     lastTab = ranked1v1LeaderboardTab;
     lastTabController = ranked1v1LeaderboardController;
-    ranked1v1LeaderboardController.setLeagueType(League.RANKED1V1);
-    ranked2v2LeaderboardController.setLeagueType(League.RANKED2V2);
-    teamLeaderboardController.setLeagueType(League.TEAM);
+    ranked1v1LeaderboardController.setLeagueTechnicalName("RANKED1V1");
+    ranked2v2LeaderboardController.setLeagueTechnicalName("RANKED2V2");
+    teamLeaderboardController.setLeagueTechnicalName("TEAM");
 
     leaderboardRoot.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> {
       if (isHandlingEvent) {
