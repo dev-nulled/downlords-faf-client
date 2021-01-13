@@ -46,7 +46,7 @@ public class LeaderboardServiceImpl implements LeaderboardService {
   }
 
   @Override
-  public CompletableFuture<List<DivisionStat>> getDivisionStats() {
+  public CompletableFuture<List<DivisionStat>> getDivisionStats(String leagueTechnicalName) {
 //    return getDivisions().thenAccept(divisions -> {
 //      divisions.stream().map(division ->
 //          fafService.getLeagueLeaderboard(division).thenApply(this::toDivisionStats))

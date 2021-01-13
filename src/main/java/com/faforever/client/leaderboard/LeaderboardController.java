@@ -252,7 +252,7 @@ public class LeaderboardController extends AbstractViewController<Node> {
           }).collect(Collectors.toList()));
       Platform.runLater(() -> ratingDistributionChart.getData().add(series));
     });
-    leaderboardService.getDivisionStats()
+    leaderboardService.getDivisionStats(leagueTechnicalName)
         .thenAccept(divisionStats -> {
           int totalPlayers = 0;
           for (DivisionStat entry : divisionStats) {

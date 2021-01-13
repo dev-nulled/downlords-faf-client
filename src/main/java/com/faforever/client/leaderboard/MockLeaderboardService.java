@@ -55,7 +55,7 @@ public class MockLeaderboardService implements LeaderboardService {
   }
 
   @Override
-  public CompletableFuture<List<DivisionStat>> getDivisionStats() {
+  public CompletableFuture<List<DivisionStat>> getDivisionStats(String leagueTechnicalName) {
     return CompletableFuture.completedFuture(Collections.emptyList());
   }
 
