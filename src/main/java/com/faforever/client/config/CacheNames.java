@@ -12,6 +12,7 @@ public final class CacheNames {
   public static final String ACHIEVEMENTS = "achievements";
   public static final String MODS = "mods";
   public static final String LEADERBOARD = "Leaderboard";
+  public static final String LEAGUE = "League";
   public static final String LADDER_1V1_LEADERBOARD = "ladder1v1Leaderboard";
   public static final String GLOBAL_LEADERBOARD = "globalLeaderboard";
   public static final String MAPS = "maps";

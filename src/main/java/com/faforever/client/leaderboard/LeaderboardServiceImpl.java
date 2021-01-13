@@ -2,7 +2,6 @@ package com.faforever.client.leaderboard;
 
 import com.faforever.client.FafClientApplication;
 import com.faforever.client.api.dto.DivisionName;
-import com.faforever.client.leaderboard.LeaderboardController.League;
 import com.faforever.client.remote.FafService;
 import com.faforever.client.util.RatingUtil;
 import com.faforever.client.util.Tuple;
@@ -44,6 +43,11 @@ public class LeaderboardServiceImpl implements LeaderboardService {
     return fafService.getLeaderboards();
   }
 
+  @Override
+  public CompletableFuture<List<League>> getLeagues() {
+    return fafService.getLeagues();
+  }
+
   public CompletableFuture<List<LeaderboardEntry>> getEntries(Leaderboard leaderboard) {
     return fafService.getAllLeaderboardEntries(leaderboard.getTechnicalName());
   }
@@ -79,7 +83,7 @@ public class LeaderboardServiceImpl implements LeaderboardService {
         .collect(Collectors.toList());
   }
 
-  private DivisionStat toDivisionStats(List<LeaderboardEntry> entries) {
+  private DivisionStat toDivisionStats(List<LeagueEntry> entries) {
     return new DivisionStat(entries.size());
   }
 
@@ -94,8 +98,8 @@ public class LeaderboardServiceImpl implements LeaderboardService {
   }
 
   @Override
-  public CompletableFuture<LeaderboardEntry> getLeagueEntryForPlayer(int playerId, League leagueType) {
-    LeaderboardEntry entry = new LeaderboardEntry();
+  public CompletableFuture<LeagueEntry> getLeagueEntryForPlayer(int playerId, LeaderboardController.League leagueType) {
+    LeagueEntry entry = new LeagueEntry();
     entry.setSubDivisionIndex(4);
     entry.setMajorDivisionIndex(2);
     entry.setScore(8);
@@ -111,12 +115,12 @@ public class LeaderboardServiceImpl implements LeaderboardService {
   }
 
   @Override
-  public CompletableFuture<List<LeaderboardEntry>> getEntries(Division division) {
+  public CompletableFuture<List<LeagueEntry>> getEntries(Division division) {
     return fafService.getDivisionLeaderboard(division);
   }
 
   @Override
-  public CompletableFuture<List<Division>> getDivisions(League leagueType) {
+  public CompletableFuture<List<Division>> getDivisions(LeaderboardController.League leagueType) {
     DivisionName[] subnames = {V, IV, III, II, I};
     DivisionName[] majornames = {BRONZE, SILVER, GOLD, DIAMOND, MASTER};
     List<Division> divisions = new LinkedList<Division>();
@@ -134,7 +138,7 @@ public class LeaderboardServiceImpl implements LeaderboardService {
   }
 
   @Override
-  public CompletableFuture<List<LeaderboardEntry>> getDivisionEntries(Division division) {
+  public CompletableFuture<List<LeagueEntry>> getDivisionEntries(Division division) {
     return fafService.getDivisionLeaderboard(division);
   }
 }

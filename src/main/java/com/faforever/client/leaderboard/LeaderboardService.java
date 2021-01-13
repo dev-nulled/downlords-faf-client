@@ -1,6 +1,5 @@
 package com.faforever.client.leaderboard;
 
-import com.faforever.client.leaderboard.LeaderboardController.League;
 import com.faforever.client.util.Tuple;
 
 import java.util.List;
@@ -11,6 +10,8 @@ public interface LeaderboardService {
 
   CompletableFuture<List<Leaderboard>> getLeaderboards();
 
+  CompletableFuture<List<League>> getLeagues();
+
   CompletableFuture<List<LeaderboardEntry>> getEntriesForPlayer(int playerId);
 
   CompletableFuture<List<LeaderboardEntry>> getEntries(Leaderboard leaderboard);
@@ -19,13 +20,13 @@ public interface LeaderboardService {
 
   CompletableFuture<List<RatingStat>> getLeaderboardStats(String leaderboardTechnicalName);
 
-  CompletableFuture<LeaderboardEntry> getLeagueEntryForPlayer(int playerId, League leagueType);
+  CompletableFuture<LeagueEntry> getLeagueEntryForPlayer(int playerId, LeaderboardController.League leagueType);
 
-  CompletableFuture<List<LeaderboardEntry>> getEntries(Division division);
+  CompletableFuture<List<LeagueEntry>> getEntries(Division division);
 
   CompletableFuture<List<DivisionStat>> getDivisionStats();
 
-  CompletableFuture<List<Division>> getDivisions(League leagueType);
+  CompletableFuture<List<Division>> getDivisions(LeaderboardController.League leagueType);
 
-  CompletableFuture<List<LeaderboardEntry>> getDivisionEntries(Division division);
+  CompletableFuture<List<LeagueEntry>> getDivisionEntries(Division division);
 }

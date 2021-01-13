@@ -134,7 +134,7 @@ public class LeaderboardController extends AbstractViewController<Node> {
             .filter(tab -> tab.getUserData().equals(leaderboardEntry.getSubDivisionIndex()))
             .findFirst().ifPresent(tab -> {
           subDivisionTabPane.getSelectionModel().select(tab);
-          TableView<LeaderboardEntry> newTable = (TableView<LeaderboardEntry>) tab.getContent();
+          TableView<LeagueEntry> newTable = (TableView<LeagueEntry>) tab.getContent();
           newTable.scrollTo(leaderboardEntry);
           newTable.getSelectionModel().select(leaderboardEntry);
         });
@@ -201,7 +201,7 @@ public class LeaderboardController extends AbstractViewController<Node> {
                 .findFirst().ifPresent(tab -> {
                   subDivisionTabPane.getSelectionModel().select(tab);
                   // Need to test this once the api is up
-                  TableView<LeaderboardEntry> newTable = (TableView<LeaderboardEntry>) tab.getContent();
+                  TableView<LeagueEntry> newTable = (TableView<LeagueEntry>) tab.getContent();
                   newTable.scrollTo(leaderboardEntry);
                   newTable.getSelectionModel().select(leaderboardEntry);
             });
@@ -227,7 +227,7 @@ public class LeaderboardController extends AbstractViewController<Node> {
     });
   }
 
-  private void plotDivisionDistributions(List<Division> divisions, LeaderboardEntry leaderboardEntry) {
+  private void plotDivisionDistributions(List<Division> divisions, LeagueEntry leaderboardEntry) {
     divisions.stream().filter(division -> division.getMajorDivisionIndex() == 1).forEach(firstTierSubDivision -> {
       XYChart.Series<String, Integer> series = new XYChart.Series<>();
       series.setName(i18n.get(firstTierSubDivision.getSubDivisionName().getI18nKey()));

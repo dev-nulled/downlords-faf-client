@@ -33,11 +33,11 @@ public class SubDivisionTabController implements Controller<Node> {
   private final ReportingService reportingService;
 
   public Tab subDivisionTab;
-  public TableColumn<LeaderboardEntry, Number> rankColumn;
-  public TableColumn<LeaderboardEntry, String> nameColumn;
-  public TableColumn<LeaderboardEntry, Number> gamesPlayedColumn;
-  public TableColumn<LeaderboardEntry, Number> scoreColumn;
-  public TableView<LeaderboardEntry> ratingTable;
+  public TableColumn<LeagueEntry, Number> rankColumn;
+  public TableColumn<LeagueEntry, String> nameColumn;
+  public TableColumn<LeagueEntry, Number> gamesPlayedColumn;
+  public TableColumn<LeagueEntry, Number> scoreColumn;
+  public TableView<LeagueEntry> ratingTable;
 
   @Override
   // We can't return the tab, because it is not a node
@@ -56,7 +56,7 @@ public class SubDivisionTabController implements Controller<Node> {
     gamesPlayedColumn.setCellValueFactory(param -> param.getValue().gamesPlayedProperty());
     gamesPlayedColumn.setCellFactory(param -> new StringCell<>(count -> i18n.number(count.intValue())));
 
-    scoreColumn.setCellValueFactory(param -> param.getValue().ratingProperty());
+    scoreColumn.setCellValueFactory(param -> param.getValue().scoreProperty());
     scoreColumn.setCellFactory(param -> new StringCell<>(rating -> i18n.number(rating.intValue())));
   }
 
@@ -67,8 +67,8 @@ public class SubDivisionTabController implements Controller<Node> {
   public void populate(Division division) {
     subDivisionTab.setText(i18n.get(division.getSubDivisionName().getI18nKey()).toUpperCase());
 
-    leaderboardService.getEntries(division).thenAccept(leaderboardEntryBeans -> {
-      ratingTable.setItems(observableList(leaderboardEntryBeans));
+    leaderboardService.getEntries(division).thenAccept(leagueEntryBeans -> {
+      ratingTable.setItems(observableList(leagueEntryBeans));
     }).exceptionally(throwable -> {
       logger.warn("Error while loading leaderboard entries", throwable);
       notificationService.addImmediateErrorNotification(throwable, "leaderboard.failedToLoad");

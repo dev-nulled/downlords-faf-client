@@ -2,7 +2,6 @@ package com.faforever.client.leaderboard;
 
 import com.faforever.client.FafClientApplication;
 import com.faforever.client.i18n.I18n;
-import com.faforever.client.leaderboard.LeaderboardController.League;
 import com.faforever.client.task.CompletableTask;
 import com.faforever.client.task.TaskService;
 import com.faforever.client.util.Tuple;
@@ -38,17 +37,22 @@ public class MockLeaderboardService implements LeaderboardService {
   }
 
   @Override
+  public CompletableFuture<List<League>> getLeagues() {
+    return CompletableFuture.completedFuture(Collections.emptyList());
+  }
+
+  @Override
   public CompletableFuture<List<DivisionStat>> getDivisionStats() {
     return CompletableFuture.completedFuture(Collections.emptyList());
   }
 
   @Override
-  public CompletableFuture<List<Division>> getDivisions(League leagueType) {
+  public CompletableFuture<List<Division>> getDivisions(LeaderboardController.League leagueType) {
     return CompletableFuture.completedFuture(Collections.emptyList());
   }
 
   @Override
-  public CompletableFuture<List<LeaderboardEntry>> getDivisionEntries(Division division) {
+  public CompletableFuture<List<LeagueEntry>> getDivisionEntries(Division division) {
     return CompletableFuture.completedFuture(Collections.emptyList());
   }
 
@@ -68,25 +72,25 @@ public class MockLeaderboardService implements LeaderboardService {
   }
 
   @Override
-  public CompletableFuture<LeaderboardEntry> getLeagueEntryForPlayer(int playerId, League leagueType) {
+  public CompletableFuture<LeagueEntry> getLeagueEntryForPlayer(int playerId, LeaderboardController.League leagueType) {
     return null;
   }
 
   @Override
-  public CompletableFuture<List<LeaderboardEntry>> getEntries(Division division) {
-    return taskService.submitTask(new CompletableTask<List<LeaderboardEntry>>(HIGH) {
+  public CompletableFuture<List<LeagueEntry>> getEntries(Division division) {
+    return taskService.submitTask(new CompletableTask<List<LeagueEntry>>(HIGH) {
       @Override
-      protected List<LeaderboardEntry> call() throws Exception {
+      protected List<LeagueEntry> call() throws Exception {
         updateTitle("Reading ladder");
 
-        List<LeaderboardEntry> list = new ArrayList<>();
+        List<LeagueEntry> list = new ArrayList<>();
         for (int i = 1; i <= 10000; i++) {
           String name = RandomStringUtils.random(10);
-          int rating = (int) (Math.random() * 2500);
+          int score = (int) (Math.random() * 25);
           int gamecount = (int) (Math.random() * 10000);
           float winloss = (float) (Math.random() * 100);
 
-          list.add(createLadderInfoBean(name, i, rating, gamecount, winloss));
+          list.add(createLeagueEntryBean(name, score, gamecount, winloss));
 
         }
         return list;
@@ -94,13 +98,13 @@ public class MockLeaderboardService implements LeaderboardService {
     }).getFuture();
   }
 
-  private LeaderboardEntry createLadderInfoBean(String name, int rank, int rating, int gamesPlayed, float winLossRatio) {
-    LeaderboardEntry leaderboardEntry = new LeaderboardEntry();
-    leaderboardEntry.setUsername(name);
-    leaderboardEntry.setRating(rating);
-    leaderboardEntry.setGamesPlayed(gamesPlayed);
-    leaderboardEntry.setWinLossRatio(winLossRatio);
+  private LeagueEntry createLeagueEntryBean(String name, int score, int gamesPlayed, float winLossRatio) {
+    LeagueEntry leagueEntry = new LeagueEntry();
+    leagueEntry.setUsername(name);
+    leagueEntry.setScore(score);
+    leagueEntry.setGamesPlayed(gamesPlayed);
+    leagueEntry.setWinLossRatio(winLossRatio);
 
-    return leaderboardEntry;
+    return leagueEntry;
   }
 }

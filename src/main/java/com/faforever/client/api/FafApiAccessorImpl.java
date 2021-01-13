@@ -11,7 +11,8 @@ import com.faforever.client.api.dto.GameReviewsSummary;
 import com.faforever.client.api.dto.Leaderboard;
 import com.faforever.client.api.dto.LeaderboardEntry;
 import com.faforever.client.api.dto.LeaderboardRatingJournal;
-import com.faforever.client.api.dto.LeagueLeaderboardEntry;
+import com.faforever.client.api.dto.League;
+import com.faforever.client.api.dto.LeagueEntry;
 import com.faforever.client.api.dto.Map;
 import com.faforever.client.api.dto.MapStatistics;
 import com.faforever.client.api.dto.MapVersion;
@@ -98,6 +99,7 @@ public class FafApiAccessorImpl implements FafApiAccessor, InitializingBean {
   private static final String ACHIEVEMENT_ENDPOINT = "/data/achievement";
   private static final String LEADERBOARD_ENDPOINT = "/data/leaderboard";
   private static final String LEADERBOARD_ENTRY_ENDPOINT = "/data/leaderboardRating";
+  private static final String LEAGUE_ENDPOINT = "/data/league";
   private static final String TOURNAMENT_LIST_ENDPOINT = "/challonge/v1/tournaments.json";
   private static final String REPLAY_INCLUDES = "featuredMod,playerStats,playerStats.player,playerStats.ratingChanges,reviews," +
       "reviews.player,mapVersion,mapVersion.map,reviewsSummary";
@@ -207,6 +209,12 @@ public class FafApiAccessorImpl implements FafApiAccessor, InitializingBean {
   }
 
   @Override
+  @Cacheable(value = CacheNames.LEAGUE, sync = true)
+  public List<League> getLeagues() {
+    return getAll(LEAGUE_ENDPOINT);
+  }
+
+  @Override
   public List<LeaderboardEntry> getLeaderboardEntriesForPlayer(int playerId) {
     return getAll(LEADERBOARD_ENTRY_ENDPOINT, java.util.Map.of(
         FILTER, rsql(qBuilder().intNum("player.id").eq(playerId)),
@@ -215,7 +223,7 @@ public class FafApiAccessorImpl implements FafApiAccessor, InitializingBean {
   }
 
   @Override
-  public List<LeagueLeaderboardEntry> getLeagueLeaderboard(Division division) {
+  public List<LeagueEntry> getLeagueLeaderboard(Division division) {
     return List.of();
   }
 
@@ -239,8 +247,8 @@ public class FafApiAccessorImpl implements FafApiAccessor, InitializingBean {
   }
 
   @Override
-  public LeagueLeaderboardEntry getLeagueEntryForPlayer(int playerId, String league) {
-    //return getOne("/leaderboards/"+ league + "/" + playerId, LeagueLeaderboardEntry.class);
+  public LeagueEntry getLeagueEntryForPlayer(int playerId, String league) {
+    //return getOne("/leaderboards/"+ league + "/" + playerId, LeagueEntry.class);
     return null;
   }
 
