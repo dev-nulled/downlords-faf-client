@@ -4,7 +4,6 @@ import com.faforever.client.api.dto.AchievementDefinition;
 import com.faforever.client.api.dto.Clan;
 import com.faforever.client.api.dto.CoopMission;
 import com.faforever.client.api.dto.CoopResult;
-import com.faforever.client.api.dto.DivisionLeaderboardEntry;
 import com.faforever.client.api.dto.FeaturedModFile;
 import com.faforever.client.api.dto.Game;
 import com.faforever.client.api.dto.GameReview;
@@ -12,6 +11,7 @@ import com.faforever.client.api.dto.GameReviewsSummary;
 import com.faforever.client.api.dto.Leaderboard;
 import com.faforever.client.api.dto.LeaderboardEntry;
 import com.faforever.client.api.dto.LeaderboardRatingJournal;
+import com.faforever.client.api.dto.LeagueLeaderboardEntry;
 import com.faforever.client.api.dto.Map;
 import com.faforever.client.api.dto.MapStatistics;
 import com.faforever.client.api.dto.MapVersion;
@@ -215,8 +215,8 @@ public class FafApiAccessorImpl implements FafApiAccessor, InitializingBean {
   }
 
   @Override
-  public List<DivisionLeaderboardEntry> getDivisionLeaderboard(Division division) {
-    return null;
+  public List<LeagueLeaderboardEntry> getLeagueLeaderboard(Division division) {
+    return List.of();
   }
 
   @Override
@@ -239,8 +239,8 @@ public class FafApiAccessorImpl implements FafApiAccessor, InitializingBean {
   }
 
   @Override
-  public DivisionLeaderboardEntry getLeagueEntryForPlayer(int playerId, String league) {
-    //return getOne("/leaderboards/"+ league + "/" + playerId, DivisionLeaderboardEntry.class);
+  public LeagueLeaderboardEntry getLeagueEntryForPlayer(int playerId, String league) {
+    //return getOne("/leaderboards/"+ league + "/" + playerId, LeagueLeaderboardEntry.class);
     return null;
   }
 

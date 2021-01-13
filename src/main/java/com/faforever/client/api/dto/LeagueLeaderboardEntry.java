@@ -9,8 +9,8 @@ import lombok.Setter;
 @Getter
 @Setter
 @EqualsAndHashCode(of = "id")
-@Type("divisionLeaderboardEntry")
-public class DivisionLeaderboardEntry {
+@Type("leagueLeaderboardEntry")
+public class LeagueLeaderboardEntry {
   @Id
   private String id;
   private int rank;

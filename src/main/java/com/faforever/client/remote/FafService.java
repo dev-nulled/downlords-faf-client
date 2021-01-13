@@ -177,7 +177,7 @@ public class FafService {
 
   @Async
   public CompletableFuture<LeaderboardEntry> getLeagueEntryForPlayer(int playerId, String league) {
-    return CompletableFuture.completedFuture(LeaderboardEntry.fromDivision(fafApiAccessor.getLeagueEntryForPlayer(playerId, league)));
+    return CompletableFuture.completedFuture(LeaderboardEntry.fromLeagueDto(fafApiAccessor.getLeagueEntryForPlayer(playerId, league)));
   }
 
   @Async
@@ -302,8 +302,8 @@ public class FafService {
 
   @Async
   public CompletableFuture<List<LeaderboardEntry>> getDivisionLeaderboard(Division division) {
-    return CompletableFuture.completedFuture(fafApiAccessor.getDivisionLeaderboard(division).parallelStream()
-        .map(LeaderboardEntry::fromDivision)
+    return CompletableFuture.completedFuture(fafApiAccessor.getLeagueLeaderboard(division).parallelStream()
+        .map(LeaderboardEntry::fromLeagueDto)
         .collect(toList()));
   }
 

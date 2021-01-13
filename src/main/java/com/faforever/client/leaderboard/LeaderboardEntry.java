@@ -1,6 +1,6 @@
 package com.faforever.client.leaderboard;
 
-import com.faforever.client.api.dto.DivisionLeaderboardEntry;
+import com.faforever.client.api.dto.LeagueLeaderboardEntry;
 import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.FloatProperty;
 import javafx.beans.property.IntegerProperty;
@@ -19,9 +19,9 @@ public class LeaderboardEntry {
   private final IntegerProperty gamesPlayed;
   private final FloatProperty winLossRatio;
   private final ObjectProperty<Leaderboard> leaderboard;
-  private IntegerProperty score;
-  private IntegerProperty majorDivisionIndex;
-  private IntegerProperty subDivisionIndex;
+  private final IntegerProperty score;
+  private final IntegerProperty majorDivisionIndex;
+  private final IntegerProperty subDivisionIndex;
 
   public LeaderboardEntry() {
     username = new SimpleStringProperty();
@@ -44,13 +44,13 @@ public class LeaderboardEntry {
     return leaderboardEntry;
   }
 
-  public static LeaderboardEntry fromDivision(DivisionLeaderboardEntry divisionLeaderboardEntry) {
+  public static LeaderboardEntry fromLeagueDto(LeagueLeaderboardEntry entry) {
     LeaderboardEntry leaderboardEntry = new LeaderboardEntry();
-    leaderboardEntry.setUsername(divisionLeaderboardEntry.getName());
-    leaderboardEntry.setGamesPlayed(divisionLeaderboardEntry.getNumGames());
-    leaderboardEntry.setScore(divisionLeaderboardEntry.getScore());
-    leaderboardEntry.setMajorDivisionIndex(divisionLeaderboardEntry.getMajorDivisionIndex());
-    leaderboardEntry.setSubDivisionIndex(divisionLeaderboardEntry.getSubDivisionIndex());
+    leaderboardEntry.setUsername(entry.getName());
+    leaderboardEntry.setGamesPlayed(entry.getNumGames());
+    leaderboardEntry.setScore(entry.getScore());
+    leaderboardEntry.setMajorDivisionIndex(entry.getMajorDivisionIndex());
+    leaderboardEntry.setSubDivisionIndex(entry.getSubDivisionIndex());
     return leaderboardEntry;
   }
 

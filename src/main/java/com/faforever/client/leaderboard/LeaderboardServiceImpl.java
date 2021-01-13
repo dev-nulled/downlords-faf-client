@@ -60,10 +60,10 @@ public class LeaderboardServiceImpl implements LeaderboardService {
   public CompletableFuture<List<DivisionStat>> getDivisionStats() {
 //    return getDivisions().thenAccept(divisions -> {
 //      divisions.stream().map(division ->
-//          fafService.getDivisionLeaderboard(division).thenApply(this::toDivisionStats))
+//          fafService.getLeagueLeaderboard(division).thenApply(this::toDivisionStats))
 //          .collect(Collectors.toList());
 //    });
-    return null;
+    return CompletableFuture.completedFuture(List.of());
   }
 
   private List<RatingStat> toRatingStats(List<LeaderboardEntry> entries) {
