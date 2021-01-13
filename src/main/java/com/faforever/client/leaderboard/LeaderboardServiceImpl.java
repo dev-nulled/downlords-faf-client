@@ -1,7 +1,6 @@
 package com.faforever.client.leaderboard;
 
 import com.faforever.client.FafClientApplication;
-import com.faforever.client.api.dto.DivisionName;
 import com.faforever.client.remote.FafService;
 import com.faforever.client.util.RatingUtil;
 import com.faforever.client.util.Tuple;
@@ -17,18 +16,18 @@ import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static com.faforever.client.api.dto.DivisionName.BRONZE;
-import static com.faforever.client.api.dto.DivisionName.COMMANDER;
-import static com.faforever.client.api.dto.DivisionName.DIAMOND;
-import static com.faforever.client.api.dto.DivisionName.GOLD;
-import static com.faforever.client.api.dto.DivisionName.I;
-import static com.faforever.client.api.dto.DivisionName.II;
-import static com.faforever.client.api.dto.DivisionName.III;
-import static com.faforever.client.api.dto.DivisionName.IV;
-import static com.faforever.client.api.dto.DivisionName.MASTER;
-import static com.faforever.client.api.dto.DivisionName.NONE;
-import static com.faforever.client.api.dto.DivisionName.SILVER;
-import static com.faforever.client.api.dto.DivisionName.V;
+import static com.faforever.client.leaderboard.DivisionName.BRONZE;
+import static com.faforever.client.leaderboard.DivisionName.COMMANDER;
+import static com.faforever.client.leaderboard.DivisionName.DIAMOND;
+import static com.faforever.client.leaderboard.DivisionName.GOLD;
+import static com.faforever.client.leaderboard.DivisionName.I;
+import static com.faforever.client.leaderboard.DivisionName.II;
+import static com.faforever.client.leaderboard.DivisionName.III;
+import static com.faforever.client.leaderboard.DivisionName.IV;
+import static com.faforever.client.leaderboard.DivisionName.MASTER;
+import static com.faforever.client.leaderboard.DivisionName.NONE;
+import static com.faforever.client.leaderboard.DivisionName.SILVER;
+import static com.faforever.client.leaderboard.DivisionName.V;
 
 
 @Lazy

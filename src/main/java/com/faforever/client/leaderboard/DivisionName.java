@@ -1,4 +1,4 @@
-package com.faforever.client.api.dto;
+package com.faforever.client.leaderboard;
 
 import lombok.Getter;
 
