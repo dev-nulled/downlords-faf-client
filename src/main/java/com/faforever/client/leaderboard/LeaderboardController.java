@@ -91,23 +91,22 @@ public class LeaderboardController extends AbstractViewController<Node> {
 
     JavaFxUtil.addListener(playerService.currentPlayerProperty(), (observable, oldValue, newValue) -> Platform.runLater(() -> setCurrentPlayer(newValue)));
 
-
     searchTextField.textProperty().addListener((observable, oldValue, newValue) -> {
-      TableView<LeaderboardEntry> ratingTable = (TableView<LeaderboardEntry>) subDivisionTabPane.getSelectionModel().getSelectedItem().getContent();
+      TableView<LeagueEntry> ratingTable = (TableView<LeagueEntry>) subDivisionTabPane.getSelectionModel().getSelectedItem().getContent();
       if (Validator.isInt(newValue)) {
         ratingTable.scrollTo(Integer.parseInt(newValue) - 1);
       } else {
-        LeaderboardEntry foundPlayer = null;
-        for (LeaderboardEntry leaderboardEntry : ratingTable.getItems()) {
-          if (leaderboardEntry.getUsername().toLowerCase().startsWith(newValue.toLowerCase())) {
-            foundPlayer = leaderboardEntry;
+        LeagueEntry foundPlayer = null;
+        for (LeagueEntry leagueEntry : ratingTable.getItems()) {
+          if (leagueEntry.getUsername().toLowerCase().startsWith(newValue.toLowerCase())) {
+            foundPlayer = leagueEntry;
             break;
           }
         }
         if (foundPlayer == null) {
-          for (LeaderboardEntry leaderboardEntry : ratingTable.getItems()) {
-            if (leaderboardEntry.getUsername().toLowerCase().contains(newValue.toLowerCase())) {
-              foundPlayer = leaderboardEntry;
+          for (LeagueEntry leagueEntry : ratingTable.getItems()) {
+            if (leagueEntry.getUsername().toLowerCase().contains(newValue.toLowerCase())) {
+              foundPlayer = leagueEntry;
               break;
             }
           }
@@ -125,17 +124,17 @@ public class LeaderboardController extends AbstractViewController<Node> {
 
   private void searchInAllDivisions(String searchText) {
     playerService.getPlayerForUsername(searchText).ifPresent(player -> {
-      leaderboardService.getLeagueEntryForPlayer(player.getId(), leagueTechnicalName).thenAccept(leaderboardEntry -> {
+      leaderboardService.getLeagueEntryForPlayer(player.getId(), leagueTechnicalName).thenAccept(leagueEntry -> {
         majorDivisionPicker.getItems().stream()
-            .filter(item -> item.getMajorDivisionIndex() == leaderboardEntry.getMajorDivisionIndex())
+            .filter(item -> item.getMajorDivisionIndex() == leagueEntry.getMajorDivisionIndex())
             .findFirst().ifPresent(item -> majorDivisionPicker.getSelectionModel().select(item));
         subDivisionTabPane.getTabs().stream()
-            .filter(tab -> tab.getUserData().equals(leaderboardEntry.getSubDivisionIndex()))
+            .filter(tab -> tab.getUserData().equals(leagueEntry.getSubDivisionIndex()))
             .findFirst().ifPresent(tab -> {
           subDivisionTabPane.getSelectionModel().select(tab);
           TableView<LeagueEntry> newTable = (TableView<LeagueEntry>) tab.getContent();
-          newTable.scrollTo(leaderboardEntry);
-          newTable.getSelectionModel().select(leaderboardEntry);
+          newTable.scrollTo(leagueEntry);
+          newTable.getSelectionModel().select(leagueEntry);
         });
       });
     });
@@ -177,12 +176,11 @@ public class LeaderboardController extends AbstractViewController<Node> {
   }
 
   private void updateStats(Player player) {
-
-    leaderboardService.getLeagueEntryForPlayer(player.getId(), leagueTechnicalName).thenAccept(leaderboardEntry -> Platform.runLater(() -> {
+    leaderboardService.getLeagueEntryForPlayer(player.getId(), leagueTechnicalName).thenAccept(leagueEntry -> Platform.runLater(() -> {
       leaderboardService.getDivisions(leagueTechnicalName).thenAccept(divisions -> {
         divisions.forEach(division -> {
-          if (division.getMajorDivisionIndex() == leaderboardEntry.getMajorDivisionIndex()
-              && division.getSubDivisionIndex() == leaderboardEntry.getSubDivisionIndex()) {
+          if (division.getMajorDivisionIndex() == leagueEntry.getMajorDivisionIndex()
+              && division.getSubDivisionIndex() == leagueEntry.getSubDivisionIndex()) {
             playerDivisionImageView.setImage(avatarService.loadAvatar(
                 String.format("https://content.faforever.com/divisions/icons/%s-%s.png",
                     division.getMajorDivisionName().getImageKey(),
@@ -190,8 +188,8 @@ public class LeaderboardController extends AbstractViewController<Node> {
             playerDivisionNameLabel.setText(i18n.get("leaderboard.divisionName",
                 i18n.get(division.getMajorDivisionName().getI18nKey()),
                 i18n.get(division.getSubDivisionName().getI18nKey())).toUpperCase());
-            scoreArc.setLength(-360.0 * leaderboardEntry.getScore() / division.getHighestScore());
-            playerScoreLabel.setText(i18n.number(leaderboardEntry.getScore()));
+            scoreArc.setLength(-360.0 * leagueEntry.getScore() / division.getHighestScore());
+            playerScoreLabel.setText(i18n.number(leagueEntry.getScore()));
             majorDivisionPicker.getItems().stream()
                 .filter(item -> item.getMajorDivisionIndex() == division.getMajorDivisionIndex())
                 .findFirst().ifPresent(item -> majorDivisionPicker.getSelectionModel().select(item));
@@ -202,10 +200,10 @@ public class LeaderboardController extends AbstractViewController<Node> {
                   subDivisionTabPane.getSelectionModel().select(tab);
                   // Need to test this once the api is up
                   TableView<LeagueEntry> newTable = (TableView<LeagueEntry>) tab.getContent();
-                  newTable.scrollTo(leaderboardEntry);
-                  newTable.getSelectionModel().select(leaderboardEntry);
+                  newTable.scrollTo(leagueEntry);
+                  newTable.getSelectionModel().select(leagueEntry);
             });
-            plotDivisionDistributions(divisions, leaderboardEntry);
+            plotDivisionDistributions(divisions, leagueEntry);
           }
         });
       }).exceptionally(throwable -> {
@@ -217,7 +215,7 @@ public class LeaderboardController extends AbstractViewController<Node> {
       logger.debug("Leaderboard entry could not be read for current player: " + player.getUsername(), throwable);
       playerDivisionNameLabel.setText(i18n.get("leaderboard.placement",
           "X", // Would rather do this:
-          // leaderboardEntry.getGamesPlayed(),
+          // leagueEntry.getGamesPlayed(),
           10));
       majorDivisionPicker.getItems().stream()
           .findFirst().ifPresent(item -> majorDivisionPicker.getSelectionModel().select(item));
@@ -227,7 +225,7 @@ public class LeaderboardController extends AbstractViewController<Node> {
     });
   }
 
-  private void plotDivisionDistributions(List<Division> divisions, LeagueEntry leaderboardEntry) {
+  private void plotDivisionDistributions(List<Division> divisions, LeagueEntry leagueEntry) {
     divisions.stream().filter(division -> division.getMajorDivisionIndex() == 1).forEach(firstTierSubDivision -> {
       XYChart.Series<String, Integer> series = new XYChart.Series<>();
       series.setName(i18n.get(firstTierSubDivision.getSubDivisionName().getI18nKey()));
@@ -237,8 +235,8 @@ public class LeaderboardController extends AbstractViewController<Node> {
             Text label = new Text();
             label.setText(i18n.get(division.getSubDivisionName().getI18nKey()));
             label.setFill(Color.WHITE);
-            if (division.getMajorDivisionIndex() == leaderboardEntry.getMajorDivisionIndex()
-                && division.getSubDivisionIndex() == leaderboardEntry.getSubDivisionIndex()) {
+            if (division.getMajorDivisionIndex() == leagueEntry.getMajorDivisionIndex()
+                && division.getSubDivisionIndex() == leagueEntry.getSubDivisionIndex()) {
               data.nodeProperty().addListener((observable, oldValue, newValue) -> {
                 newValue.pseudoClassStateChanged(NOTIFICATION_HIGHLIGHTED_PSEUDO_CLASS, true);
                 addNodeOnTopOfBar(data, label);
@@ -259,7 +257,7 @@ public class LeaderboardController extends AbstractViewController<Node> {
             totalPlayers += entry.getTotalCount();
           }
           // TODO: fix access to rank
-          //rankNumber.labelProperty().setValue(i18n.get("leaderboard.rank", leaderboardEntry.getRank(), totalPlayers));
+          //rankNumber.labelProperty().setValue(i18n.get("leaderboard.rank", leagueEntry.getRank(), totalPlayers));
         })
         .exceptionally(throwable -> {
           logger.warn("Could not get player rank", throwable);
