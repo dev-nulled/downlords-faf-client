@@ -15,7 +15,6 @@ import javafx.beans.InvalidationListener;
 import javafx.beans.WeakInvalidationListener;
 import javafx.collections.ObservableList;
 import javafx.css.PseudoClass;
-import javafx.event.ActionEvent;
 import javafx.scene.Group;
 import javafx.scene.Node;
 import javafx.scene.chart.BarChart;
@@ -196,6 +195,7 @@ public class LeaderboardController extends AbstractViewController<Node> {
             majorDivisionPicker.getItems().stream()
                 .filter(item -> item.getMajorDivisionIndex() == division.getMajorDivisionIndex())
                 .findFirst().ifPresent(item -> majorDivisionPicker.getSelectionModel().select(item));
+            onMajorDivisionChanged();
             subDivisionTabPane.getTabs().stream()
                 .filter(tab -> tab.getUserData().equals(division.getSubDivisionIndex()))
                 .findFirst().ifPresent(tab -> {
@@ -302,9 +302,9 @@ public class LeaderboardController extends AbstractViewController<Node> {
     };
   }
 
-  public void onMajorDivisionChanged(ActionEvent actionEvent) {
-    subDivisionTabPane.getTabs().clear();
-    leaderboardService.getDivisions(leagueTechnicalName).thenAccept(divisions ->
+  public void onMajorDivisionChanged() {
+    leaderboardService.getDivisions(leagueTechnicalName).thenAccept(divisions -> {
+      subDivisionTabPane.getTabs().clear();
       divisions.stream()
           .filter(division -> division.getMajorDivisionIndex() == majorDivisionPicker.getValue().getMajorDivisionIndex())
           .forEach(division -> {
@@ -313,7 +313,8 @@ public class LeaderboardController extends AbstractViewController<Node> {
             controller.populate(division);
             subDivisionTabPane.getTabs().add(controller.getTab());
             subDivisionTabPane.getSelectionModel().selectLast();
-          }));
+          });
+    });
     // The tabs always appear 40px wider than they should for whatever reason. We add a little more to prevent horizontal scrolling
     Platform.runLater(() -> subDivisionTabPane.setTabMinWidth(subDivisionTabPane.getWidth() / subDivisionTabPane.getTabs().size() - 45.0));
     Platform.runLater(() -> subDivisionTabPane.setTabMaxWidth(subDivisionTabPane.getWidth() / subDivisionTabPane.getTabs().size() - 45.0));
