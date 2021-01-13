@@ -9,25 +9,11 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
-import static com.faforever.client.leaderboard.DivisionName.BRONZE;
-import static com.faforever.client.leaderboard.DivisionName.COMMANDER;
-import static com.faforever.client.leaderboard.DivisionName.DIAMOND;
-import static com.faforever.client.leaderboard.DivisionName.GOLD;
-import static com.faforever.client.leaderboard.DivisionName.I;
-import static com.faforever.client.leaderboard.DivisionName.II;
-import static com.faforever.client.leaderboard.DivisionName.III;
-import static com.faforever.client.leaderboard.DivisionName.IV;
-import static com.faforever.client.leaderboard.DivisionName.MASTER;
-import static com.faforever.client.leaderboard.DivisionName.NONE;
-import static com.faforever.client.leaderboard.DivisionName.SILVER;
-import static com.faforever.client.leaderboard.DivisionName.V;
 
 
 @Lazy
@@ -98,19 +84,7 @@ public class LeaderboardServiceImpl implements LeaderboardService {
 
   @Override
   public CompletableFuture<LeagueEntry> getLeagueEntryForPlayer(int playerId, String leagueTechnicalName) {
-    LeagueEntry entry = new LeagueEntry();
-    entry.setSubDivisionIndex(4);
-    entry.setMajorDivisionIndex(2);
-    entry.setScore(8);
-    entry.setGamesPlayed(3);
-
-    Throwable noEntry = new Throwable();
-    boolean testNoEntry = false;
-    if (testNoEntry)
-      return CompletableFuture.failedFuture(noEntry);
-    else
-      return CompletableFuture.completedFuture(entry);
-    //return fafService.getLeagueEntryForPlayer(playerId, leagueTechnicalName);
+    return fafService.getLeagueEntryForPlayer(playerId, leagueTechnicalName);
   }
 
   @Override
@@ -120,20 +94,7 @@ public class LeaderboardServiceImpl implements LeaderboardService {
 
   @Override
   public CompletableFuture<List<Division>> getDivisions(String leagueTechnicalName) {
-    DivisionName[] subnames = {V, IV, III, II, I};
-    DivisionName[] majornames = {BRONZE, SILVER, GOLD, DIAMOND, MASTER};
-    List<Division> divisions = new LinkedList<Division>();
-    for (int k=1; k<6; k++) {
-      for (int i=1; i<6; i++) {
-        Division div = new Division(1, k, i, majornames[k-1], subnames[i-1], 10);
-        //if (k!=5 || i!=5)
-        divisions.add(div);
-      }
-    }
-    Division div2 = new Division(1, 6, 1, COMMANDER, NONE, 10);
-    divisions.add(div2);
-    return CompletableFuture.completedFuture(divisions);
-    //return fafService.getDivisions(leagueTechnicalName);
+    return fafService.getDivisions(leagueTechnicalName);
   }
 
   @Override
