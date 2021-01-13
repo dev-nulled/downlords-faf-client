@@ -4,6 +4,7 @@ import com.faforever.client.api.dto.AchievementDefinition;
 import com.faforever.client.api.dto.Clan;
 import com.faforever.client.api.dto.CoopMission;
 import com.faforever.client.api.dto.CoopResult;
+import com.faforever.client.api.dto.DivisionLeaderboardEntry;
 import com.faforever.client.api.dto.FeaturedModFile;
 import com.faforever.client.api.dto.Game;
 import com.faforever.client.api.dto.GameReview;
@@ -23,6 +24,7 @@ import com.faforever.client.api.dto.PlayerAchievement;
 import com.faforever.client.api.dto.PlayerEvent;
 import com.faforever.client.api.dto.Tournament;
 import com.faforever.client.api.dto.TutorialCategory;
+import com.faforever.client.leaderboard.Division;
 import com.faforever.client.mod.FeaturedMod;
 import com.faforever.client.util.Tuple;
 import com.faforever.client.vault.search.SearchController.SearchConfig;
@@ -62,6 +64,10 @@ public interface FafApiAccessor {
   Tuple<List<LeaderboardEntry>, java.util.Map<String, ?>> getLeaderboardEntriesWithMeta(String leaderboardTechnicalName, int count, int page);
 
   List<LeaderboardEntry> getLeaderboardEntriesForPlayer(int playerId);
+
+  List<DivisionLeaderboardEntry> getDivisionLeaderboard(Division division);
+
+  DivisionLeaderboardEntry getLeagueEntryForPlayer(int playerId, String league);
 
   List<LeaderboardRatingJournal> getRatingJournal(int playerId, String leaderboardTechnicalName);
 
@@ -142,4 +148,6 @@ public interface FafApiAccessor {
   void updateMapVersion(String id, MapVersion mapVersion);
 
   MeResult getOwnPlayer();
+
+  List<Division> getDivisions(String league);
 }

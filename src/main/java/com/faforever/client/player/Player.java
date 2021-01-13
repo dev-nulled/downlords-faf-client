@@ -40,6 +40,8 @@ public class Player {
   private final StringProperty avatarTooltip;
   private final ObjectProperty<SocialStatus> socialStatus;
   private final MapProperty<String, LeaderboardRating> leaderboardRatings;
+  private final IntegerProperty score;
+  private final IntegerProperty subDivisionIndex;
   private final ObjectProperty<Game> game;
   private final ObjectProperty<PlayerStatus> status;
   private final ObservableSet<ChatChannelUser> chatChannelUsers;
@@ -68,6 +70,8 @@ public class Player {
     avatarUrl = new SimpleStringProperty();
     avatarTooltip = new SimpleStringProperty();
     leaderboardRatings = new SimpleMapProperty<>();
+    score = new SimpleIntegerProperty();
+    subDivisionIndex = new SimpleIntegerProperty();
     status = new SimpleObjectProperty<>(PlayerStatus.IDLE);
     chatChannelUsers = FXCollections.observableSet();
     game = new SimpleObjectProperty<>();
@@ -254,6 +258,30 @@ public class Player {
 
   public ObjectProperty<Game> gameProperty() {
     return game;
+  }
+
+  public int getScore() {
+    return score.get();
+  }
+
+  public void setScore(int score) {
+    this.score.set(score);
+  }
+
+  public IntegerProperty scoreProperty() {
+    return score;
+  }
+
+  public int getSubDivisionIndex() {
+    return subDivisionIndex.get();
+  }
+
+  public void setSubDivisionIndex(int subDivisionIndex) {
+    this.subDivisionIndex.set(subDivisionIndex);
+  }
+
+  public IntegerProperty subDivisionIndexProperty() {
+    return subDivisionIndex;
   }
 
   public Instant getIdleSince() {

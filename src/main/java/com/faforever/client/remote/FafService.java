@@ -21,6 +21,7 @@ import com.faforever.client.coop.CoopMission;
 import com.faforever.client.domain.RatingHistoryDataPoint;
 import com.faforever.client.fa.relay.GpgGameMessage;
 import com.faforever.client.game.NewGameInfo;
+import com.faforever.client.leaderboard.Division;
 import com.faforever.client.leaderboard.Leaderboard;
 import com.faforever.client.leaderboard.LeaderboardEntry;
 import com.faforever.client.map.MapBean;
@@ -175,6 +176,11 @@ public class FafService {
   }
 
   @Async
+  public CompletableFuture<LeaderboardEntry> getLeagueEntryForPlayer(int playerId, String league) {
+    return CompletableFuture.completedFuture(LeaderboardEntry.fromDivision(fafApiAccessor.getLeagueEntryForPlayer(playerId, league)));
+  }
+
+  @Async
   public CompletableFuture<List<ModVersion>> getMods() {
     return CompletableFuture.completedFuture(fafApiAccessor.getMods().stream()
         .map(ModVersion::fromModDto)
@@ -287,6 +293,18 @@ public class FafService {
   @Async
   public CompletableFuture<List<FeaturedModFile>> getFeaturedModFiles(FeaturedMod featuredMod, Integer version) {
     return CompletableFuture.completedFuture(fafApiAccessor.getFeaturedModFiles(featuredMod, version));
+  }
+
+  @Async
+  public CompletableFuture<List<Division>> getDivisions(String leagueType) {
+    return CompletableFuture.completedFuture(fafApiAccessor.getDivisions(leagueType));
+  }
+
+  @Async
+  public CompletableFuture<List<LeaderboardEntry>> getDivisionLeaderboard(Division division) {
+    return CompletableFuture.completedFuture(fafApiAccessor.getDivisionLeaderboard(division).parallelStream()
+        .map(LeaderboardEntry::fromDivision)
+        .collect(toList()));
   }
 
   @Async

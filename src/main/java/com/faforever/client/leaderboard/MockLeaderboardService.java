@@ -2,17 +2,22 @@ package com.faforever.client.leaderboard;
 
 import com.faforever.client.FafClientApplication;
 import com.faforever.client.i18n.I18n;
+import com.faforever.client.leaderboard.LeaderboardController.League;
+import com.faforever.client.task.CompletableTask;
 import com.faforever.client.task.TaskService;
 import com.faforever.client.util.Tuple;
 import lombok.RequiredArgsConstructor;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
+import static com.faforever.client.task.CompletableTask.Priority.HIGH;
 
 @Lazy
 @Service
@@ -33,6 +38,21 @@ public class MockLeaderboardService implements LeaderboardService {
   }
 
   @Override
+  public CompletableFuture<List<DivisionStat>> getDivisionStats() {
+    return CompletableFuture.completedFuture(Collections.emptyList());
+  }
+
+  @Override
+  public CompletableFuture<List<Division>> getDivisions(League leagueType) {
+    return CompletableFuture.completedFuture(Collections.emptyList());
+  }
+
+  @Override
+  public CompletableFuture<List<LeaderboardEntry>> getDivisionEntries(Division division) {
+    return CompletableFuture.completedFuture(Collections.emptyList());
+  }
+
+  @Override
   public CompletableFuture<List<LeaderboardEntry>> getEntriesForPlayer(int playerId) {
     return CompletableFuture.completedFuture(Collections.emptyList());
   }
@@ -45,5 +65,42 @@ public class MockLeaderboardService implements LeaderboardService {
   @Override
   public CompletableFuture<Tuple<List<LeaderboardEntry>, Integer>> getPagedEntries(Leaderboard leaderboard, int count, int page) {
     return CompletableFuture.completedFuture(new Tuple<>(Collections.emptyList(), 1));
+  }
+
+  @Override
+  public CompletableFuture<LeaderboardEntry> getLeagueEntryForPlayer(int playerId, League leagueType) {
+    return null;
+  }
+
+  @Override
+  public CompletableFuture<List<LeaderboardEntry>> getEntries(Division division) {
+    return taskService.submitTask(new CompletableTask<List<LeaderboardEntry>>(HIGH) {
+      @Override
+      protected List<LeaderboardEntry> call() throws Exception {
+        updateTitle("Reading ladder");
+
+        List<LeaderboardEntry> list = new ArrayList<>();
+        for (int i = 1; i <= 10000; i++) {
+          String name = RandomStringUtils.random(10);
+          int rating = (int) (Math.random() * 2500);
+          int gamecount = (int) (Math.random() * 10000);
+          float winloss = (float) (Math.random() * 100);
+
+          list.add(createLadderInfoBean(name, i, rating, gamecount, winloss));
+
+        }
+        return list;
+      }
+    }).getFuture();
+  }
+
+  private LeaderboardEntry createLadderInfoBean(String name, int rank, int rating, int gamesPlayed, float winLossRatio) {
+    LeaderboardEntry leaderboardEntry = new LeaderboardEntry();
+    leaderboardEntry.setUsername(name);
+    leaderboardEntry.setRating(rating);
+    leaderboardEntry.setGamesPlayed(gamesPlayed);
+    leaderboardEntry.setWinLossRatio(winLossRatio);
+
+    return leaderboardEntry;
   }
 }

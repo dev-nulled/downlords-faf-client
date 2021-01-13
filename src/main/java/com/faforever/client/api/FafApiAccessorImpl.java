@@ -4,6 +4,7 @@ import com.faforever.client.api.dto.AchievementDefinition;
 import com.faforever.client.api.dto.Clan;
 import com.faforever.client.api.dto.CoopMission;
 import com.faforever.client.api.dto.CoopResult;
+import com.faforever.client.api.dto.DivisionLeaderboardEntry;
 import com.faforever.client.api.dto.FeaturedModFile;
 import com.faforever.client.api.dto.Game;
 import com.faforever.client.api.dto.GameReview;
@@ -30,6 +31,7 @@ import com.faforever.client.config.CacheNames;
 import com.faforever.client.config.ClientProperties;
 import com.faforever.client.config.ClientProperties.Api;
 import com.faforever.client.io.CountingFileSystemResource;
+import com.faforever.client.leaderboard.Division;
 import com.faforever.client.mod.FeaturedMod;
 import com.faforever.client.user.event.LoggedOutEvent;
 import com.faforever.client.user.event.LoginSuccessEvent;
@@ -213,6 +215,11 @@ public class FafApiAccessorImpl implements FafApiAccessor, InitializingBean {
   }
 
   @Override
+  public List<DivisionLeaderboardEntry> getDivisionLeaderboard(Division division) {
+    return null;
+  }
+
+  @Override
   @Cacheable(value = CacheNames.LEADERBOARD, sync = true)
   public List<LeaderboardEntry> getAllLeaderboardEntries(String leaderboardTechnicalName) {
     return getAll(LEADERBOARD_ENTRY_ENDPOINT, java.util.Map.of(
@@ -229,6 +236,12 @@ public class FafApiAccessorImpl implements FafApiAccessor, InitializingBean {
         INCLUDE, LEADERBOARD_ENTRY_INCLUDES,
         SORT, "-rating"));
     return new Tuple<>(jsonApiDoc.get(), jsonApiDoc.getMeta());
+  }
+
+  @Override
+  public DivisionLeaderboardEntry getLeagueEntryForPlayer(int playerId, String league) {
+    //return getOne("/leaderboards/"+ league + "/" + playerId, DivisionLeaderboardEntry.class);
+    return null;
   }
 
   @Override
@@ -405,6 +418,11 @@ public class FafApiAccessorImpl implements FafApiAccessor, InitializingBean {
   @Override
   public MeResult getOwnPlayer() {
     return getOne("/me", MeResult.class);
+  }
+
+  @Override
+  public List<Division> getDivisions(String league) {
+    return getAll("/" + league);
   }
 
   @Override

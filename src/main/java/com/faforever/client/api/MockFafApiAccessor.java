@@ -6,6 +6,7 @@ import com.faforever.client.api.dto.AchievementType;
 import com.faforever.client.api.dto.Clan;
 import com.faforever.client.api.dto.CoopMission;
 import com.faforever.client.api.dto.CoopResult;
+import com.faforever.client.api.dto.DivisionLeaderboardEntry;
 import com.faforever.client.api.dto.FeaturedModFile;
 import com.faforever.client.api.dto.Game;
 import com.faforever.client.api.dto.GameReview;
@@ -27,6 +28,7 @@ import com.faforever.client.api.dto.PlayerAchievement;
 import com.faforever.client.api.dto.PlayerEvent;
 import com.faforever.client.api.dto.Tournament;
 import com.faforever.client.api.dto.TutorialCategory;
+import com.faforever.client.leaderboard.Division;
 import com.faforever.client.mod.FeaturedMod;
 import com.faforever.client.util.Tuple;
 import com.faforever.client.vault.search.SearchController.SearchConfig;
@@ -138,6 +140,16 @@ public class MockFafApiAccessor implements FafApiAccessor {
   @Override
   public List<LeaderboardRatingJournal> getRatingJournal(int playerId, String leaderboardTechnicalName) {
     return List.of();
+  }
+
+  @Override
+  public List<DivisionLeaderboardEntry> getDivisionLeaderboard(Division division) {
+    return Collections.emptyList();
+  }
+
+  @Override
+  public DivisionLeaderboardEntry getLeagueEntryForPlayer(int playerId, String league) {
+    return null;
   }
 
   @Override
@@ -322,6 +334,11 @@ public class MockFafApiAccessor implements FafApiAccessor {
   @Override
   public MeResult getOwnPlayer() {
     return null;
+  }
+
+  @Override
+  public List<Division> getDivisions(String league) {
+    return Collections.emptyList();
   }
 
   @Override

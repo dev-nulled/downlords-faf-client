@@ -1,5 +1,6 @@
 package com.faforever.client.leaderboard;
 
+import com.faforever.client.api.dto.DivisionLeaderboardEntry;
 import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.FloatProperty;
 import javafx.beans.property.IntegerProperty;
@@ -18,6 +19,9 @@ public class LeaderboardEntry {
   private final IntegerProperty gamesPlayed;
   private final FloatProperty winLossRatio;
   private final ObjectProperty<Leaderboard> leaderboard;
+  private IntegerProperty score;
+  private IntegerProperty majorDivisionIndex;
+  private IntegerProperty subDivisionIndex;
 
   public LeaderboardEntry() {
     username = new SimpleStringProperty();
@@ -25,6 +29,9 @@ public class LeaderboardEntry {
     gamesPlayed = new SimpleIntegerProperty();
     winLossRatio = new SimpleFloatProperty();
     leaderboard = new SimpleObjectProperty<>();
+    score = new SimpleIntegerProperty();
+    majorDivisionIndex = new SimpleIntegerProperty();
+    subDivisionIndex = new SimpleIntegerProperty();
   }
 
   public static LeaderboardEntry fromDto(com.faforever.client.api.dto.LeaderboardEntry entry) {
@@ -34,6 +41,16 @@ public class LeaderboardEntry {
     leaderboardEntry.setRating(entry.getRating());
     leaderboardEntry.setWinLossRatio(entry.getWonGames() / (float) entry.getTotalGames());
     leaderboardEntry.setGamesPlayed(entry.getTotalGames());
+    return leaderboardEntry;
+  }
+
+  public static LeaderboardEntry fromDivision(DivisionLeaderboardEntry divisionLeaderboardEntry) {
+    LeaderboardEntry leaderboardEntry = new LeaderboardEntry();
+    leaderboardEntry.setUsername(divisionLeaderboardEntry.getName());
+    leaderboardEntry.setGamesPlayed(divisionLeaderboardEntry.getNumGames());
+    leaderboardEntry.setScore(divisionLeaderboardEntry.getScore());
+    leaderboardEntry.setMajorDivisionIndex(divisionLeaderboardEntry.getMajorDivisionIndex());
+    leaderboardEntry.setSubDivisionIndex(divisionLeaderboardEntry.getSubDivisionIndex());
     return leaderboardEntry;
   }
 
@@ -95,6 +112,42 @@ public class LeaderboardEntry {
 
   public FloatProperty winLossRatioProperty() {
     return winLossRatio;
+  }
+
+  public int getScore() {
+    return score.get();
+  }
+
+  public void setScore(int score) {
+    this.score.set(score);
+  }
+
+  public IntegerProperty scoreProperty() {
+    return score;
+  }
+
+  public int getMajorDivisionIndex() {
+    return majorDivisionIndex.get();
+  }
+
+  public void setMajorDivisionIndex(int majorDivisionIndex) {
+    this.majorDivisionIndex.set(majorDivisionIndex);
+  }
+
+  public IntegerProperty majorDivisionIndexProperty() {
+    return majorDivisionIndex;
+  }
+
+  public int getSubDivisionIndex() {
+    return subDivisionIndex.get();
+  }
+
+  public void setSubDivisionIndex(int subDivisionIndex) {
+    this.subDivisionIndex.set(subDivisionIndex);
+  }
+
+  public IntegerProperty subDivisionIndexProperty() {
+    return subDivisionIndex;
   }
 
   @Override
