@@ -1,38 +1,37 @@
 package com.faforever.client.leaderboard;
 
 import com.faforever.client.fx.AbstractViewController;
+import com.faforever.client.i18n.I18n;
 import com.faforever.client.main.event.NavigateEvent;
-import com.faforever.client.main.event.OpenRanked1v1LeaderboardEvent;
-import com.faforever.client.main.event.OpenRanked2v2LeaderboardEvent;
-import com.faforever.client.main.event.OpenTeamLeaderboardEvent;
+import com.faforever.client.main.event.OpenLeaderboardEvent;
+import com.faforever.client.theme.UiService;
 import com.google.common.eventbus.EventBus;
 import javafx.scene.Node;
 import javafx.scene.control.Tab;
 import javafx.scene.control.TabPane;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Component
+@RequiredArgsConstructor
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
 public class LeaderboardsController extends AbstractViewController<Node> {
   private final EventBus eventBus;
+  private final I18n i18n;
+  private final LeaderboardService leaderboardService;
+  private final UiService uiService;
 
   public TabPane leaderboardRoot;
-  public LeaderboardController ranked1v1LeaderboardController;
-  public LeaderboardController ranked2v2LeaderboardController;
-  public LeaderboardController teamLeaderboardController;
-  public Tab ranked1v1LeaderboardTab;
-  public Tab ranked2v2LeaderboardTab;
-  public Tab teamLeaderboardTab;
 
   private boolean isHandlingEvent;
-  private AbstractViewController<?> lastTabController;
+  private LeaderboardController lastTabController;
+  private final List<LeaderboardController> controllers = new ArrayList<>();
   private Tab lastTab;
-
-  public LeaderboardsController(EventBus eventBus) {
-    this.eventBus = eventBus;
-  }
 
   @Override
   public Node getRoot() {
@@ -41,24 +40,24 @@ public class LeaderboardsController extends AbstractViewController<Node> {
 
   @Override
   public void initialize() {
-    lastTab = ranked1v1LeaderboardTab;
-    lastTabController = ranked1v1LeaderboardController;
-    ranked1v1LeaderboardController.setLeagueTechnicalName("RANKED1V1");
-    ranked2v2LeaderboardController.setLeagueTechnicalName("RANKED2V2");
-    teamLeaderboardController.setLeagueTechnicalName("TEAM");
+    leaderboardService.getLeagues().thenAccept(leagues -> {
+      leagues.forEach(league -> {
+        LeaderboardController controller = uiService.loadFxml("theme/leaderboard/leaderboard.fxml");
+        controller.setLeagueTechnicalName(league.getTechnicalName());
+        controller.getRoot().setText(i18n.get(String.format("leaderboard.%s", league.getTechnicalName())));
+        leaderboardRoot.getTabs().add(controller.getRoot());
+        controllers.add(controller);
+      });
+      lastTabController = controllers.get(0);
+      lastTab = lastTabController.getRoot();
+      leaderboardRoot.getSelectionModel().select(lastTabController.getRoot());
+    });
 
     leaderboardRoot.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> {
       if (isHandlingEvent) {
         return;
       }
-
-      if (newValue == ranked1v1LeaderboardTab) {
-        eventBus.post(new OpenRanked1v1LeaderboardEvent());
-      } else if (newValue == ranked2v2LeaderboardTab) {
-        eventBus.post(new OpenRanked2v2LeaderboardEvent());
-      } else if (newValue == teamLeaderboardTab) {
-        eventBus.post(new OpenTeamLeaderboardEvent());
-      }
+      eventBus.post(new OpenLeaderboardEvent(newValue));
     });
   }
 
@@ -67,18 +66,17 @@ public class LeaderboardsController extends AbstractViewController<Node> {
     isHandlingEvent = true;
 
     try {
-      if (navigateEvent instanceof OpenRanked1v1LeaderboardEvent) {
-        lastTab = ranked1v1LeaderboardTab;
-        lastTabController = ranked1v1LeaderboardController;
-      } else if (navigateEvent instanceof OpenRanked2v2LeaderboardEvent) {
-        lastTab = ranked2v2LeaderboardTab;
-        lastTabController = ranked2v2LeaderboardController;
-      } else if (navigateEvent instanceof OpenTeamLeaderboardEvent) {
-        lastTab = teamLeaderboardTab;
-        lastTabController = teamLeaderboardController;
+      if (navigateEvent instanceof OpenLeaderboardEvent) {
+        OpenLeaderboardEvent event = (OpenLeaderboardEvent) navigateEvent;
+        controllers.forEach(controller -> {
+          if (controller.getRoot().equals(event.getLeagueTab())) {
+            lastTab = controller.getRoot();
+            lastTabController = controller;
+          }
+        });
       }
       leaderboardRoot.getSelectionModel().select(lastTab);
-      lastTabController.display(navigateEvent);
+      lastTabController.display();
     } finally {
       isHandlingEvent = false;
     }

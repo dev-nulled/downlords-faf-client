@@ -1,10 +1,9 @@
 package com.faforever.client.leaderboard;
 
 import com.faforever.client.chat.avatar.AvatarService;
-import com.faforever.client.fx.AbstractViewController;
+import com.faforever.client.fx.Controller;
 import com.faforever.client.fx.JavaFxUtil;
 import com.faforever.client.i18n.I18n;
-import com.faforever.client.main.event.NavigateEvent;
 import com.faforever.client.player.Player;
 import com.faforever.client.player.PlayerService;
 import com.faforever.client.theme.UiService;
@@ -22,12 +21,12 @@ import javafx.scene.chart.CategoryAxis;
 import javafx.scene.chart.XYChart;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
+import javafx.scene.control.Tab;
 import javafx.scene.control.TabPane;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.Pane;
-import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Arc;
 import javafx.scene.text.Text;
@@ -48,7 +47,7 @@ import java.util.stream.Collectors;
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
 @RequiredArgsConstructor
-public class LeaderboardController extends AbstractViewController<Node> {
+public class LeaderboardController implements Controller<Tab> {
 
   private static final Logger logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
   private static final PseudoClass NOTIFICATION_HIGHLIGHTED_PSEUDO_CLASS = PseudoClass.getPseudoClass("highlighted-bar");
@@ -58,7 +57,7 @@ public class LeaderboardController extends AbstractViewController<Node> {
   private final PlayerService playerService;
   private final UiService uiService;
   private final AvatarService avatarService;
-  public VBox leaderboardRoot;
+  public Tab leaderboardRoot;
   public TextField searchTextField;
   public Pane connectionProgressPane;
   public Pane contentPane;
@@ -77,8 +76,6 @@ public class LeaderboardController extends AbstractViewController<Node> {
 
   @Override
   public void initialize() {
-    super.initialize();
-
     seasonLabel.setText(i18n.get("leaderboard.season").toUpperCase());
     scoreLabel.setText(i18n.get("leaderboard.score").toUpperCase());
     searchTextField.setPromptText(i18n.get("leaderboard.searchPrompt").toUpperCase());
@@ -140,8 +137,7 @@ public class LeaderboardController extends AbstractViewController<Node> {
     });
   }
 
-  @Override
-  protected void onDisplay(NavigateEvent navigateEvent) {
+  protected void display() {
     Assert.checkNullIllegalState(leagueTechnicalName, "leagueName must not be null");
 
     contentPane.setVisible(false);
@@ -159,7 +155,7 @@ public class LeaderboardController extends AbstractViewController<Node> {
     playerService.getCurrentPlayer().ifPresent(this::setCurrentPlayer);
   }
 
-  public Node getRoot() {
+  public Tab getRoot() {
     return leaderboardRoot;
   }
 

@@ -1,21 +1,20 @@
 package com.faforever.client.leaderboard;
 
 import com.faforever.client.i18n.I18n;
-import com.faforever.client.notification.NotificationService;
-import com.faforever.client.reporting.ReportingService;
 import com.faforever.client.test.AbstractPlainJavaFxTest;
+import com.faforever.client.theme.UiService;
+import com.google.common.eventbus.EventBus;
+import javafx.scene.control.Tab;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mock;
-import org.testfx.util.WaitForAsyncUtils;
 
-import java.util.Arrays;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 public class LeaderboardsControllerTest extends AbstractPlainJavaFxTest {
@@ -23,84 +22,38 @@ public class LeaderboardsControllerTest extends AbstractPlainJavaFxTest {
   private LeaderboardsController instance;
 
   @Mock
+  private EventBus eventBus;
+  @Mock
   private LeaderboardService leaderboardService;
   @Mock
-  private NotificationService notificationService;
-  @Mock
-  private ReportingService reportingService;
+  private UiService uiService;
   @Mock
   private I18n i18n;
+  @Mock
+  private LeaderboardController leaderboardController;
 
-  private Leaderboard leaderboard;
+  private League league;
 
   @Before
   public void setUp() throws Exception {
-    leaderboard = LeaderboardBuilder.create().defaultValues().get();
+    league = League.fromDto(new com.faforever.client.api.dto.League("1", OffsetDateTime.now(), OffsetDateTime.now(), "mock", "mock", "mock", "1"));
 
-    when(leaderboardService.getLeaderboards()).thenReturn(CompletableFuture.completedFuture(List.of(leaderboard)));
+    when(leaderboardService.getLeagues()).thenReturn(CompletableFuture.completedFuture(List.of(league, league)));
+    when(uiService.loadFxml("theme/leaderboard/leaderboard.fxml")).thenReturn(leaderboardController);
+    when(i18n.get("leaderboard.mock")).thenReturn("mock");
+    when(leaderboardController.getRoot()).thenReturn(new Tab());
 
-    instance = new LeaderboardsController(leaderboardService, notificationService, i18n, reportingService);
+    instance = new LeaderboardsController(eventBus, i18n, leaderboardService, uiService);
 
     loadFxml("theme/leaderboard/leaderboards.fxml", clazz -> instance);
   }
 
   @Test
-  public void testOnDisplay() {
-    when(leaderboardService.getEntries(leaderboard)).thenReturn(CompletableFuture.completedFuture(Arrays.asList(
-        new LeaderboardEntry(), new LeaderboardEntry()
-    )));
-
-    instance.leaderboardComboBox.setValue(leaderboard);
-    instance.onLeaderboardSelected();
-    WaitForAsyncUtils.waitForFxEvents();
-
-    assertEquals(2, instance.ratingTable.getItems().size());
-    verifyNoInteractions(notificationService);
+  public void testInitialize() {
+    assertEquals(2, instance.leaderboardRoot.getTabs().size());
+    assertEquals(0, instance.leaderboardRoot.getSelectionModel().getSelectedIndex());
   }
 
-  @Test
-  public void testFilterByNamePlayerExactMatch() {
-    LeaderboardEntry entry1 = LeaderboardEntryBuilder.create().defaultValues().username("Aa").get();
-    LeaderboardEntry entry2 = LeaderboardEntryBuilder.create().defaultValues().username("Ab").get();
-
-    when(leaderboardService.getEntries(leaderboard)).thenReturn(CompletableFuture.completedFuture(Arrays.asList(
-        entry1, entry2
-    )));
-
-    instance.leaderboardComboBox.setValue(leaderboard);
-    instance.onLeaderboardSelected();
-    WaitForAsyncUtils.waitForFxEvents();
-
-    assertNull(instance.ratingTable.getSelectionModel().getSelectedItem());
-
-    instance.searchTextField.setText("aa");
-    WaitForAsyncUtils.waitForFxEvents();
-    assertEquals(2, instance.ratingTable.getItems().size());
-    assertEquals("Aa", instance.ratingTable.getSelectionModel().getSelectedItem().getUsername());
-  }
-
-  @Test
-  public void testFilterByNamePlayerPartialMatch() {
-    LeaderboardEntry entry1 = new LeaderboardEntry();
-    entry1.setUsername("Aa");
-    LeaderboardEntry entry2 = new LeaderboardEntry();
-    entry2.setUsername("Ab");
-
-    when(leaderboardService.getEntries(leaderboard)).thenReturn(CompletableFuture.completedFuture(Arrays.asList(
-        entry1, entry2
-    )));
-
-    instance.leaderboardComboBox.setValue(leaderboard);
-    instance.onLeaderboardSelected();
-    WaitForAsyncUtils.waitForFxEvents();
-
-    assertNull(instance.ratingTable.getSelectionModel().getSelectedItem());
-
-    instance.searchTextField.setText("b");
-    WaitForAsyncUtils.waitForFxEvents();
-    assertEquals(2, instance.ratingTable.getItems().size());
-    assertEquals("Ab", instance.ratingTable.getSelectionModel().getSelectedItem().getUsername());
-  }
 
   @Test
   public void testGetRoot() throws Exception {

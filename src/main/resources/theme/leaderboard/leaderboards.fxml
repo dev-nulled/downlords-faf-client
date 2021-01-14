@@ -1,20 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<?import javafx.scene.control.Tab?>
 <?import javafx.scene.control.TabPane?>
 <TabPane xmlns:fx="http://javafx.com/fxml/1" fx:id="leaderboardRoot"
          tabClosingPolicy="UNAVAILABLE"
          xmlns="http://javafx.com/javafx/8.0.60"
          fx:controller="com.faforever.client.leaderboard.LeaderboardsController">
-    <tabs>
-        <Tab fx:id="ranked1v1LeaderboardTab" text="%leaderboard.ranked1v1">
-            <fx:include fx:id="ranked1v1Leaderboard" source="leaderboard.fxml"/>
-        </Tab>
-        <Tab fx:id="ranked2v2LeaderboardTab" text="%leaderboard.ranked2v2">
-            <fx:include fx:id="ranked2v2Leaderboard" source="leaderboard.fxml"/>
-        </Tab>
-        <Tab fx:id="teamLeaderboardTab" text="%leaderboard.team">
-            <fx:include fx:id="teamLeaderboard" source="leaderboard.fxml"/>
-        </Tab>
-    </tabs>
 </TabPane>

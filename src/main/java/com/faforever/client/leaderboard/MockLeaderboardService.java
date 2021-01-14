@@ -11,6 +11,7 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedList;
@@ -51,7 +52,11 @@ public class MockLeaderboardService implements LeaderboardService {
 
   @Override
   public CompletableFuture<List<League>> getLeagues() {
-    return CompletableFuture.completedFuture(Collections.emptyList());
+    return CompletableFuture.completedFuture(List.of(
+        League.fromDto(new com.faforever.client.api.dto.League("1", OffsetDateTime.now(), OffsetDateTime.now(), "mock", "mock", "ladder1v1", "1")),
+        League.fromDto(new com.faforever.client.api.dto.League("1", OffsetDateTime.now(), OffsetDateTime.now(), "mock", "mock", "tmm2v2", "1")),
+        League.fromDto(new com.faforever.client.api.dto.League("1", OffsetDateTime.now(), OffsetDateTime.now(), "mock", "mock", "team", "1"))
+    ));
   }
 
   @Override
