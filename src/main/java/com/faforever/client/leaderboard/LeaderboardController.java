@@ -307,9 +307,9 @@ public class LeaderboardController extends AbstractViewController<Node> {
           .filter(division -> division.getMajorDivisionIndex() == majorDivisionPicker.getValue().getMajorDivisionIndex())
           .forEach(division -> {
             SubDivisionTabController controller = uiService.loadFxml("theme/leaderboard/subDivisionTab.fxml");
-            controller.getTab().setUserData(division.getSubDivisionIndex());
+            controller.getRoot().setUserData(division.getSubDivisionIndex());
             controller.populate(division);
-            subDivisionTabPane.getTabs().add(controller.getTab());
+            subDivisionTabPane.getTabs().add(controller.getRoot());
             subDivisionTabPane.getSelectionModel().selectLast();
           });
     });

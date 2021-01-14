@@ -6,7 +6,6 @@ import com.faforever.client.i18n.I18n;
 import com.faforever.client.notification.NotificationService;
 import com.faforever.client.reporting.ReportingService;
 import javafx.beans.property.SimpleIntegerProperty;
-import javafx.scene.Node;
 import javafx.scene.control.Tab;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
@@ -24,7 +23,7 @@ import static javafx.collections.FXCollections.observableList;
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
 @RequiredArgsConstructor
-public class SubDivisionTabController implements Controller<Node> {
+public class SubDivisionTabController implements Controller<Tab> {
 
   private static final Logger logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
   private final LeaderboardService leaderboardService;
@@ -40,9 +39,8 @@ public class SubDivisionTabController implements Controller<Node> {
   public TableView<LeagueEntry> ratingTable;
 
   @Override
-  // We can't return the tab, because it is not a node
-  public Node getRoot() {
-    return null;
+  public Tab getRoot() {
+    return subDivisionTab;
   }
 
   @Override
@@ -58,10 +56,6 @@ public class SubDivisionTabController implements Controller<Node> {
 
     scoreColumn.setCellValueFactory(param -> param.getValue().scoreProperty());
     scoreColumn.setCellFactory(param -> new StringCell<>(rating -> i18n.number(rating.intValue())));
-  }
-
-  public Tab getTab() {
-    return subDivisionTab;
   }
 
   public void populate(Division division) {
