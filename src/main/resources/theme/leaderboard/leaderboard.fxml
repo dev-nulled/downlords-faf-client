@@ -34,7 +34,7 @@
                     </Label>
                     <HBox fx:id="box" spacing="10.0">
                         <children>
-                            <ComboBox fx:id="majorDivisionPicker" styleClass="division-selector" onAction="#onMajorDivisionChanged"
+                            <ComboBox fx:id="majorDivisionPicker" styleClass="division-selector" onAction="#onMajorDivisionPicked"
                                       promptText="Tiers"/>
                             <Pane HBox.hgrow="ALWAYS" />
                             <HBox alignment="CENTER_LEFT" spacing="10.0">

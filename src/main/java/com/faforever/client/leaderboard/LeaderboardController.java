@@ -32,6 +32,7 @@ import javafx.scene.shape.Arc;
 import javafx.scene.text.Text;
 import javafx.util.StringConverter;
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -71,8 +72,8 @@ public class LeaderboardController implements Controller<Tab> {
   public TabPane subDivisionTabPane;
   public ImageView playerDivisionImageView;
   public CategoryAxis rankNumber;
+  @Setter
   private String leagueTechnicalName;
-  private InvalidationListener playerLeagueScoreListener;
 
   @Override
   public void initialize() {
@@ -89,34 +90,38 @@ public class LeaderboardController implements Controller<Tab> {
     JavaFxUtil.addListener(playerService.currentPlayerProperty(), (observable, oldValue, newValue) -> Platform.runLater(() -> setCurrentPlayer(newValue)));
 
     searchTextField.textProperty().addListener((observable, oldValue, newValue) -> {
-      TableView<LeagueEntry> ratingTable = (TableView<LeagueEntry>) subDivisionTabPane.getSelectionModel().getSelectedItem().getContent();
-      if (Validator.isInt(newValue)) {
-        ratingTable.scrollTo(Integer.parseInt(newValue) - 1);
-      } else {
-        LeagueEntry foundPlayer = null;
+      processSearchInput(newValue);
+    });
+  }
+
+  private void processSearchInput(String searchText) {
+    TableView<LeagueEntry> ratingTable = (TableView<LeagueEntry>) subDivisionTabPane.getSelectionModel().getSelectedItem().getContent();
+    if (Validator.isInt(searchText)) {
+      ratingTable.scrollTo(Integer.parseInt(searchText) - 1);
+    } else {
+      LeagueEntry foundPlayer = null;
+      for (LeagueEntry leagueEntry : ratingTable.getItems()) {
+        if (leagueEntry.getUsername().toLowerCase().startsWith(searchText.toLowerCase())) {
+          foundPlayer = leagueEntry;
+          break;
+        }
+      }
+      if (foundPlayer == null) {
         for (LeagueEntry leagueEntry : ratingTable.getItems()) {
-          if (leagueEntry.getUsername().toLowerCase().startsWith(newValue.toLowerCase())) {
+          if (leagueEntry.getUsername().toLowerCase().contains(searchText.toLowerCase())) {
             foundPlayer = leagueEntry;
             break;
           }
         }
-        if (foundPlayer == null) {
-          for (LeagueEntry leagueEntry : ratingTable.getItems()) {
-            if (leagueEntry.getUsername().toLowerCase().contains(newValue.toLowerCase())) {
-              foundPlayer = leagueEntry;
-              break;
-            }
-          }
-        }
-        if (foundPlayer != null) {
-          ratingTable.scrollTo(foundPlayer);
-          ratingTable.getSelectionModel().select(foundPlayer);
-        } else {
-          ratingTable.getSelectionModel().select(null);
-          searchInAllDivisions(newValue);
-        }
       }
-    });
+      if (foundPlayer != null) {
+        ratingTable.scrollTo(foundPlayer);
+        ratingTable.getSelectionModel().select(foundPlayer);
+      } else {
+        ratingTable.getSelectionModel().select(null);
+        searchInAllDivisions(searchText);
+      }
+    }
   }
 
   private void searchInAllDivisions(String searchText) {
@@ -155,28 +160,25 @@ public class LeaderboardController implements Controller<Tab> {
     playerService.getCurrentPlayer().ifPresent(this::setCurrentPlayer);
   }
 
+  @Override
   public Tab getRoot() {
     return leaderboardRoot;
   }
 
-  public void setLeagueTechnicalName(String leagueTechnicalName) {
-    this.leagueTechnicalName = leagueTechnicalName;
-  }
-
   private void setCurrentPlayer(Player player) {
-    playerLeagueScoreListener = leagueObservable -> Platform.runLater(() -> updateStats(player));
+    InvalidationListener playerLeagueScoreListener = leagueObservable -> Platform.runLater(() -> updateDisplayedPlayerStats(player));
 
     JavaFxUtil.addListener(player.subDivisionIndexProperty(), new WeakInvalidationListener(playerLeagueScoreListener));
     JavaFxUtil.addListener(player.scoreProperty(), new WeakInvalidationListener(playerLeagueScoreListener));
-    updateStats(player);
+    updateDisplayedPlayerStats(player);
   }
 
-  private void updateStats(Player player) {
-    leaderboardService.getLeagueEntryForPlayer(player.getId(), leagueTechnicalName).thenAccept(leagueEntry -> Platform.runLater(() -> {
-      leaderboardService.getDivisions(leagueTechnicalName).thenAccept(divisions -> {
-        divisions.forEach(division -> {
-          if (division.getMajorDivisionIndex() == leagueEntry.getMajorDivisionIndex()
-              && division.getSubDivisionIndex() == leagueEntry.getSubDivisionIndex()) {
+  private void updateDisplayedPlayerStats(Player player) {
+    leaderboardService.getLeagueEntryForPlayer(player.getId(), leagueTechnicalName).thenAccept(leagueEntry ->
+      leaderboardService.getDivisions(leagueTechnicalName).thenAccept(divisions -> divisions.forEach(division -> {
+        if (division.getMajorDivisionIndex() == leagueEntry.getMajorDivisionIndex()
+            && division.getSubDivisionIndex() == leagueEntry.getSubDivisionIndex()) {
+          Platform.runLater(() -> {
             playerDivisionImageView.setImage(avatarService.loadAvatar(
                 String.format("https://content.faforever.com/divisions/icons/%s-%s.png",
                     division.getMajorDivisionName().getImageKey(),
@@ -186,27 +188,15 @@ public class LeaderboardController implements Controller<Tab> {
                 i18n.get(division.getSubDivisionName().getI18nKey())).toUpperCase());
             scoreArc.setLength(-360.0 * leagueEntry.getScore() / division.getHighestScore());
             playerScoreLabel.setText(i18n.number(leagueEntry.getScore()));
-            majorDivisionPicker.getItems().stream()
-                .filter(item -> item.getMajorDivisionIndex() == division.getMajorDivisionIndex())
-                .findFirst().ifPresent(item -> majorDivisionPicker.getSelectionModel().select(item));
-            onMajorDivisionChanged();
-            subDivisionTabPane.getTabs().stream()
-                .filter(tab -> tab.getUserData().equals(division.getSubDivisionIndex()))
-                .findFirst().ifPresent(tab -> {
-                  subDivisionTabPane.getSelectionModel().select(tab);
-                  // Need to test this once the api is up
-                  TableView<LeagueEntry> newTable = (TableView<LeagueEntry>) tab.getContent();
-                  newTable.scrollTo(leagueEntry);
-                  newTable.getSelectionModel().select(leagueEntry);
-            });
+            selectOwnLeagueEntry(leagueEntry, division);
             plotDivisionDistributions(divisions, leagueEntry);
-          }
-        });
-      }).exceptionally(throwable -> {
+          });
+        }
+      })).exceptionally(throwable -> {
         logger.warn("Could not get list of divisions", throwable);
         return null;
-      });
-    })).exceptionally(throwable -> {
+      })
+    ).exceptionally(throwable -> {
       // Debug instead of warn, since it's fairly common that players don't have a leaderboard entry which causes a 404
       logger.debug("Leaderboard entry could not be read for current player: " + player.getUsername(), throwable);
       playerDivisionNameLabel.setText(i18n.get("leaderboard.placement",
@@ -221,6 +211,22 @@ public class LeaderboardController implements Controller<Tab> {
     });
   }
 
+  private void selectOwnLeagueEntry(LeagueEntry leagueEntry, Division division) {
+    majorDivisionPicker.getItems().stream()
+        .filter(item -> item.getMajorDivisionIndex() == division.getMajorDivisionIndex())
+        .findFirst().ifPresent(item -> majorDivisionPicker.getSelectionModel().select(item));
+    onMajorDivisionPicked();
+    subDivisionTabPane.getTabs().stream()
+        .filter(tab -> tab.getUserData().equals(division.getSubDivisionIndex()))
+        .findFirst().ifPresent(tab -> {
+          subDivisionTabPane.getSelectionModel().select(tab);
+          // Need to test this once the api is up
+          TableView<LeagueEntry> newTable = (TableView<LeagueEntry>) tab.getContent();
+          newTable.scrollTo(leagueEntry);
+          newTable.getSelectionModel().select(leagueEntry);
+    });
+  }
+
   private void plotDivisionDistributions(List<Division> divisions, LeagueEntry leagueEntry) {
     divisions.stream().filter(division -> division.getMajorDivisionIndex() == 1).forEach(firstTierSubDivision -> {
       XYChart.Series<String, Integer> series = new XYChart.Series<>();
@@ -231,17 +237,13 @@ public class LeaderboardController implements Controller<Tab> {
             Text label = new Text();
             label.setText(i18n.get(division.getSubDivisionName().getI18nKey()));
             label.setFill(Color.WHITE);
-            if (division.getMajorDivisionIndex() == leagueEntry.getMajorDivisionIndex()
-                && division.getSubDivisionIndex() == leagueEntry.getSubDivisionIndex()) {
-              data.nodeProperty().addListener((observable, oldValue, newValue) -> {
+            data.nodeProperty().addListener((observable, oldValue, newValue) -> {
+              if (division.getMajorDivisionIndex() == leagueEntry.getMajorDivisionIndex()
+                  && division.getSubDivisionIndex() == leagueEntry.getSubDivisionIndex()) {
                 newValue.pseudoClassStateChanged(NOTIFICATION_HIGHLIGHTED_PSEUDO_CLASS, true);
-                addNodeOnTopOfBar(data, label);
-              });
-            } else {
-              data.nodeProperty().addListener((observable, oldValue, newValue) -> {
-                addNodeOnTopOfBar(data, label);
-              });
-            }
+              }
+              addNodeOnTopOfBar(data, label);
+            });
             return data;
           }).collect(Collectors.toList()));
       Platform.runLater(() -> ratingDistributionChart.getData().add(series));
@@ -296,7 +298,7 @@ public class LeaderboardController implements Controller<Tab> {
     };
   }
 
-  public void onMajorDivisionChanged() {
+  public void onMajorDivisionPicked() {
     leaderboardService.getDivisions(leagueTechnicalName).thenAccept(divisions -> {
       subDivisionTabPane.getTabs().clear();
       divisions.stream()
