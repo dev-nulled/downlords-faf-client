@@ -17,6 +17,7 @@ import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.faforever.client.leaderboard.DivisionName.BRONZE;
 import static com.faforever.client.leaderboard.DivisionName.COMMANDER;
@@ -60,8 +61,8 @@ public class MockLeaderboardService implements LeaderboardService {
   }
 
   @Override
-  public CompletableFuture<List<DivisionStat>> getDivisionStats(String leagueTechnicalName) {
-    return CompletableFuture.completedFuture(Collections.emptyList());
+  public CompletableFuture<Integer> getAccumulatedRank(LeagueEntry entry) {
+    return CompletableFuture.completedFuture(8000);
   }
 
   @Override
@@ -82,8 +83,18 @@ public class MockLeaderboardService implements LeaderboardService {
   }
 
   @Override
-  public CompletableFuture<List<LeagueEntry>> getDivisionEntries(Division division) {
-    return CompletableFuture.completedFuture(Collections.emptyList());
+  public CompletableFuture<Integer> getTotalPlayers(String leagueTechnicalName) {
+    AtomicInteger rank = new AtomicInteger();
+    getDivisions(leagueTechnicalName).thenAccept(divisions -> {
+      divisions.forEach(division -> getSizeOfDivision(division).thenApply(rank::addAndGet));
+    });
+    return CompletableFuture.completedFuture(rank.get());
+  }
+
+  @Override
+  public CompletableFuture<Integer> getSizeOfDivision(Division division) {
+    //return getEntries(division).thenApply(List::size);
+    return CompletableFuture.completedFuture((int) Math.abs(Math.random() * 100 + 200 - Math.pow(division.getMajorDivisionIndex() - 3.3, 2) * 30));
   }
 
   @Override
@@ -104,10 +115,12 @@ public class MockLeaderboardService implements LeaderboardService {
   @Override
   public CompletableFuture<LeagueEntry> getLeagueEntryForPlayer(int playerId, String leagueTechnicalName) {
     LeagueEntry entry = new LeagueEntry();
+    League league = League.fromDto(new com.faforever.client.api.dto.League("1", OffsetDateTime.now(), OffsetDateTime.now(), "mock", "mock", "ladder1v1", "1"));
     entry.setSubDivisionIndex(4);
     entry.setMajorDivisionIndex(2);
     entry.setScore(8);
     entry.setGamesPlayed(3);
+    entry.setLeague(league);
 
     Throwable noEntry = new Throwable();
     boolean testNoEntry = false;
@@ -125,8 +138,8 @@ public class MockLeaderboardService implements LeaderboardService {
         updateTitle("Reading ladder");
 
         List<LeagueEntry> list = new ArrayList<>();
-        for (int i = 1; i <= 1000; i++) {
-          String name = RandomStringUtils.random(10);
+        for (int i = 1; i <= 100; i++) {
+          String name = RandomStringUtils.random(10, true, false);
           int score = (int) (Math.random() * 25);
           int gamecount = (int) (Math.random() * 1000);
           float winloss = (float) (Math.random() * 100);

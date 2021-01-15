@@ -71,7 +71,7 @@ public class LeaderboardController implements Controller<Tab> {
   public Arc scoreArc;
   public TabPane subDivisionTabPane;
   public ImageView playerDivisionImageView;
-  public CategoryAxis rankNumber;
+  public CategoryAxis xAxis;
   @Setter
   private String leagueTechnicalName;
 
@@ -188,7 +188,7 @@ public class LeaderboardController implements Controller<Tab> {
                 i18n.get(division.getSubDivisionName().getI18nKey())).toUpperCase());
             scoreArc.setLength(-360.0 * leagueEntry.getScore() / division.getHighestScore());
             playerScoreLabel.setText(i18n.number(leagueEntry.getScore()));
-            selectOwnLeagueEntry(leagueEntry, division);
+            selectOwnLeagueEntry(leagueEntry);
             plotDivisionDistributions(divisions, leagueEntry);
           });
         }
@@ -211,13 +211,13 @@ public class LeaderboardController implements Controller<Tab> {
     });
   }
 
-  private void selectOwnLeagueEntry(LeagueEntry leagueEntry, Division division) {
+  private void selectOwnLeagueEntry(LeagueEntry leagueEntry) {
     majorDivisionPicker.getItems().stream()
-        .filter(item -> item.getMajorDivisionIndex() == division.getMajorDivisionIndex())
+        .filter(item -> item.getMajorDivisionIndex() == leagueEntry.getMajorDivisionIndex())
         .findFirst().ifPresent(item -> majorDivisionPicker.getSelectionModel().select(item));
     onMajorDivisionPicked();
     subDivisionTabPane.getTabs().stream()
-        .filter(tab -> tab.getUserData().equals(division.getSubDivisionIndex()))
+        .filter(tab -> tab.getUserData().equals(leagueEntry.getSubDivisionIndex()))
         .findFirst().ifPresent(tab -> {
           subDivisionTabPane.getSelectionModel().select(tab);
           // Need to test this once the api is up
@@ -231,32 +231,29 @@ public class LeaderboardController implements Controller<Tab> {
     divisions.stream().filter(division -> division.getMajorDivisionIndex() == 1).forEach(firstTierSubDivision -> {
       XYChart.Series<String, Integer> series = new XYChart.Series<>();
       series.setName(i18n.get(firstTierSubDivision.getSubDivisionName().getI18nKey()));
-      series.getData().addAll(
-          divisions.stream().filter(division -> division.getSubDivisionIndex() == firstTierSubDivision.getSubDivisionIndex()).map(division -> {
-            XYChart.Data<String, Integer> data = new XYChart.Data<>(i18n.get(division.getMajorDivisionName().getI18nKey()),(int) (Math.random() * 100 + 200 - Math.pow(division.getMajorDivisionIndex() - 3.3, 2) * 30));
-            Text label = new Text();
-            label.setText(i18n.get(division.getSubDivisionName().getI18nKey()));
-            label.setFill(Color.WHITE);
-            data.nodeProperty().addListener((observable, oldValue, newValue) -> {
-              if (division.getMajorDivisionIndex() == leagueEntry.getMajorDivisionIndex()
-                  && division.getSubDivisionIndex() == leagueEntry.getSubDivisionIndex()) {
-                newValue.pseudoClassStateChanged(NOTIFICATION_HIGHLIGHTED_PSEUDO_CLASS, true);
-              }
-              addNodeOnTopOfBar(data, label);
-            });
-            return data;
-          }).collect(Collectors.toList()));
+      divisions.stream().filter(division -> division.getSubDivisionIndex() == firstTierSubDivision.getSubDivisionIndex()).forEach(division -> {
+        leaderboardService.getSizeOfDivision(division).thenAccept(size -> {
+          XYChart.Data<String, Integer> data = new XYChart.Data<>(i18n.get(division.getMajorDivisionName().getI18nKey()), size);
+          Text label = new Text();
+          label.setText(i18n.get(division.getSubDivisionName().getI18nKey()));
+          label.setFill(Color.WHITE);
+          data.nodeProperty().addListener((observable, oldValue, newValue) -> {
+            if (division.getMajorDivisionIndex() == leagueEntry.getMajorDivisionIndex()
+                && division.getSubDivisionIndex() == leagueEntry.getSubDivisionIndex()) {
+              newValue.pseudoClassStateChanged(NOTIFICATION_HIGHLIGHTED_PSEUDO_CLASS, true);
+            }
+            addNodeOnTopOfBar(data, label);
+          });
+          series.getData().add(data);
+        });
+      });
       Platform.runLater(() -> ratingDistributionChart.getData().add(series));
     });
-    leaderboardService.getDivisionStats(leagueTechnicalName)
-        .thenAccept(divisionStats -> {
-          int totalPlayers = 0;
-          for (DivisionStat entry : divisionStats) {
-            totalPlayers += entry.getTotalCount();
-          }
-          // TODO: fix access to rank
-          //rankNumber.labelProperty().setValue(i18n.get("leaderboard.rank", leagueEntry.getRank(), totalPlayers));
-        })
+    leaderboardService.getAccumulatedRank(leagueEntry)
+        .thenAccept(rank ->
+            leaderboardService.getTotalPlayers(leagueEntry.getLeague().getTechnicalName())
+                .thenAccept(totalPlayers ->
+            xAxis.labelProperty().setValue(i18n.get("leaderboard.rank", rank, totalPlayers))))
         .exceptionally(throwable -> {
           logger.warn("Could not get player rank", throwable);
           return null;

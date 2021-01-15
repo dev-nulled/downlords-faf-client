@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -46,13 +47,38 @@ public class LeaderboardServiceImpl implements LeaderboardService {
   }
 
   @Override
-  public CompletableFuture<List<DivisionStat>> getDivisionStats(String leagueTechnicalName) {
-//    return getDivisions().thenAccept(divisions -> {
-//      divisions.stream().map(division ->
-//          fafService.getLeagueLeaderboard(division).thenApply(this::toDivisionStats))
-//          .collect(Collectors.toList());
-//    });
-    return CompletableFuture.completedFuture(List.of());
+  public CompletableFuture<Integer> getAccumulatedRank(LeagueEntry entry) {
+    AtomicInteger rank = new AtomicInteger();
+    getDivisions(entry.getLeague().getTechnicalName()).thenAccept(divisions -> {
+      //discard lower divisions
+      divisions.stream()
+          .filter(division -> division.getMajorDivisionIndex() >= entry.getMajorDivisionIndex())
+          .filter(division -> !(division.getMajorDivisionIndex() == entry.getMajorDivisionIndex() && division.getSubDivisionIndex() < entry.getSubDivisionIndex()))
+          .forEach(division -> {
+            if (division.getMajorDivisionIndex() == entry.getMajorDivisionIndex()
+                && division.getSubDivisionIndex() == entry.getSubDivisionIndex()) {
+              //add local rank of entry in own division
+              rank.addAndGet(20);
+            } else {
+              getSizeOfDivision(division).thenApply(rank::addAndGet);
+            }
+      });
+    });
+    return CompletableFuture.completedFuture(rank.get());
+  }
+
+  @Override
+  public CompletableFuture<Integer> getTotalPlayers(String leagueTechnicalName) {
+    AtomicInteger rank = new AtomicInteger();
+    getDivisions(leagueTechnicalName).thenAccept(divisions -> {
+      divisions.forEach(division -> getSizeOfDivision(division).thenApply(rank::addAndGet));
+    });
+    return CompletableFuture.completedFuture(rank.get());
+  }
+
+  @Override
+  public CompletableFuture<Integer> getSizeOfDivision(Division division) {
+    return getEntries(division).thenApply(List::size);
   }
 
   private List<RatingStat> toRatingStats(List<LeaderboardEntry> entries) {
@@ -66,10 +92,6 @@ public class LeaderboardServiceImpl implements LeaderboardService {
             entry.getValue().intValue(),
             countWithoutFewGames.getOrDefault(entry.getKey(), 0L).intValue()))
         .collect(Collectors.toList());
-  }
-
-  private DivisionStat toDivisionStats(List<LeagueEntry> entries) {
-    return new DivisionStat(entries.size());
   }
 
   private Map<Integer, Long> countByRating(Stream<LeaderboardEntry> entries) {
@@ -95,10 +117,5 @@ public class LeaderboardServiceImpl implements LeaderboardService {
   @Override
   public CompletableFuture<List<Division>> getDivisions(String leagueTechnicalName) {
     return fafService.getDivisions(leagueTechnicalName);
-  }
-
-  @Override
-  public CompletableFuture<List<LeagueEntry>> getDivisionEntries(Division division) {
-    return fafService.getDivisionLeaderboard(division);
   }
 }
