@@ -76,7 +76,6 @@ public class LeaderboardsController extends AbstractViewController<Node> {
         });
       }
       leaderboardRoot.getSelectionModel().select(lastTab);
-      lastTabController.display();
     } finally {
       isHandlingEvent = false;
     }

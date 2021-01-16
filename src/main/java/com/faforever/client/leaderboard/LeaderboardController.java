@@ -7,7 +7,6 @@ import com.faforever.client.i18n.I18n;
 import com.faforever.client.player.Player;
 import com.faforever.client.player.PlayerService;
 import com.faforever.client.theme.UiService;
-import com.faforever.client.util.Assert;
 import com.faforever.client.util.Validator;
 import javafx.application.Platform;
 import javafx.beans.InvalidationListener;
@@ -32,7 +31,6 @@ import javafx.scene.shape.Arc;
 import javafx.scene.text.Text;
 import javafx.util.StringConverter;
 import lombok.RequiredArgsConstructor;
-import lombok.Setter;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -72,7 +70,6 @@ public class LeaderboardController implements Controller<Tab> {
   public TabPane subDivisionTabPane;
   public ImageView playerDivisionImageView;
   public CategoryAxis xAxis;
-  @Setter
   private String leagueTechnicalName;
 
   @Override
@@ -89,9 +86,8 @@ public class LeaderboardController implements Controller<Tab> {
 
     JavaFxUtil.addListener(playerService.currentPlayerProperty(), (observable, oldValue, newValue) -> Platform.runLater(() -> setCurrentPlayer(newValue)));
 
-    searchTextField.textProperty().addListener((observable, oldValue, newValue) -> {
-      processSearchInput(newValue);
-    });
+    searchTextField.textProperty().addListener((observable, oldValue, newValue) ->
+        processSearchInput(newValue));
   }
 
   private void processSearchInput(String searchText) {
@@ -142,13 +138,12 @@ public class LeaderboardController implements Controller<Tab> {
     });
   }
 
-  protected void display() {
-    Assert.checkNullIllegalState(leagueTechnicalName, "leagueName must not be null");
+  public void setLeagueTechnicalName(String leagueTechnicalName) {
+    this.leagueTechnicalName = leagueTechnicalName;
 
     contentPane.setVisible(false);
     leaderboardService.getDivisions(leagueTechnicalName).thenAccept(divisions -> Platform.runLater(() -> {
       majorDivisionPicker.getItems().clear();
-
       majorDivisionPicker.getItems().addAll(
           divisions.stream().filter(division -> division.getSubDivisionIndex() == 1).collect(Collectors.toList()));
       contentPane.setVisible(true);
@@ -205,6 +200,7 @@ public class LeaderboardController implements Controller<Tab> {
           10));
       majorDivisionPicker.getItems().stream()
           .findFirst().ifPresent(item -> majorDivisionPicker.getSelectionModel().select(item));
+      onMajorDivisionPicked();
       subDivisionTabPane.getTabs().stream()
           .findFirst().ifPresent(tab -> subDivisionTabPane.getSelectionModel().select(tab));
       return null;
