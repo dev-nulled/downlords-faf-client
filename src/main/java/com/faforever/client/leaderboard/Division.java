@@ -10,4 +10,9 @@ public class Division {
   DivisionName majorDivisionName;
   DivisionName subDivisionName;
   int highestScore;
+
+  @Override
+  public String toString() {
+    return majorDivisionName.getImageKey() + subDivisionName.getImageKey();
+  }
 }

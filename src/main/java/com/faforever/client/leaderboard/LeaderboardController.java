@@ -4,6 +4,7 @@ import com.faforever.client.chat.avatar.AvatarService;
 import com.faforever.client.fx.Controller;
 import com.faforever.client.fx.JavaFxUtil;
 import com.faforever.client.i18n.I18n;
+import com.faforever.client.notification.NotificationService;
 import com.faforever.client.player.Player;
 import com.faforever.client.player.PlayerService;
 import com.faforever.client.theme.UiService;
@@ -31,28 +32,27 @@ import javafx.scene.shape.Arc;
 import javafx.scene.text.Text;
 import javafx.util.StringConverter;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
-import java.lang.invoke.MethodHandles;
 import java.util.List;
 import java.util.stream.Collectors;
 
 
+@Slf4j
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
 @RequiredArgsConstructor
 public class LeaderboardController implements Controller<Tab> {
 
-  private static final Logger logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
   private static final PseudoClass NOTIFICATION_HIGHLIGHTED_PSEUDO_CLASS = PseudoClass.getPseudoClass("highlighted-bar");
 
   private final LeaderboardService leaderboardService;
   private final I18n i18n;
+  private final NotificationService notificationService;
   private final PlayerService playerService;
   private final UiService uiService;
   private final AvatarService avatarService;
@@ -149,7 +149,8 @@ public class LeaderboardController implements Controller<Tab> {
       contentPane.setVisible(true);
     })).exceptionally(throwable -> {
       contentPane.setVisible(false);
-      logger.warn("Could not read divisions", throwable);
+      log.warn("Error while loading division list", throwable);
+      notificationService.addImmediateErrorNotification(throwable, "leaderboard.failedToLoad");
       return null;
     });
     playerService.getCurrentPlayer().ifPresent(this::setCurrentPlayer);
@@ -188,12 +189,12 @@ public class LeaderboardController implements Controller<Tab> {
           });
         }
       })).exceptionally(throwable -> {
-        logger.warn("Could not get list of divisions", throwable);
+        log.warn("Error while loading division list", throwable);
         return null;
       })
     ).exceptionally(throwable -> {
       // Debug instead of warn, since it's fairly common that players don't have a leaderboard entry which causes a 404
-      logger.debug("Leaderboard entry could not be read for current player: " + player.getUsername(), throwable);
+      log.debug("Leaderboard entry could not be read for current player: " + player.getUsername(), throwable);
       playerDivisionNameLabel.setText(i18n.get("leaderboard.placement",
           "X", // Would rather do this:
           // leagueEntry.getGamesPlayed(),
@@ -251,7 +252,7 @@ public class LeaderboardController implements Controller<Tab> {
                 .thenAccept(totalPlayers ->
             xAxis.labelProperty().setValue(i18n.get("leaderboard.rank", rank, totalPlayers))))
         .exceptionally(throwable -> {
-          logger.warn("Could not get player rank", throwable);
+          log.warn("Could not get player rank", throwable);
           return null;
         });
   }
