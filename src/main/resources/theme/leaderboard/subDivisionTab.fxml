@@ -10,6 +10,7 @@
         <columns>
             <TableColumn fx:id="rankColumn" prefWidth="60" text="RANK" />
             <TableColumn fx:id="nameColumn" prefWidth="${ratingTable.width - 220}" text="NAME" />
+            <TableColumn fx:id="winLossColumn" text="Win/Loss Ratio" visible="false"/>
             <TableColumn fx:id="scoreColumn" prefWidth="80" text="SCORE" />
             <TableColumn fx:id="gamesPlayedColumn" prefWidth="80" text="GAMES" />
         </columns>
