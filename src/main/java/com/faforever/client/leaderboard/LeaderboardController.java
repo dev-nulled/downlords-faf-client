@@ -164,8 +164,7 @@ public class LeaderboardController implements Controller<Tab> {
   private void setCurrentPlayer(Player player) {
     InvalidationListener playerLeagueScoreListener = leagueObservable -> Platform.runLater(() -> updateDisplayedPlayerStats(player));
 
-    JavaFxUtil.addListener(player.subDivisionIndexProperty(), new WeakInvalidationListener(playerLeagueScoreListener));
-    JavaFxUtil.addListener(player.scoreProperty(), new WeakInvalidationListener(playerLeagueScoreListener));
+    JavaFxUtil.addListener(player.leaderboardRatingMapProperty(), new WeakInvalidationListener(playerLeagueScoreListener));
     updateDisplayedPlayerStats(player);
   }
 
