@@ -23,6 +23,8 @@ import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
+import java.util.Comparator;
+
 import static javafx.collections.FXCollections.observableList;
 
 
@@ -62,7 +64,8 @@ public class LeaderboardsController extends AbstractViewController<Node> {
       return null;
     });
 
-    rankColumn.setCellValueFactory(param -> new SimpleIntegerProperty(ratingTable.getItems().indexOf(param.getValue()) + 1));
+    rankColumn.setCellValueFactory(param -> new SimpleIntegerProperty(ratingTable.getItems()
+        .sorted(Comparator.comparingDouble(LeaderboardEntry::getRating).reversed()).indexOf(param.getValue()) + 1));
     rankColumn.setCellFactory(param -> new StringCell<>(rank -> i18n.number(rank.intValue())));
 
     nameColumn.setCellValueFactory(param -> param.getValue().usernameProperty());
