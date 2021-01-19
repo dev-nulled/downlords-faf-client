@@ -14,6 +14,7 @@ import com.faforever.client.api.dto.LeaderboardEntry;
 import com.faforever.client.api.dto.LeaderboardRatingJournal;
 import com.faforever.client.api.dto.League;
 import com.faforever.client.api.dto.LeagueEntry;
+import com.faforever.client.api.dto.LeagueSeason;
 import com.faforever.client.api.dto.Map;
 import com.faforever.client.api.dto.MapVersion;
 import com.faforever.client.api.dto.MapVersionReview;
@@ -149,7 +150,7 @@ public class MockFafApiAccessor implements FafApiAccessor {
   }
 
   @Override
-  public LeagueEntry getLeagueEntryForPlayer(int playerId, String league) {
+  public LeagueEntry getLeagueEntryForPlayer(int playerId, int leagueSeasonId) {
     return null;
   }
 
@@ -338,15 +339,20 @@ public class MockFafApiAccessor implements FafApiAccessor {
   }
 
   @Override
-  public List<Division> getDivisions(String league) {
+  public List<Division> getDivisions(int leagueSeasonId) {
     return Collections.emptyList();
   }
 
   @Override
   public List<League> getLeagues() {
     return List.of(
-        new League("1", OffsetDateTime.now(), OffsetDateTime.now(), "mock", "mock", "mock", "1")
+        new League("1", "mock", "mock", "mock", OffsetDateTime.now(), OffsetDateTime.now())
     );
+  }
+
+  @Override
+  public LeagueSeason getLatestSeason(int leagueId) {
+    return new LeagueSeason("1", 1, 1, "seasonName", OffsetDateTime.now(), OffsetDateTime.now());
   }
 
   @Override

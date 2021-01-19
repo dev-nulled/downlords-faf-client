@@ -26,6 +26,7 @@ import com.faforever.client.leaderboard.Leaderboard;
 import com.faforever.client.leaderboard.LeaderboardEntry;
 import com.faforever.client.leaderboard.League;
 import com.faforever.client.leaderboard.LeagueEntry;
+import com.faforever.client.leaderboard.LeagueSeason;
 import com.faforever.client.map.MapBean;
 import com.faforever.client.mod.FeaturedMod;
 import com.faforever.client.mod.ModVersion;
@@ -159,6 +160,11 @@ public class FafService {
   }
 
   @Async
+  public CompletableFuture<LeagueSeason> getLatestSeason(int leagueId) {
+    return CompletableFuture.completedFuture(LeagueSeason.fromDto(fafApiAccessor.getLatestSeason(leagueId)));
+  }
+
+  @Async
   public CompletableFuture<List<LeaderboardEntry>> getLeaderboardEntriesForPlayer(int playerId) {
     return CompletableFuture.completedFuture(fafApiAccessor.getLeaderboardEntriesForPlayer(playerId)
         .stream()
@@ -185,8 +191,8 @@ public class FafService {
   }
 
   @Async
-  public CompletableFuture<LeagueEntry> getLeagueEntryForPlayer(int playerId, String league) {
-    return CompletableFuture.completedFuture(LeagueEntry.fromDto(fafApiAccessor.getLeagueEntryForPlayer(playerId, league)));
+  public CompletableFuture<LeagueEntry> getLeagueEntryForPlayer(int playerId, int leagueSeasonId) {
+    return CompletableFuture.completedFuture(LeagueEntry.fromDto(fafApiAccessor.getLeagueEntryForPlayer(playerId, leagueSeasonId)));
   }
 
   @Async
@@ -305,8 +311,8 @@ public class FafService {
   }
 
   @Async
-  public CompletableFuture<List<Division>> getDivisions(String leagueTechnicalName) {
-    return CompletableFuture.completedFuture(fafApiAccessor.getDivisions(leagueTechnicalName));
+  public CompletableFuture<List<Division>> getDivisions(int leagueSeasonId) {
+    return CompletableFuture.completedFuture(fafApiAccessor.getDivisions(leagueSeasonId));
   }
 
   @Async

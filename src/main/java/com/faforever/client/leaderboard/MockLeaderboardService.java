@@ -47,6 +47,13 @@ public class MockLeaderboardService implements LeaderboardService {
   }
 
   @Override
+  public CompletableFuture<LeagueSeason> getLatestSeason(int leagueId) {
+    LeagueSeason season = new LeagueSeason();
+    season.setTechnicalName("1");
+    return CompletableFuture.completedFuture(season);
+  }
+
+  @Override
   public CompletableFuture<List<Leaderboard>> getLeaderboards() {
     return CompletableFuture.completedFuture(Collections.emptyList());
   }
@@ -54,9 +61,9 @@ public class MockLeaderboardService implements LeaderboardService {
   @Override
   public CompletableFuture<List<League>> getLeagues() {
     return CompletableFuture.completedFuture(List.of(
-        League.fromDto(new com.faforever.client.api.dto.League("1", OffsetDateTime.now(), OffsetDateTime.now(), "mock", "mock", "ladder1v1", "1")),
-        League.fromDto(new com.faforever.client.api.dto.League("1", OffsetDateTime.now(), OffsetDateTime.now(), "mock", "mock", "tmm2v2", "1")),
-        League.fromDto(new com.faforever.client.api.dto.League("1", OffsetDateTime.now(), OffsetDateTime.now(), "mock", "mock", "team", "1"))
+        League.fromDto(new com.faforever.client.api.dto.League("1", "ladder1v1", "mock", "mock", OffsetDateTime.now(), OffsetDateTime.now())),
+        League.fromDto(new com.faforever.client.api.dto.League("2", "tmm2v2", "mock", "mock", OffsetDateTime.now(), OffsetDateTime.now())),
+        League.fromDto(new com.faforever.client.api.dto.League("3", "team", "mock", "mock", OffsetDateTime.now(), OffsetDateTime.now()))
     ));
   }
 
@@ -66,7 +73,7 @@ public class MockLeaderboardService implements LeaderboardService {
   }
 
   @Override
-  public CompletableFuture<List<Division>> getDivisions(String leagueTechnicalName) {
+  public CompletableFuture<List<Division>> getDivisions(int leagueSeasonId) {
     DivisionName[] subnames = {V, IV, III, II, I};
     DivisionName[] majornames = {BRONZE, SILVER, GOLD, DIAMOND, MASTER};
     List<Division> divisions = new LinkedList<>();
@@ -83,9 +90,9 @@ public class MockLeaderboardService implements LeaderboardService {
   }
 
   @Override
-  public CompletableFuture<Integer> getTotalPlayers(String leagueTechnicalName) {
+  public CompletableFuture<Integer> getTotalPlayers(int leagueSeasonId) {
     AtomicInteger rank = new AtomicInteger();
-    getDivisions(leagueTechnicalName).thenAccept(divisions -> {
+    getDivisions(leagueSeasonId).thenAccept(divisions -> {
       divisions.forEach(division -> getSizeOfDivision(division).thenApply(rank::addAndGet));
     });
     return CompletableFuture.completedFuture(rank.get());
@@ -113,14 +120,14 @@ public class MockLeaderboardService implements LeaderboardService {
   }
 
   @Override
-  public CompletableFuture<LeagueEntry> getLeagueEntryForPlayer(int playerId, String leagueTechnicalName) {
+  public CompletableFuture<LeagueEntry> getLeagueEntryForPlayer(int playerId, int leagueSeasonId) {
     LeagueEntry entry = new LeagueEntry();
-    League league = League.fromDto(new com.faforever.client.api.dto.League("1", OffsetDateTime.now(), OffsetDateTime.now(), "mock", "mock", "ladder1v1", "1"));
+    LeagueSeason leagueSeason = LeagueSeason.fromDto(new com.faforever.client.api.dto.LeagueSeason("1", 1, 1, "mock", OffsetDateTime.now(), OffsetDateTime.now()));
     entry.setSubDivisionIndex(4);
     entry.setMajorDivisionIndex(2);
     entry.setScore(8);
     entry.setGamesPlayed(3);
-    entry.setLeague(league);
+    entry.setLeagueSeason(leagueSeason);
 
     Throwable noEntry = new Throwable();
     boolean testNoEntry = false;

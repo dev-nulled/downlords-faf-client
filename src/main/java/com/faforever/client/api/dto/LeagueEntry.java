@@ -30,5 +30,5 @@ public class LeagueEntry {
   private Player player;
 
   @Relationship("league")
-  private League league;
+  private LeagueSeason leagueSeason;
 }

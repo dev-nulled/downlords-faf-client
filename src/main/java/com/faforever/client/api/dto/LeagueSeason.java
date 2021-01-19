@@ -9,15 +9,15 @@ import lombok.NoArgsConstructor;
 import java.time.OffsetDateTime;
 
 @Data
-@Type("league")
+@Type("leagueSeason")
 @AllArgsConstructor
 @NoArgsConstructor
-public class League {
+public class LeagueSeason {
   @Id
   private String id;
-  private String technicalName;
-  private String nameKey;
-  private String descriptionKey;
-  private OffsetDateTime createTime;
-  private OffsetDateTime updateTime;
+  private Integer leagueId;
+  private Integer leaderboardId;
+  private String technicalName; // not provided yet
+  private OffsetDateTime startDate;
+  private OffsetDateTime endDate;
 }

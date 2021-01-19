@@ -13,6 +13,7 @@ import com.faforever.client.api.dto.LeaderboardEntry;
 import com.faforever.client.api.dto.LeaderboardRatingJournal;
 import com.faforever.client.api.dto.League;
 import com.faforever.client.api.dto.LeagueEntry;
+import com.faforever.client.api.dto.LeagueSeason;
 import com.faforever.client.api.dto.Map;
 import com.faforever.client.api.dto.MapStatistics;
 import com.faforever.client.api.dto.MapVersion;
@@ -215,6 +216,11 @@ public class FafApiAccessorImpl implements FafApiAccessor, InitializingBean {
   }
 
   @Override
+  public LeagueSeason getLatestSeason(int leagueId) {
+    return null;
+  }
+
+  @Override
   public List<LeaderboardEntry> getLeaderboardEntriesForPlayer(int playerId) {
     return getAll(LEADERBOARD_ENTRY_ENDPOINT, java.util.Map.of(
         FILTER, rsql(qBuilder().intNum("player.id").eq(playerId)),
@@ -247,7 +253,7 @@ public class FafApiAccessorImpl implements FafApiAccessor, InitializingBean {
   }
 
   @Override
-  public LeagueEntry getLeagueEntryForPlayer(int playerId, String league) {
+  public LeagueEntry getLeagueEntryForPlayer(int playerId, int leagueSeasonId) {
     //return getOne("/leaderboards/"+ league + "/" + playerId, LeagueEntry.class);
     return null;
   }
@@ -429,8 +435,8 @@ public class FafApiAccessorImpl implements FafApiAccessor, InitializingBean {
   }
 
   @Override
-  public List<Division> getDivisions(String league) {
-    return getAll("/" + league);
+  public List<Division> getDivisions(int leagueSeasonId) {
+    return getAll("/" + leagueSeasonId);
   }
 
   @Override

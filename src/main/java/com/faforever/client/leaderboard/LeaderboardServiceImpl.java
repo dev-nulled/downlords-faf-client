@@ -47,9 +47,14 @@ public class LeaderboardServiceImpl implements LeaderboardService {
   }
 
   @Override
+  public CompletableFuture<LeagueSeason> getLatestSeason(int leagueId) {
+    return fafService.getLatestSeason(leagueId);
+  }
+
+  @Override
   public CompletableFuture<Integer> getAccumulatedRank(LeagueEntry entry) {
     AtomicInteger rank = new AtomicInteger();
-    getDivisions(entry.getLeague().getTechnicalName()).thenAccept(divisions -> {
+    getDivisions(entry.getLeagueSeason().getId()).thenAccept(divisions -> {
       //discard lower divisions
       divisions.stream()
           .filter(division -> division.getMajorDivisionIndex() >= entry.getMajorDivisionIndex())
@@ -68,9 +73,9 @@ public class LeaderboardServiceImpl implements LeaderboardService {
   }
 
   @Override
-  public CompletableFuture<Integer> getTotalPlayers(String leagueTechnicalName) {
+  public CompletableFuture<Integer> getTotalPlayers(int leagueSeasonId) {
     AtomicInteger rank = new AtomicInteger();
-    getDivisions(leagueTechnicalName).thenAccept(divisions -> {
+    getDivisions(leagueSeasonId).thenAccept(divisions -> {
       divisions.forEach(division -> getSizeOfDivision(division).thenApply(rank::addAndGet));
     });
     return CompletableFuture.completedFuture(rank.get());
@@ -105,8 +110,8 @@ public class LeaderboardServiceImpl implements LeaderboardService {
   }
 
   @Override
-  public CompletableFuture<LeagueEntry> getLeagueEntryForPlayer(int playerId, String leagueTechnicalName) {
-    return fafService.getLeagueEntryForPlayer(playerId, leagueTechnicalName);
+  public CompletableFuture<LeagueEntry> getLeagueEntryForPlayer(int playerId, int leagueSeasonId) {
+    return fafService.getLeagueEntryForPlayer(playerId, leagueSeasonId);
   }
 
   @Override
@@ -115,7 +120,7 @@ public class LeaderboardServiceImpl implements LeaderboardService {
   }
 
   @Override
-  public CompletableFuture<List<Division>> getDivisions(String leagueTechnicalName) {
-    return fafService.getDivisions(leagueTechnicalName);
+  public CompletableFuture<List<Division>> getDivisions(int leagueSeasonId) {
+    return fafService.getDivisions(leagueSeasonId);
   }
 }

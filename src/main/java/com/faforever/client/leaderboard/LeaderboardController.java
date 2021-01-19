@@ -70,11 +70,10 @@ public class LeaderboardController implements Controller<Tab> {
   public TabPane subDivisionTabPane;
   public ImageView playerDivisionImageView;
   public CategoryAxis xAxis;
-  private String leagueTechnicalName;
+  private LeagueSeason season;
 
   @Override
   public void initialize() {
-    seasonLabel.setText(i18n.get("leaderboard.season").toUpperCase());
     scoreLabel.setText(i18n.get("leaderboard.score").toUpperCase());
     searchTextField.setPromptText(i18n.get("leaderboard.searchPrompt").toUpperCase());
 
@@ -122,7 +121,7 @@ public class LeaderboardController implements Controller<Tab> {
 
   private void searchInAllDivisions(String searchText) {
     playerService.getPlayerForUsername(searchText).ifPresent(player -> {
-      leaderboardService.getLeagueEntryForPlayer(player.getId(), leagueTechnicalName).thenAccept(leagueEntry -> {
+      leaderboardService.getLeagueEntryForPlayer(player.getId(), season.getId()).thenAccept(leagueEntry -> {
         majorDivisionPicker.getItems().stream()
             .filter(item -> item.getMajorDivisionIndex() == leagueEntry.getMajorDivisionIndex())
             .findFirst().ifPresent(item -> majorDivisionPicker.getSelectionModel().select(item));
@@ -138,11 +137,12 @@ public class LeaderboardController implements Controller<Tab> {
     });
   }
 
-  public void setLeagueTechnicalName(String leagueTechnicalName) {
-    this.leagueTechnicalName = leagueTechnicalName;
+  public void setSeason(LeagueSeason season) {
+    this.season = season;
 
+    seasonLabel.setText(i18n.get("leaderboard.seasonName", season.getTechnicalName()).toUpperCase());
     contentPane.setVisible(false);
-    leaderboardService.getDivisions(leagueTechnicalName).thenAccept(divisions -> Platform.runLater(() -> {
+    leaderboardService.getDivisions(season.getId()).thenAccept(divisions -> Platform.runLater(() -> {
       majorDivisionPicker.getItems().clear();
       majorDivisionPicker.getItems().addAll(
           divisions.stream().filter(division -> division.getSubDivisionIndex() == 1).collect(Collectors.toList()));
@@ -169,8 +169,8 @@ public class LeaderboardController implements Controller<Tab> {
   }
 
   private void updateDisplayedPlayerStats(Player player) {
-    leaderboardService.getLeagueEntryForPlayer(player.getId(), leagueTechnicalName).thenAccept(leagueEntry ->
-      leaderboardService.getDivisions(leagueTechnicalName).thenAccept(divisions -> divisions.forEach(division -> {
+    leaderboardService.getLeagueEntryForPlayer(player.getId(), season.getId()).thenAccept(leagueEntry ->
+      leaderboardService.getDivisions(season.getId()).thenAccept(divisions -> divisions.forEach(division -> {
         if (division.getMajorDivisionIndex() == leagueEntry.getMajorDivisionIndex()
             && division.getSubDivisionIndex() == leagueEntry.getSubDivisionIndex()) {
           Platform.runLater(() -> {
@@ -247,7 +247,7 @@ public class LeaderboardController implements Controller<Tab> {
     });
     leaderboardService.getAccumulatedRank(leagueEntry)
         .thenAccept(rank ->
-            leaderboardService.getTotalPlayers(leagueEntry.getLeague().getTechnicalName())
+            leaderboardService.getTotalPlayers(season.getId())
                 .thenAccept(totalPlayers ->
             xAxis.labelProperty().setValue(i18n.get("leaderboard.rank", rank, totalPlayers))))
         .exceptionally(throwable -> {
@@ -292,7 +292,7 @@ public class LeaderboardController implements Controller<Tab> {
   }
 
   public void onMajorDivisionPicked() {
-    leaderboardService.getDivisions(leagueTechnicalName).thenAccept(divisions -> {
+    leaderboardService.getDivisions(season.getId()).thenAccept(divisions -> {
       subDivisionTabPane.getTabs().clear();
       divisions.stream()
           .filter(division -> division.getMajorDivisionIndex() == majorDivisionPicker.getValue().getMajorDivisionIndex())

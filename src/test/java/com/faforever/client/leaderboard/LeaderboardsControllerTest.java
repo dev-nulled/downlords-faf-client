@@ -39,7 +39,7 @@ public class LeaderboardsControllerTest extends AbstractPlainJavaFxTest {
 
   @Before
   public void setUp() throws Exception {
-    league = League.fromDto(new com.faforever.client.api.dto.League("1", OffsetDateTime.now(), OffsetDateTime.now(), "mock", "mock", "mock", "1"));
+    league = League.fromDto(new com.faforever.client.api.dto.League("1", "mock", "mock", "mock", OffsetDateTime.now(), OffsetDateTime.now()));
 
     when(leaderboardService.getLeagues()).thenReturn(CompletableFuture.completedFuture(List.of(league, league)));
     when(uiService.loadFxml("theme/leaderboard/leaderboard.fxml")).thenReturn(leaderboardController);

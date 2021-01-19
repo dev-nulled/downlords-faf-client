@@ -14,7 +14,7 @@ public class LeagueEntry {
   private final StringProperty username;
   private final IntegerProperty gamesPlayed;
   private final FloatProperty winLossRatio;
-  private final ObjectProperty<League> league;
+  private final ObjectProperty<LeagueSeason> leagueSeason;
   private final IntegerProperty score;
   private final IntegerProperty majorDivisionIndex;
   private final IntegerProperty subDivisionIndex;
@@ -23,7 +23,7 @@ public class LeagueEntry {
     username = new SimpleStringProperty();
     gamesPlayed = new SimpleIntegerProperty();
     winLossRatio = new SimpleFloatProperty();
-    league = new SimpleObjectProperty<>();
+    leagueSeason = new SimpleObjectProperty<>();
     score = new SimpleIntegerProperty();
     majorDivisionIndex = new SimpleIntegerProperty();
     subDivisionIndex = new SimpleIntegerProperty();
@@ -34,7 +34,7 @@ public class LeagueEntry {
     leagueEntry.setUsername(entry.getPlayer().getLogin());
     leagueEntry.setGamesPlayed(entry.getNumGames());
     leagueEntry.setWinLossRatio(entry.getWonGames() / (float) entry.getNumGames());
-    leagueEntry.setLeague(League.fromDto(entry.getLeague()));
+    leagueEntry.setLeagueSeason(LeagueSeason.fromDto(entry.getLeagueSeason()));
     leagueEntry.setScore(entry.getScore());
     leagueEntry.setMajorDivisionIndex(entry.getMajorDivisionIndex());
     leagueEntry.setSubDivisionIndex(entry.getSubDivisionIndex());
@@ -54,16 +54,16 @@ public class LeagueEntry {
     return username;
   }
 
-  public League getLeague() {
-    return league.get();
+  public LeagueSeason getLeagueSeason() {
+    return leagueSeason.get();
   }
 
-  public void setLeague(League league) {
-    this.league.set(league);
+  public void setLeagueSeason(LeagueSeason leagueSeason) {
+    this.leagueSeason.set(leagueSeason);
   }
 
-  public ObjectProperty<League> leagueProperty() {
-    return league;
+  public ObjectProperty<LeagueSeason> leagueSeasonProperty() {
+    return leagueSeason;
   }
 
   public int getGamesPlayed() {
@@ -150,7 +150,7 @@ public class LeagueEntry {
   public String toString() {
     return "LeagueEntry{" +
         "username=" + username.get() +
-        ",leaderboard=" + league.get().getTechnicalName() +
+        ",leagueSeason=" + leagueSeason.get().getTechnicalName() +
         '}';
   }
 }

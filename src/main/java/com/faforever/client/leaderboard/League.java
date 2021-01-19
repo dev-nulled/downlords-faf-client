@@ -14,21 +14,19 @@ import java.util.Objects;
 @Data
 public class League {
   private final IntegerProperty id;
+  private final StringProperty technicalName;
+  private final StringProperty nameKey;
+  private final StringProperty descriptionKey;
   private final ObjectProperty<OffsetDateTime> createTime;
   private final ObjectProperty<OffsetDateTime> updateTime;
-  private final StringProperty descriptionKey;
-  private final StringProperty nameKey;
-  private final StringProperty technicalName;
-  private final IntegerProperty currentSeasonId;
 
   public League() {
     id = new SimpleIntegerProperty();
+    technicalName = new SimpleStringProperty();
+    nameKey = new SimpleStringProperty();
+    descriptionKey = new SimpleStringProperty();
     createTime = new SimpleObjectProperty<>();
     updateTime = new SimpleObjectProperty<>();
-    descriptionKey = new SimpleStringProperty();
-    nameKey = new SimpleStringProperty();
-    technicalName = new SimpleStringProperty();
-    currentSeasonId = new SimpleIntegerProperty();
   }
 
   public static League fromDto(com.faforever.client.api.dto.League dto) {
@@ -39,7 +37,6 @@ public class League {
     league.setDescriptionKey(dto.getDescriptionKey());
     league.setNameKey(dto.getNameKey());
     league.setTechnicalName(dto.getTechnicalName());
-    league.setCurrentSeasonId(Integer.parseInt(dto.getCurrentSeasonId()));
     return league;
   }
 
@@ -113,18 +110,6 @@ public class League {
 
   public ObjectProperty<OffsetDateTime> updateTimeProperty() {
     return updateTime;
-  }
-
-  public Integer getCurrentSeasonId() {
-    return currentSeasonId.get();
-  }
-
-  public void setCurrentSeasonId(int id) {
-    this.currentSeasonId.set(id);
-  }
-
-  public IntegerProperty currentSeasonIdProperty() {
-    return currentSeasonId;
   }
 
   @Override

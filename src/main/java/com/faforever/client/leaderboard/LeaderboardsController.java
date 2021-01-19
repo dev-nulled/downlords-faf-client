@@ -47,11 +47,13 @@ public class LeaderboardsController extends AbstractViewController<Node> {
   public void initialize() {
     leaderboardService.getLeagues().thenAccept(leagues -> {
       leagues.forEach(league -> {
-        LeaderboardController controller = uiService.loadFxml("theme/leaderboard/leaderboard.fxml");
-        controller.setLeagueTechnicalName(league.getTechnicalName());
-        controller.getRoot().setText(i18n.get(String.format("leaderboard.%s", league.getTechnicalName())));
-        leaderboardRoot.getTabs().add(controller.getRoot());
-        controllers.add(controller);
+        leaderboardService.getLatestSeason(league.getId()).thenAccept(season -> {
+          LeaderboardController controller = uiService.loadFxml("theme/leaderboard/leaderboard.fxml");
+          controller.setSeason(season);
+          controller.getRoot().setText(i18n.get(String.format("leaderboard.%s", league.getTechnicalName())));
+          leaderboardRoot.getTabs().add(controller.getRoot());
+          controllers.add(controller);
+        });
       });
       lastTabController = controllers.get(0);
       lastTab = lastTabController.getRoot();
