@@ -7,8 +7,6 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.time.OffsetDateTime;
-
 @Getter
 @Setter
 @EqualsAndHashCode(of = "id")
@@ -16,15 +14,13 @@ import java.time.OffsetDateTime;
 public class LeagueEntry {
   @Id
   private String id;
-  private int rank; // Will we even need/have this?
-  private Integer score;
+  private Integer rank; // Not supported at the moment
+  private Integer score; // (may be null)
   private Integer numGames;
-  private Integer wonGames;
-  private Boolean isActive;
+  private Integer wonGames; // Not supported at the moment
+  //server only stores subDivisionId instead of explicitly these two (may be null)
   private Integer majorDivisionIndex;
   private Integer subDivisionIndex;
-  private OffsetDateTime createTime;
-  private OffsetDateTime updateTime;
 
   @Relationship("player")
   private Player player;
