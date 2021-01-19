@@ -1,6 +1,7 @@
 package com.faforever.client.leaderboard;
 
 import com.faforever.client.i18n.I18n;
+import com.faforever.client.notification.NotificationService;
 import com.faforever.client.test.AbstractPlainJavaFxTest;
 import com.faforever.client.theme.UiService;
 import com.google.common.eventbus.EventBus;
@@ -26,6 +27,8 @@ public class LeaderboardsControllerTest extends AbstractPlainJavaFxTest {
   @Mock
   private LeaderboardService leaderboardService;
   @Mock
+  private NotificationService notificationService;
+  @Mock
   private UiService uiService;
   @Mock
   private I18n i18n;
@@ -43,7 +46,7 @@ public class LeaderboardsControllerTest extends AbstractPlainJavaFxTest {
     when(i18n.get("leaderboard.mock")).thenReturn("mock");
     when(leaderboardController.getRoot()).thenReturn(new Tab());
 
-    instance = new LeaderboardsController(eventBus, i18n, leaderboardService, uiService);
+    instance = new LeaderboardsController(eventBus, i18n, leaderboardService, notificationService, uiService);
 
     loadFxml("theme/leaderboard/leaderboards.fxml", clazz -> instance);
   }
