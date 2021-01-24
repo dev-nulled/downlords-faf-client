@@ -63,6 +63,7 @@ public class LeaderboardServiceImpl implements LeaderboardService {
             if (division.getMajorDivisionIndex() == entry.getMajorDivisionIndex()
                 && division.getSubDivisionIndex() == entry.getSubDivisionIndex()) {
               //add local rank of entry in own division
+              // TODO we need the actual rank
               rank.addAndGet(20);
             } else {
               getSizeOfDivision(division).thenApply(rank::addAndGet);

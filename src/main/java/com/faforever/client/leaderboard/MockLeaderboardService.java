@@ -69,7 +69,23 @@ public class MockLeaderboardService implements LeaderboardService {
 
   @Override
   public CompletableFuture<Integer> getAccumulatedRank(LeagueEntry entry) {
-    return CompletableFuture.completedFuture(8000);
+    AtomicInteger rank = new AtomicInteger();
+    getDivisions(entry.getLeagueSeason().getId()).thenAccept(divisions -> {
+      //discard lower divisions
+      divisions.stream()
+          .filter(division -> division.getMajorDivisionIndex() >= entry.getMajorDivisionIndex())
+          .filter(division -> !(division.getMajorDivisionIndex() == entry.getMajorDivisionIndex() && division.getSubDivisionIndex() < entry.getSubDivisionIndex()))
+          .forEach(division -> {
+            if (division.getMajorDivisionIndex() == entry.getMajorDivisionIndex()
+                && division.getSubDivisionIndex() == entry.getSubDivisionIndex()) {
+              //add local rank of entry in own division
+              rank.addAndGet(20);
+            } else {
+              getSizeOfDivision(division).thenApply(rank::addAndGet);
+            }
+          });
+    });
+    return CompletableFuture.completedFuture(rank.get());
   }
 
   @Override
