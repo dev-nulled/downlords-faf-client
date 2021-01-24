@@ -169,58 +169,61 @@ public class LeaderboardController implements Controller<Tab> {
   }
 
   private void updateDisplayedPlayerStats(Player player) {
-    leaderboardService.getLeagueEntryForPlayer(player.getId(), season.getId()).thenAccept(leagueEntry ->
-      leaderboardService.getDivisions(season.getId()).thenAccept(divisions -> divisions.forEach(division -> {
-        if (division.getMajorDivisionIndex() == leagueEntry.getMajorDivisionIndex()
-            && division.getSubDivisionIndex() == leagueEntry.getSubDivisionIndex()) {
-          Platform.runLater(() -> {
-            playerDivisionImageView.setImage(avatarService.loadAvatar(
-                String.format("https://content.faforever.com/divisions/icons/%s-%s.png",
-                    division.getMajorDivisionName().getImageKey(),
-                    division.getSubDivisionName().getImageKey())));
-            playerDivisionNameLabel.setText(i18n.get("leaderboard.divisionName",
-                i18n.get(division.getMajorDivisionName().getI18nKey()),
-                i18n.get(division.getSubDivisionName().getI18nKey())).toUpperCase());
-            scoreArc.setLength(-360.0 * leagueEntry.getScore() / division.getHighestScore());
-            playerScoreLabel.setText(i18n.number(leagueEntry.getScore()));
-            selectOwnLeagueEntry(leagueEntry);
-            plotDivisionDistributions(divisions, leagueEntry);
-          });
+    leaderboardService.getDivisions(season.getId()).thenAccept(divisions ->
+      leaderboardService.getLeagueEntryForPlayer(player.getId(), season.getId()).thenAccept(leagueEntry -> {
+        divisions.forEach(division -> {
+          if (division.getMajorDivisionIndex() == leagueEntry.getMajorDivisionIndex()
+              && division.getSubDivisionIndex() == leagueEntry.getSubDivisionIndex()) {
+            Platform.runLater(() -> {
+              playerDivisionImageView.setImage(avatarService.loadAvatar(
+                  String.format("https://content.faforever.com/divisions/icons/%s-%s.png",
+                      division.getMajorDivisionName().getImageKey(),
+                      division.getSubDivisionName().getImageKey())));
+              playerDivisionNameLabel.setText(i18n.get("leaderboard.divisionName",
+                  i18n.get(division.getMajorDivisionName().getI18nKey()),
+                  i18n.get(division.getSubDivisionName().getI18nKey())).toUpperCase());
+              scoreArc.setLength(-360.0 * leagueEntry.getScore() / division.getHighestScore());
+              playerScoreLabel.setText(i18n.number(leagueEntry.getScore()));
+            });
+          }
+        });
+        if (leagueEntry.getMajorDivisionIndex() == 0) {
+          // TODO hardcoding the 10 games is bad
+          playerDivisionNameLabel.setText(i18n.get("leaderboard.placement", leagueEntry.getGamesPlayed(), 10));
+          selectHighestDivision();
+        } else {
+          selectOwnLeagueEntry(leagueEntry);
         }
-      })).exceptionally(throwable -> {
-        log.warn("Error while loading division list", throwable);
+        plotDivisionDistributions(divisions, leagueEntry);
+      }).exceptionally(throwable -> {
+        // Debug instead of warn, since it's fairly common that players don't have a leaderboard entry which causes a 404
+        log.debug("Leaderboard entry could not be read for current player: " + player.getUsername(), throwable);
+        playerDivisionNameLabel.setText(i18n.get("leaderboard.noEntry"));
+        plotDivisionDistributions(divisions, null);
+        selectHighestDivision();
         return null;
       })
     ).exceptionally(throwable -> {
-      // Debug instead of warn, since it's fairly common that players don't have a leaderboard entry which causes a 404
-      log.debug("Leaderboard entry could not be read for current player: " + player.getUsername(), throwable);
-      playerDivisionNameLabel.setText(i18n.get("leaderboard.placement",
-          "X", // Would rather do this:
-          // leagueEntry.getGamesPlayed(),
-          10));
-      majorDivisionPicker.getItems().stream()
-          .findFirst().ifPresent(item -> majorDivisionPicker.getSelectionModel().select(item));
-      onMajorDivisionPicked();
-      subDivisionTabPane.getTabs().stream()
-          .findFirst().ifPresent(tab -> subDivisionTabPane.getSelectionModel().select(tab));
+      log.warn("Error while loading division list", throwable);
       return null;
     });
   }
 
   private void selectOwnLeagueEntry(LeagueEntry leagueEntry) {
-    majorDivisionPicker.getItems().stream()
-        .filter(item -> item.getMajorDivisionIndex() == leagueEntry.getMajorDivisionIndex())
-        .findFirst().ifPresent(item -> majorDivisionPicker.getSelectionModel().select(item));
-    onMajorDivisionPicked();
-    subDivisionTabPane.getTabs().stream()
-        .filter(tab -> tab.getUserData().equals(leagueEntry.getSubDivisionIndex()))
-        .findFirst().ifPresent(tab -> {
-          subDivisionTabPane.getSelectionModel().select(tab);
-          // Need to test this once the api is up
-          TableView<LeagueEntry> newTable = (TableView<LeagueEntry>) tab.getContent();
-          newTable.scrollTo(leagueEntry);
-          newTable.getSelectionModel().select(leagueEntry);
-          // Alternatively:
+    Platform.runLater(() -> {
+      majorDivisionPicker.getItems().stream()
+          .filter(item -> item.getMajorDivisionIndex() == leagueEntry.getMajorDivisionIndex())
+          .findFirst().ifPresent(item -> majorDivisionPicker.getSelectionModel().select(item));
+      onMajorDivisionPicked();
+      subDivisionTabPane.getTabs().stream()
+          .filter(tab -> tab.getUserData().equals(leagueEntry.getSubDivisionIndex()))
+          .findFirst().ifPresent(tab -> {
+            subDivisionTabPane.getSelectionModel().select(tab);
+            // Need to test this once the api is up
+            TableView<LeagueEntry> newTable = (TableView<LeagueEntry>) tab.getContent();
+            newTable.scrollTo(leagueEntry);
+            newTable.getSelectionModel().select(leagueEntry);
+            // Alternatively:
 //          for (LeagueEntry tableEntry : newTable.getItems()) {
 //            if (tableEntry.getUsername().equals(leagueEntry.getUsername())) {
 //              newTable.scrollTo(tableEntry);
@@ -228,6 +231,15 @@ public class LeaderboardController implements Controller<Tab> {
 //              break;
 //            }
 //          }
+      });
+    });
+  }
+
+  private void selectHighestDivision() {
+    Platform.runLater(() -> {
+      majorDivisionPicker.getSelectionModel().selectLast();
+      onMajorDivisionPicked();
+      subDivisionTabPane.getSelectionModel().selectLast();
     });
   }
 
@@ -242,7 +254,7 @@ public class LeaderboardController implements Controller<Tab> {
           label.setText(i18n.get(division.getSubDivisionName().getI18nKey()));
           label.setFill(Color.WHITE);
           data.nodeProperty().addListener((observable, oldValue, newValue) -> {
-            if (division.getMajorDivisionIndex() == leagueEntry.getMajorDivisionIndex()
+            if (leagueEntry != null && division.getMajorDivisionIndex() == leagueEntry.getMajorDivisionIndex()
                 && division.getSubDivisionIndex() == leagueEntry.getSubDivisionIndex()) {
               newValue.pseudoClassStateChanged(NOTIFICATION_HIGHLIGHTED_PSEUDO_CLASS, true);
             }
@@ -253,15 +265,23 @@ public class LeaderboardController implements Controller<Tab> {
       });
       Platform.runLater(() -> ratingDistributionChart.getData().add(series));
     });
-    leaderboardService.getAccumulatedRank(leagueEntry)
-        .thenAccept(rank ->
-            leaderboardService.getTotalPlayers(season.getId())
-                .thenAccept(totalPlayers ->
-            xAxis.labelProperty().setValue(i18n.get("leaderboard.rank", rank, totalPlayers))))
-        .exceptionally(throwable -> {
-          log.warn("Could not get player rank", throwable);
-          return null;
-        });
+    setXAxisLabel(leagueEntry);
+  }
+
+  private void setXAxisLabel(LeagueEntry leagueEntry) {
+    leaderboardService.getTotalPlayers(season.getId()).thenAccept(totalPlayers -> {
+      if (leagueEntry == null) {
+        xAxis.labelProperty().setValue(i18n.get("leaderboard.totalPlayers", totalPlayers));
+      } else {
+        leaderboardService.getAccumulatedRank(leagueEntry)
+            .thenAccept(rank -> xAxis.labelProperty().setValue(i18n.get("leaderboard.rank", rank, totalPlayers)))
+            .exceptionally(throwable -> {
+              log.warn("Could not get player rank", throwable);
+              xAxis.labelProperty().setValue(i18n.get("leaderboard.totalPlayers", totalPlayers));
+              return null;
+            });
+      }
+    });
   }
 
   private void addNodeOnTopOfBar(XYChart.Data<String, Integer> data, Node nodeToAdd) {

@@ -9,6 +9,8 @@ import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 
+import java.util.Optional;
+
 public class LeagueEntry {
 
   private final StringProperty username;
@@ -35,9 +37,9 @@ public class LeagueEntry {
     leagueEntry.setGamesPlayed(entry.getNumGames());
     leagueEntry.setWinLossRatio(entry.getWonGames() / (float) entry.getNumGames());
     leagueEntry.setLeagueSeason(LeagueSeason.fromDto(entry.getLeagueSeason()));
-    leagueEntry.setScore(entry.getScore());
-    leagueEntry.setMajorDivisionIndex(entry.getMajorDivisionIndex());
-    leagueEntry.setSubDivisionIndex(entry.getSubDivisionIndex());
+    Optional.ofNullable(entry.getScore()).ifPresent(leagueEntry::setScore);
+    Optional.ofNullable(entry.getMajorDivisionIndex()).ifPresent(leagueEntry::setMajorDivisionIndex);
+    Optional.ofNullable(entry.getSubDivisionIndex()).ifPresent(leagueEntry::setSubDivisionIndex);
     return leagueEntry;
   }
 

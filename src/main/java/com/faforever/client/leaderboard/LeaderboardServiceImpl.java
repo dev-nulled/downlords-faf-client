@@ -53,6 +53,10 @@ public class LeaderboardServiceImpl implements LeaderboardService {
 
   @Override
   public CompletableFuture<Integer> getAccumulatedRank(LeagueEntry entry) {
+    if (entry.getMajorDivisionIndex() == 0) {
+      Throwable notRanked = new Throwable("Player is not ranked");
+      return CompletableFuture.failedFuture(notRanked);
+    }
     AtomicInteger rank = new AtomicInteger();
     getDivisions(entry.getLeagueSeason().getId()).thenAccept(divisions -> {
       //discard lower divisions
@@ -76,9 +80,8 @@ public class LeaderboardServiceImpl implements LeaderboardService {
   @Override
   public CompletableFuture<Integer> getTotalPlayers(int leagueSeasonId) {
     AtomicInteger rank = new AtomicInteger();
-    getDivisions(leagueSeasonId).thenAccept(divisions -> {
-      divisions.forEach(division -> getSizeOfDivision(division).thenApply(rank::addAndGet));
-    });
+    getDivisions(leagueSeasonId).thenAccept(divisions ->
+        divisions.forEach(division -> getSizeOfDivision(division).thenApply(rank::addAndGet)));
     return CompletableFuture.completedFuture(rank.get());
   }
 

@@ -69,6 +69,10 @@ public class MockLeaderboardService implements LeaderboardService {
 
   @Override
   public CompletableFuture<Integer> getAccumulatedRank(LeagueEntry entry) {
+    if (entry.getMajorDivisionIndex() == 0) {
+      Throwable notRanked = new Throwable("Player is not ranked");
+      return CompletableFuture.failedFuture(notRanked);
+    }
     AtomicInteger rank = new AtomicInteger();
     getDivisions(entry.getLeagueSeason().getId()).thenAccept(divisions -> {
       //discard lower divisions
@@ -142,13 +146,20 @@ public class MockLeaderboardService implements LeaderboardService {
     entry.setSubDivisionIndex(4);
     entry.setMajorDivisionIndex(2);
     entry.setScore(8);
-    entry.setGamesPlayed(3);
+    entry.setGamesPlayed(13);
     entry.setLeagueSeason(leagueSeason);
+
+    LeagueEntry entry2 = new LeagueEntry();
+    entry2.setGamesPlayed(3);
+    entry2.setLeagueSeason(leagueSeason);
 
     Throwable noEntry = new Throwable();
     boolean testNoEntry = false;
+    boolean testNoPlacement = false;
     if (testNoEntry)
       return CompletableFuture.failedFuture(noEntry);
+    else if (testNoPlacement)
+      return CompletableFuture.completedFuture(entry2);
     else
       return CompletableFuture.completedFuture(entry);
   }
