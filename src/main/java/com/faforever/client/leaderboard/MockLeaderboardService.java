@@ -1,7 +1,6 @@
 package com.faforever.client.leaderboard;
 
 import com.faforever.client.FafClientApplication;
-import com.faforever.client.i18n.I18n;
 import com.faforever.client.task.CompletableTask;
 import com.faforever.client.task.TaskService;
 import com.faforever.client.util.Tuple;
@@ -40,7 +39,6 @@ import static com.faforever.client.task.CompletableTask.Priority.HIGH;
 public class MockLeaderboardService implements LeaderboardService {
 
   private final TaskService taskService;
-  private final I18n i18n;
 
   public CompletableFuture<List<RatingStat>> getLeaderboardStats(String leaderboardTechnicalName) {
     return CompletableFuture.completedFuture(Collections.emptyList());
