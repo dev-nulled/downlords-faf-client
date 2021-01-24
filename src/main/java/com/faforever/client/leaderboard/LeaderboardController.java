@@ -220,6 +220,14 @@ public class LeaderboardController implements Controller<Tab> {
           TableView<LeagueEntry> newTable = (TableView<LeagueEntry>) tab.getContent();
           newTable.scrollTo(leagueEntry);
           newTable.getSelectionModel().select(leagueEntry);
+          // Alternatively:
+//          for (LeagueEntry tableEntry : newTable.getItems()) {
+//            if (tableEntry.getUsername().equals(leagueEntry.getUsername())) {
+//              newTable.scrollTo(tableEntry);
+//              newTable.getSelectionModel().select(tableEntry);
+//              break;
+//            }
+//          }
     });
   }
 
