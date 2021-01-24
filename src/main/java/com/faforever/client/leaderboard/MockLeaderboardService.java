@@ -20,9 +20,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.faforever.client.leaderboard.DivisionName.BRONZE;
-import static com.faforever.client.leaderboard.DivisionName.COMMANDER;
 import static com.faforever.client.leaderboard.DivisionName.DIAMOND;
 import static com.faforever.client.leaderboard.DivisionName.GOLD;
+import static com.faforever.client.leaderboard.DivisionName.GRANDMASTER;
 import static com.faforever.client.leaderboard.DivisionName.I;
 import static com.faforever.client.leaderboard.DivisionName.II;
 import static com.faforever.client.leaderboard.DivisionName.III;
@@ -104,7 +104,7 @@ public class MockLeaderboardService implements LeaderboardService {
         divisions.add(div);
       }
     }
-    Division div2 = new Division(1, 6, 1, COMMANDER, NONE, 10);
+    Division div2 = new Division(1, 6, 1, GRANDMASTER, NONE, 10);
     divisions.add(div2);
     return CompletableFuture.completedFuture(divisions);
   }

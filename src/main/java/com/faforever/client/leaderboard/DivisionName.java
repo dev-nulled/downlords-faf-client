@@ -9,7 +9,7 @@ public enum DivisionName {
   GOLD("leagues.divisionName.gold", "Gold"),
   DIAMOND("leagues.divisionName.diamond", "Diamond"),
   MASTER("leagues.divisionName.master", "Master"),
-  COMMANDER("leagues.divisionName.commander", "Grandmaster"),
+  GRANDMASTER("leagues.divisionName.grandmaster", "Grandmaster"),
   I("leagues.divisionName.I", "1"),
   II("leagues.divisionName.II", "2"),
   III("leagues.divisionName.III", "3"),
