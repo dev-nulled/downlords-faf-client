@@ -145,7 +145,7 @@ public class MockFafApiAccessor implements FafApiAccessor {
   }
 
   @Override
-  public List<LeagueEntry> getLeagueLeaderboard(Division division) {
+  public List<LeagueEntry> getDivisionLeaderboard(Division division) {
     return List.of();
   }
 
@@ -339,7 +339,7 @@ public class MockFafApiAccessor implements FafApiAccessor {
   }
 
   @Override
-  public List<Division> getDivisions(int leagueSeasonId) {
+  public List<Division> getDivisions(Integer leagueSeasonId) {
     return Collections.emptyList();
   }
 
@@ -351,7 +351,7 @@ public class MockFafApiAccessor implements FafApiAccessor {
   }
 
   @Override
-  public LeagueSeason getLatestSeason(int leagueId) {
+  public LeagueSeason getLatestSeason(Integer leagueId) {
     return new LeagueSeason("1", 1, 1, "seasonName", OffsetDateTime.now(), OffsetDateTime.now());
   }
 

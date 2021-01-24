@@ -67,7 +67,7 @@ public interface FafApiAccessor {
 
   List<LeaderboardEntry> getLeaderboardEntriesForPlayer(int playerId);
 
-  List<LeagueEntry> getLeagueLeaderboard(Division division);
+  List<LeagueEntry> getDivisionLeaderboard(Division division);
 
   LeagueEntry getLeagueEntryForPlayer(int playerId, int leagueSeasonId);
 
@@ -151,9 +151,9 @@ public interface FafApiAccessor {
 
   MeResult getOwnPlayer();
 
-  List<Division> getDivisions(int leagueSeasonId);
+  List<Division> getDivisions(Integer leagueSeasonId);
 
   List<League> getLeagues();
 
-  LeagueSeason getLatestSeason(int leagueId);
+  LeagueSeason getLatestSeason(Integer leagueId);
 }
