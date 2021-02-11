@@ -36,6 +36,7 @@ import com.faforever.client.remote.domain.LoginMessage;
 import com.faforever.client.remote.domain.PeriodType;
 import com.faforever.client.remote.domain.ServerMessage;
 import com.faforever.client.replay.Replay;
+import com.faforever.client.reporting.ModerationReport;
 import com.faforever.client.teammatchmaking.MatchmakingQueue;
 import com.faforever.client.tournament.TournamentBean;
 import com.faforever.client.tutorial.TutorialCategory;
@@ -365,6 +366,12 @@ public class FafService {
         .collect(toList()));
   }
 
+  public CompletableFuture<List<Player>> queryPlayersByName(String playerName) {
+    return CompletableFuture.completedFuture(fafApiAccessor.queryPlayersByName(playerName).stream()
+        .map(Player::fromDto)
+        .collect(toList()));
+  }
+
   @Async
   public CompletableFuture<Void> saveGameReview(Review review, int gameId) {
     GameReview gameReview = (GameReview) new GameReview()
@@ -528,6 +535,18 @@ public class FafService {
         .collect(toList()));
   }
 
+  @Async
+  public CompletableFuture<List<ModerationReport>> getAllModerationReports(int playerId) {
+    return CompletableFuture.completedFuture(fafApiAccessor.getPlayerModerationReports(playerId)
+        .stream()
+        .map(ModerationReport::fromReportDto)
+        .collect(toList()));
+  }
+
+  public CompletableFuture<Void> postModerationReport(ModerationReport report) {
+    fafApiAccessor.uploadModerationReport(report);
+    return CompletableFuture.completedFuture(null);
+  }
 
   @Async
   public CompletableFuture<Tuple<List<MapBean>, Integer>> getOwnedMapsWithPageCount(int playerId, int loadMoreCount, int page) {
@@ -550,7 +569,7 @@ public class FafService {
   }
 
   @Async
-  public CompletableFuture<Void> unrankeMapVersion(MapBean map) {
+  public CompletableFuture<Void> unRankMapVersion(MapBean map) {
     String id = map.getId();
     MapVersion mapVersion = new MapVersion();
     mapVersion.setRanked(false);

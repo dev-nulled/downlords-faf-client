@@ -22,6 +22,7 @@ import com.faforever.client.api.dto.Mod;
 import com.faforever.client.api.dto.ModReviewsSummary;
 import com.faforever.client.api.dto.ModVersion;
 import com.faforever.client.api.dto.ModVersionReview;
+import com.faforever.client.api.dto.ModerationReport;
 import com.faforever.client.api.dto.Player;
 import com.faforever.client.api.dto.PlayerAchievement;
 import com.faforever.client.api.dto.PlayerEvent;
@@ -221,6 +222,11 @@ public class MockFafApiAccessor implements FafApiAccessor {
   }
 
   @Override
+  public List<Player> queryPlayersByName(String playerName) {
+    return null;
+  }
+
+  @Override
   public GameReview createGameReview(GameReview review) {
     return null;
   }
@@ -308,6 +314,16 @@ public class MockFafApiAccessor implements FafApiAccessor {
   @Override
   public List<Tournament> getAllTournaments() {
     return List.of();
+  }
+
+  @Override
+  public List<ModerationReport> getPlayerModerationReports(int playerId) {
+    return null;
+  }
+
+  @Override
+  public void uploadModerationReport(com.faforever.client.reporting.ModerationReport report) {
+
   }
 
   @Override

@@ -1,20 +1,17 @@
 package com.faforever.client.reporting;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
-import java.lang.invoke.MethodHandles;
-
-
+@Slf4j
 @Lazy
 @Service
+@RequiredArgsConstructor
 public class ReportingService {
 
-  private static final Logger logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
-
   public void reportError(Throwable e) {
-    logger.warn("Reporting has not yet been implemented");
+    log.warn("Reporting has not yet been implemented");
   }
 }

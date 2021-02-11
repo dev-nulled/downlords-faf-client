@@ -21,6 +21,7 @@ import com.faforever.client.api.dto.MeResult;
 import com.faforever.client.api.dto.Mod;
 import com.faforever.client.api.dto.ModVersion;
 import com.faforever.client.api.dto.ModVersionReview;
+import com.faforever.client.api.dto.ModerationReport;
 import com.faforever.client.api.dto.Player;
 import com.faforever.client.api.dto.PlayerAchievement;
 import com.faforever.client.api.dto.PlayerEvent;
@@ -69,9 +70,11 @@ import java.io.Serializable;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map.Entry;
@@ -96,6 +99,7 @@ public class FafApiAccessorImpl implements FafApiAccessor, InitializingBean {
   private static final String ACHIEVEMENT_ENDPOINT = "/data/achievement";
   private static final String LEADERBOARD_ENDPOINT = "/data/leaderboard";
   private static final String LEADERBOARD_ENTRY_ENDPOINT = "/data/leaderboardRating";
+  private static final String REPORT_ENDPOINT = "/data/moderationReport";
   private static final String TOURNAMENT_LIST_ENDPOINT = "/challonge/v1/tournaments.json";
   private static final String REPLAY_INCLUDES = "featuredMod,playerStats,playerStats.player,playerStats.ratingChanges,reviews," +
       "reviews.player,mapVersion,mapVersion.map,reviewsSummary";
@@ -109,7 +113,8 @@ public class FafApiAccessorImpl implements FafApiAccessor, InitializingBean {
       "versions.reviews.player";
   private static final String LEADERBOARD_ENTRY_INCLUDES = "player,leaderboard";
   private static final String COOP_RESULT_INCLUDES = "game.playerStats.player";
-  private static final String PLAYER_INCLUDES = "globalRating,ladder1v1Rating,names";
+  private static final String PLAYER_INCLUDES = "names";
+  private static final String REPORT_INCLUDES = "reporter,lastModerator,reportedUsers,game";
   private static final String OAUTH_TOKEN_PATH = "/oauth/token";
   private static final String FILTER = "filter";
   private static final String SORT = "sort";
@@ -398,7 +403,14 @@ public class FafApiAccessorImpl implements FafApiAccessor, InitializingBean {
 
     return getMany("/data/player", playerIds.size(), java.util.Map.of(
         INCLUDE, PLAYER_INCLUDES,
-        FILTER, rsql(qBuilder().string("id").in(ids))
+        FILTER, rsql(qBuilder().string("id").in(ids))));
+  }
+
+  @Override
+  public List<Player> queryPlayersByName(String playerName) {
+    return getAll("/data/player", java.util.Map.of(
+        INCLUDE, PLAYER_INCLUDES,
+        FILTER, rsql(qBuilder().string("login").eq("*" + playerName + "*"))
     ));
   }
 
@@ -572,6 +584,28 @@ public class FafApiAccessorImpl implements FafApiAccessor, InitializingBean {
   @SneakyThrows
   public List<Tournament> getAllTournaments() {
     return Arrays.asList(restOperations.getForObject(TOURNAMENT_LIST_ENDPOINT, Tournament[].class));
+  }
+
+  @Override
+  public List<ModerationReport> getPlayerModerationReports(int playerId) {
+    return getAll(REPORT_ENDPOINT, java.util.Map.of(
+        INCLUDE, REPORT_INCLUDES,
+        FILTER, rsql(qBuilder().intNum("reporter.id").eq(playerId))));
+  }
+
+  @Override
+  public void uploadModerationReport(com.faforever.client.reporting.ModerationReport report) {
+    List<java.util.Map<String, String>> reportedUsers = new ArrayList<>();
+    report.getReportedUsers().forEach(player -> reportedUsers.add(java.util.Map.of("type", "player", "id", String.valueOf(player.getId()))));
+    java.util.Map<String, Object> relationships = new HashMap<>(java.util.Map.of("reportedUsers", java.util.Map.of("data", reportedUsers)));
+    if (report.getGameId() != null) {
+      relationships.put("game", java.util.Map.of("data", java.util.Map.of("type", "game", "id", report.getGameId())));
+    }
+    java.util.Map<String, Object> body = java.util.Map.of("data", List.of(java.util.Map.of(
+        "type", "moderationReport",
+        "attributes", java.util.Map.of("gameIncidentTimecode", report.getGameIncidentTimeCode(), "reportDescription", report.getReportDescription()),
+        "relationships", relationships)));
+    post(REPORT_ENDPOINT, body, false);
   }
 
   @Override

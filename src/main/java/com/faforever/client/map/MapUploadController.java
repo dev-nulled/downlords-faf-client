@@ -10,7 +10,6 @@ import com.faforever.client.notification.Action;
 import com.faforever.client.notification.DismissAction;
 import com.faforever.client.notification.ImmediateNotification;
 import com.faforever.client.notification.NotificationService;
-import com.faforever.client.notification.ReportAction;
 import com.faforever.client.reporting.ReportingService;
 import com.faforever.client.task.CompletableTask;
 import com.faforever.commons.map.PreviewGenerator;
@@ -172,7 +171,6 @@ public class MapUploadController implements Controller<Node> {
           i18n.get("errorTitle"), i18n.get("mapVault.upload.failed", throwable.getLocalizedMessage()), ERROR, throwable,
           asList(
               new Action(i18n.get("mapVault.upload.retry"), event -> onUploadClicked()),
-              new ReportAction(i18n, reportingService, throwable),
               new DismissAction(i18n)
           )
       ));

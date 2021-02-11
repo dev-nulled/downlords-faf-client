@@ -3,6 +3,7 @@ package com.faforever.client.main;
 import com.faforever.client.chat.UserInfoWindowController;
 import com.faforever.client.fx.Controller;
 import com.faforever.client.player.PlayerService;
+import com.faforever.client.reporting.ReportDialogController;
 import com.faforever.client.theme.UiService;
 import com.faforever.client.user.event.LogOutRequestEvent;
 import com.faforever.client.user.event.LoginSuccessEvent;
@@ -46,6 +47,12 @@ public class UserButtonController implements Controller<Node> {
     userInfoWindowController.setPlayer(playerService.getCurrentPlayer().orElseThrow(() -> new IllegalStateException("Player has not been set")));
     userInfoWindowController.setOwnerWindow(userMenuButtonRoot.getScene().getWindow());
     userInfoWindowController.show();
+  }
+
+  public void onReport(ActionEvent event) {
+    ReportDialogController reportDialogController = uiService.loadFxml("theme/reporting/report_dialog.fxml");
+    reportDialogController.setOwnerWindow(userMenuButtonRoot.getScene().getWindow());
+    reportDialogController.show();
   }
 
   public void onLogOut(ActionEvent actionEvent) {
