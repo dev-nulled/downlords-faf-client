@@ -20,6 +20,7 @@ import com.faforever.client.rating.RatingService;
 import com.faforever.client.replay.Replay.ChatMessage;
 import com.faforever.client.replay.Replay.GameOption;
 import com.faforever.client.replay.Replay.PlayerStats;
+import com.faforever.client.reporting.ReportDialogController;
 import com.faforever.client.theme.UiService;
 import com.faforever.client.util.ClipboardUtil;
 import com.faforever.client.util.RatingUtil;
@@ -48,7 +49,6 @@ import javafx.scene.layout.Pane;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
-import org.springframework.context.NoSuchMessageException;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 import org.springframework.util.Assert;
@@ -112,6 +112,7 @@ public class ReplayDetailController implements Controller<Node> {
   public TextField replayIdField;
   public ScrollPane scrollPane;
   public Button showRatingChangeButton;
+  public Button reportButton;
   public Label notRatedReasonLabel;
   private Replay replay;
   private ObservableMap<String, List<PlayerStats>> teams;
@@ -377,6 +378,13 @@ public class ReplayDetailController implements Controller<Node> {
       showRatingChangeButton.setDisable(false);
       notRatedReasonLabel.setVisible(false);
     }
+  }
+
+  public void onReport() {
+    ReportDialogController reportDialogController = uiService.loadFxml("theme/reporting/report_dialog.fxml");
+    reportDialogController.setGame(replay);
+    reportDialogController.setOwnerWindow(getRoot().getScene().getWindow());
+    reportDialogController.show();
   }
 
   @Override

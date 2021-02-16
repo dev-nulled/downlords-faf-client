@@ -2,8 +2,10 @@ package com.faforever.client.reporting;
 
 import com.faforever.client.api.dto.ModerationReportStatus;
 import com.faforever.client.player.Player;
+import javafx.beans.property.IntegerProperty;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SetProperty;
+import javafx.beans.property.SimpleIntegerProperty;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.property.SimpleSetProperty;
 import javafx.beans.property.SimpleStringProperty;
@@ -15,6 +17,7 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 
 public class ModerationReport {
+  private final IntegerProperty reportId;
   private final StringProperty reportDescription;
   private final ObjectProperty<ModerationReportStatus> reportStatus;
   private final StringProperty gameIncidentTimeCode;
@@ -27,6 +30,7 @@ public class ModerationReport {
   private final StringProperty gameId;
 
   public ModerationReport() {
+    reportId = new SimpleIntegerProperty();
     reportDescription = new SimpleStringProperty();
     gameIncidentTimeCode = new SimpleStringProperty();
     moderatorNotice = new SimpleStringProperty();
@@ -46,8 +50,9 @@ public class ModerationReport {
     report.setReportDescription(dto.getReportDescription());
     report.setGameIncidentTimeCode(dto.getGameIncidentTimecode());
     report.setModeratorNotice(dto.getModeratorNotice());
-    report.setLastModerator(Player.fromDto(dto.getLastModerator()));
     report.setReporter(Player.fromDto(dto.getReporter()));
+    Optional.ofNullable(dto.getLastModerator()).ifPresent(moderator ->
+        report.setLastModerator(Player.fromDto(moderator)));
     Optional.ofNullable(dto.getCreateTime())
         .ifPresent(offsetDateTime -> report.setCreateTime(offsetDateTime.toLocalDateTime()));
     Optional.ofNullable(dto.getUpdateTime())
@@ -176,5 +181,17 @@ public class ModerationReport {
 
   public StringProperty gameIdProperty() {
     return gameId;
+  }
+
+  public int getReportId() {
+    return reportId.get();
+  }
+
+  public void setReportId(int reportId) {
+    this.reportId.set(reportId);
+  }
+
+  public IntegerProperty reportIdProperty() {
+    return reportId;
   }
 }

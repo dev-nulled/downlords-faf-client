@@ -366,10 +366,8 @@ public class FafService {
         .collect(toList()));
   }
 
-  public CompletableFuture<List<Player>> queryPlayersByName(String playerName) {
-    return CompletableFuture.completedFuture(fafApiAccessor.queryPlayersByName(playerName).stream()
-        .map(Player::fromDto)
-        .collect(toList()));
+  public CompletableFuture<Optional<Player>> queryPlayerByName(String playerName) {
+    return CompletableFuture.completedFuture(fafApiAccessor.queryPlayerByName(playerName).map(Player::fromDto));
   }
 
   @Async

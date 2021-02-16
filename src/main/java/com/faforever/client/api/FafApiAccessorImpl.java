@@ -407,11 +407,15 @@ public class FafApiAccessorImpl implements FafApiAccessor, InitializingBean {
   }
 
   @Override
-  public List<Player> queryPlayersByName(String playerName) {
-    return getAll("/data/player", java.util.Map.of(
+  public Optional<Player> queryPlayerByName(String playerName) {
+    List<Player> players = getAll("/data/player", java.util.Map.of(
         INCLUDE, PLAYER_INCLUDES,
-        FILTER, rsql(qBuilder().string("login").eq("*" + playerName + "*"))
-    ));
+        FILTER, rsql(qBuilder().string("login").eq(playerName))));
+    if (players.size() == 1) {
+      return Optional.of(players.get(0));
+    } else {
+      return Optional.empty();
+    }
   }
 
   @Override
@@ -588,7 +592,7 @@ public class FafApiAccessorImpl implements FafApiAccessor, InitializingBean {
 
   @Override
   public List<ModerationReport> getPlayerModerationReports(int playerId) {
-    return getAll(REPORT_ENDPOINT, java.util.Map.of(
+    return getAllNoPaging(REPORT_ENDPOINT, java.util.Map.of(
         INCLUDE, REPORT_INCLUDES,
         FILTER, rsql(qBuilder().intNum("reporter.id").eq(playerId))));
   }
@@ -717,6 +721,18 @@ public class FafApiAccessorImpl implements FafApiAccessor, InitializingBean {
         .collect(Collectors.toMap(Entry::getKey, entry -> Collections.singletonList(String.valueOf(entry.getValue()))));
 
     return getPageWithMeta(endpointPath, pageSize, page, CollectionUtils.toMultiValueMap(multiValues));
+  }
+
+  @SneakyThrows
+  private <T> List<T> getAllNoPaging(String endpointPath, java.util.Map<String, String> params) {
+    java.util.Map<String, List<String>> multiValues = params.entrySet().stream()
+        .collect(Collectors.toMap(Entry::getKey, entry -> Collections.singletonList(String.valueOf(entry.getValue()))));
+    UriComponents uriComponents = UriComponentsBuilder.fromPath(endpointPath)
+        .queryParams(CollectionUtils.toMultiValueMap(multiValues))
+        .build();
+
+    authorizedLatch.await();
+    return restOperations.getForObject(uriComponents.toUriString(), List.class);
   }
 
   @SneakyThrows

@@ -222,8 +222,8 @@ public class MockFafApiAccessor implements FafApiAccessor {
   }
 
   @Override
-  public List<Player> queryPlayersByName(String playerName) {
-    return null;
+  public Optional<Player> queryPlayerByName(String playerName) {
+    return Optional.empty();
   }
 
   @Override

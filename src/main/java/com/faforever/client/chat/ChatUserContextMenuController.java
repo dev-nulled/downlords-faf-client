@@ -23,6 +23,7 @@ import com.faforever.client.preferences.ChatPrefs;
 import com.faforever.client.preferences.PreferencesService;
 import com.faforever.client.remote.domain.GameType;
 import com.faforever.client.replay.ReplayService;
+import com.faforever.client.reporting.ReportDialogController;
 import com.faforever.client.teammatchmaking.TeamMatchmakingService;
 import com.faforever.client.theme.UiService;
 import com.faforever.client.ui.alert.Alert;
@@ -296,7 +297,11 @@ public class ChatUserContextMenuController implements Controller<ContextMenu> {
   }
 
   public void onReport() {
-    platformService.showDocument(clientProperties.getWebsite().getReportUrl());
+    ReportDialogController reportDialogController = uiService.loadFxml("theme/reporting/report_dialog.fxml");
+    chatUser.getPlayer().ifPresentOrElse(reportDialogController::setOffender,
+        () -> reportDialogController.setOffender(chatUser.getUsername()));
+    reportDialogController.setOwnerWindow(chatUserContextMenuRoot.getOwnerWindow());
+    reportDialogController.show();
   }
 
   public void onAddFoeSelected() {

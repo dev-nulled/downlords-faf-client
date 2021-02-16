@@ -51,6 +51,7 @@ public class UserButtonController implements Controller<Node> {
 
   public void onReport(ActionEvent event) {
     ReportDialogController reportDialogController = uiService.loadFxml("theme/reporting/report_dialog.fxml");
+    reportDialogController.setAutoCompleteWithOnlinePlayers();
     reportDialogController.setOwnerWindow(userMenuButtonRoot.getScene().getWindow());
     reportDialogController.show();
   }

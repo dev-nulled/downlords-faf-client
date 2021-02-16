@@ -307,8 +307,8 @@ public class PlayerService implements InitializingBean {
     return fafService.getPlayersByIds(playerIds);
   }
 
-  public CompletableFuture<List<Player>> getPlayersByName(String playerName) {
-    return fafService.queryPlayersByName(playerName);
+  public CompletableFuture<Optional<Player>> getPlayerByName(String playerName) {
+    return fafService.queryPlayerByName(playerName);
   }
 
   public List<Player> getOnlinePlayersByIds(Collection<Integer> playerIds) {

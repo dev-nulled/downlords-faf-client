@@ -102,7 +102,7 @@ public interface FafApiAccessor {
 
   List<com.faforever.client.api.dto.Player> getPlayersByIds(Collection<Integer> playerIds);
 
-  List<com.faforever.client.api.dto.Player> queryPlayersByName(String playerName);
+  Optional<com.faforever.client.api.dto.Player> queryPlayerByName(String playerName);
 
   GameReview createGameReview(GameReview review);
 
