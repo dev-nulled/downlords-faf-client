@@ -28,6 +28,7 @@ Post a bounty on Issue Hunt. You can reward and financially help developers that
 
 A video tutorial is available [here](https://youtu.be/6gsHnt02I_Y). Don't forget to `Enable annotation processing`.
 
+
 ### Linux
 Learn how to install the client on Linux [here](https://github.com/FAForever/downlords-faf-client/wiki/Install-on-Linux)
 
