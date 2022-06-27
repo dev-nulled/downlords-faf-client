@@ -9,8 +9,8 @@ import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 
-import static com.faforever.client.player.PlayerNoteController.*;
-import static org.junit.jupiter.api.Assertions.*;
+import static com.faforever.client.player.PlayerNoteController.CHARACTER_LIMIT;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.verify;
 
 public class PlayerNoteControllerTest extends UITest {
@@ -37,23 +37,12 @@ public class PlayerNoteControllerTest extends UITest {
 
   @Test
   public void testCharacterLimit() {
-    PlayerBean player = PlayerBeanBuilder.create().defaultValues().note(RandomStringUtils.random(CHARACTER_LIMIT)).get();
+    PlayerBean player = PlayerBeanBuilder.create().defaultValues().note(RandomStringUtils.randomAlphanumeric(CHARACTER_LIMIT)).get();
     runOnFxThreadAndWait(() -> instance.setPlayer(player));
     assertEquals(CHARACTER_LIMIT, instance.textArea.getLength());
 
     runOnFxThreadAndWait(() -> instance.textArea.appendText("1"));
     assertEquals(CHARACTER_LIMIT, instance.textArea.getLength());
-  }
-
-  @Test
-  public void testNoMultipleSeparators() {
-    PlayerBean player = PlayerBeanBuilder.create().defaultValues().note("junit\n").get();
-    runOnFxThreadAndWait(() -> instance.setPlayer(player));
-
-    assertEquals("junit\n", instance.textArea.getText());
-
-    runOnFxThreadAndWait(() -> instance.textArea.appendText("\n"));
-    assertEquals("junit\n", instance.textArea.getText());
   }
 
   @Test

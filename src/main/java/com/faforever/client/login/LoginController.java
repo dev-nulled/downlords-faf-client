@@ -16,7 +16,6 @@ import com.faforever.client.status.Message;
 import com.faforever.client.status.Service;
 import com.faforever.client.status.StatPingService;
 import com.faforever.client.theme.UiService;
-import com.faforever.client.update.ClientConfiguration.OAuthEndpoint;
 import com.faforever.client.update.ClientConfiguration.ServerEndpoints;
 import com.faforever.client.update.ClientUpdateService;
 import com.faforever.client.update.DownloadUpdateTask;
@@ -40,6 +39,7 @@ import javafx.scene.layout.Pane;
 import javafx.util.StringConverter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
@@ -49,8 +49,8 @@ import java.io.IOException;
 import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
@@ -71,9 +71,6 @@ public class LoginController implements Controller<Pane> {
   private final UiService uiService;
   private final PlatformService platformService;
   private final OAuthValuesReceiver oAuthValuesReceiver;
-
-  private CompletableFuture<Void> initializeFuture;
-
   public Pane messagesContainer;
   public Pane errorPane;
   public Pane loginFormPane;
@@ -95,9 +92,15 @@ public class LoginController implements Controller<Pane> {
   public TextField oauthBaseUrlField;
   public TextField oauthRedirectUriField;
   public CheckBox rememberMeCheckBox;
-
   @VisibleForTesting
   CompletableFuture<UpdateInfo> updateInfoFuture;
+  private CompletableFuture<Void> initializeFuture;
+  private String state;
+  private String verifier;
+
+  private static boolean shouldDisplayAnnouncement(Message message) {
+    return message.getEndOn().isAfter(OffsetDateTime.now());
+  }
 
   public void initialize() {
     JavaFxUtil.bindManagedToVisible(downloadUpdateButton, loginErrorLabel, loginFormPane,
@@ -209,10 +212,6 @@ public class LoginController implements Controller<Pane> {
     return statPingService.getMessages()
         .filter(LoginController::shouldDisplayAnnouncement)
         .collectList().toFuture();
-  }
-
-  private static boolean shouldDisplayAnnouncement(Message message) {
-    return message.getEndOn().isAfter(OffsetDateTime.now());
   }
 
   private CompletableFuture<List<Service>> checkOfflineServices() {
@@ -330,22 +329,38 @@ public class LoginController implements Controller<Pane> {
     clientProperties.getApi().setBaseUrl(apiBaseUrlField.getText());
     clientProperties.getOauth().setBaseUrl(oauthBaseUrlField.getText());
 
-    Optional<OAuthEndpoint> oauth = Optional.ofNullable(environmentComboBox.getValue()).map(ServerEndpoints::getOauth);
+    List<URI> redirectUriCandidates = new ArrayList<>();
 
-    Optional<URI> redirectUri = !oauthRedirectUriField.getText().isEmpty()
-        ? Optional.of(URI.create(oauthRedirectUriField.getText()))
-        : Optional.empty();
+    if (!oauthRedirectUriField.getText().isBlank()) {
+      redirectUriCandidates.add(URI.create(oauthRedirectUriField.getText()));
+    }
 
-    return oAuthValuesReceiver.receiveValues(redirectUri, oauth)
+    ServerEndpoints endpoint = environmentComboBox.getValue();
+
+    if (endpoint != null) {
+      redirectUriCandidates.addAll(endpoint.getOauth().getRedirectUris());
+    }
+
+    if (state == null) {
+      state = RandomStringUtils.randomAlphanumeric(64, 128);
+    }
+
+    if (verifier == null) {
+      verifier = RandomStringUtils.randomAlphanumeric(64, 128);
+    }
+
+    return oAuthValuesReceiver.receiveValues(redirectUriCandidates, state, verifier)
         .thenCompose(values -> {
           platformService.focusWindow(clientProperties.getMainWindowTitle());
           String actualState = values.getState();
-          String expectedState = userService.getState();
-          if (!expectedState.equals(actualState)) {
-            handleInvalidSate(actualState, expectedState);
+          if (!state.equals(actualState)) {
+            handleInvalidSate(actualState, state);
             return CompletableFuture.completedFuture(null);
           }
-          return loginWithCode(values.getCode(), values.getRedirectUri());
+          return loginWithCode(values.getCode(), values.getRedirectUri(), verifier);
+        }).thenAccept(aVoid -> {
+          state = null;
+          verifier = null;
         })
         .exceptionally(throwable -> onLoginFailed(ConcurrentUtil.unwrapIfCompletionException(throwable)));
   }
@@ -359,13 +374,13 @@ public class LoginController implements Controller<Pane> {
     );
   }
 
-  private CompletableFuture<Void> loginWithCode(String code, URI redirectUri) {
+  private CompletableFuture<Void> loginWithCode(String code, URI redirectUri, String codeVerifier) {
     showLoginProgress();
-    return userService.login(code, redirectUri);
+    return userService.login(code, codeVerifier, redirectUri);
   }
 
   private Void onLoginFailed(Throwable throwable) {
-    if (userService.getOwnUser() != null) {
+    if (userService.getOwnUser() != null && userService.getOwnPlayer() != null) {
       log.info("Previous login request failed but user is already logged in", throwable);
       return null;
     }

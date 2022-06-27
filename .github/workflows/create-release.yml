@@ -47,10 +47,12 @@ jobs:
           count=0
           baseTag=$tagPrefix.$count
           
-          while [[ $(git tag -l "$baseTag") ]]; 
+          git fetch --tags
+          
+          while [[ $(git tag -l "v$baseTag") ]]
           do 
+            count=$(($count+1));
             baseTag=$tagPrefix.$count; 
-            count=$(($count+1)); 
           done
           
           if [[ "${{ github.event.inputs.release_type }}" == "Alpha" ]]; then
@@ -64,10 +66,10 @@ jobs:
           if [[ "${{ github.event.inputs.release_type }}" != "Production" ]]; then
             count=1
             tag=$baseTag-$count
-            while [[ $(git tag -l "$tag") ]]; 
+            while [[ $(git tag -l "v$tag") ]]
             do 
-              tag=$baseTag-$count; 
-              count=$(($count+1)); 
+              count=$(($count+1));
+              tag=$baseTag-$count;
             done
           else 
             tag=$baseTag
@@ -122,7 +124,7 @@ jobs:
           commit: ${{ github.sha }}
           tag: v${{ steps.set_version.outputs.tag }}
           draft: true
-          prerelease: ${{ github.event.inputs.release_type == 'Production'}}
+          prerelease: ${{ github.event.inputs.release_type != 'Production'}}
           generateReleaseNotes: true
           token: ${{ secrets.GITHUB_TOKEN }}
           artifacts: build/install4j/faf_*

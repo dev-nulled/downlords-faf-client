@@ -44,6 +44,7 @@ import javafx.stage.PopupWindow;
 import javafx.stage.PopupWindow.AnchorLocation;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.controlsfx.control.textfield.TextFields;
 import org.fxmisc.flowless.Cell;
 import org.fxmisc.flowless.VirtualFlow;
 import org.fxmisc.flowless.VirtualizedScrollPane;
@@ -113,6 +114,8 @@ public class ChatUserListController implements Controller<VBox>, InitializingBea
   private final ExecutorService usersEventQueueExecutor = Executors.newSingleThreadExecutor();
 
   private Future<?> listInitializationFuture;
+  private Runnable onListInitializedHandler;
+  private volatile boolean isListInQueue;
 
   /* ----- Listeners ----- */
   private final ListChangeListener<ChatUserCategory> hiddenCategoriesListener = change -> {
@@ -169,7 +172,18 @@ public class ChatUserListController implements Controller<VBox>, InitializingBea
 
   @Override
   public void initialize() {
+    searchUsernameTextField = createSearchUsernameTextField();
+    userListTools.getChildren().add(1, searchUsernameTextField);
     initializeAdvancedFiltersPopup();
+  }
+
+  private TextField createSearchUsernameTextField() {
+    TextField textField = TextFields.createClearableTextField();
+    textField.getStyleClass().add("filter-text-field");
+    textField.setPromptText(i18n.get("loading"));
+    textField.setMinWidth(10.0);
+    HBox.setHgrow(textField, Priority.ALWAYS);
+    return textField;
   }
 
   public void setChatChannel(ChatChannel chatChannel, Tab channelTab, BooleanBinding chatTabSelectedProperty) {
@@ -183,6 +197,10 @@ public class ChatUserListController implements Controller<VBox>, InitializingBea
     prepareData();
     initializeListeners();
     usersEventQueueExecutor.execute(() -> chatChannel.getUsers().forEach(this::onUserJoined));
+  }
+
+  public void setOnListInitialized(Runnable onListInitializedHandler) {
+    this.onListInitializedHandler = onListInitializedHandler;
   }
 
   private void prepareData() {
@@ -231,20 +249,27 @@ public class ChatUserListController implements Controller<VBox>, InitializingBea
     JavaFxUtil.addListener(channelTab.selectedProperty(), new WeakInvalidationListener(selectedChannelTabListener));
   }
 
-  private void initializeList() {
-    usersEventQueueExecutor.execute(() -> {
-      items = new FilteredList<>(new SortedList<>(source, ListItem.getComparator()));
-      listView = VirtualFlow.createVertical(items, item -> item.createCell(uiService));
-      VirtualizedScrollPane<VirtualFlow<ListItem, Cell<ListItem, Node>>> scrollPane = new VirtualizedScrollPane<>(listView);
-      scrollPane.setVbarPolicy(ScrollBarPolicy.ALWAYS);
-      VBox.setVgrow(scrollPane, Priority.ALWAYS);
-      chatUserFilterController.finalizeFiltersSettings(items, searchUsernameTextField);
-      JavaFxUtil.runLater(() -> {
-        userListContainer.getChildren().add(scrollPane);
-        userListTools.setDisable(false);
-        updateUserCount();
+  private synchronized void initializeList() {
+    if (!isListInQueue) {
+      isListInQueue = true;
+      usersEventQueueExecutor.execute(() -> {
+        items = new FilteredList<>(new SortedList<>(source, ListItem.getComparator()));
+        listView = VirtualFlow.createVertical(items, item -> item.createCell(uiService));
+        VirtualizedScrollPane<VirtualFlow<ListItem, Cell<ListItem, Node>>> scrollPane = new VirtualizedScrollPane<>(listView);
+        scrollPane.setVbarPolicy(ScrollBarPolicy.ALWAYS);
+        VBox.setVgrow(scrollPane, Priority.ALWAYS);
+        chatUserFilterController.finalizeFiltersSettings(items, searchUsernameTextField);
+        JavaFxUtil.runLater(() -> {
+          userListContainer.getChildren().add(scrollPane);
+          userListTools.setDisable(false);
+          updateUserCount();
+
+          if (onListInitializedHandler != null) {
+            onListInitializedHandler.run();
+          }
+        });
       });
-    });
+    }
   }
 
   private void initializeListIfNeed() {

@@ -1036,6 +1036,7 @@
 
 .toggle-button.queue {
   -fx-border-color: -fx-accent;
+  -fx-padding: 8 5;
 }
 
 .toggle-button.queue:hover {
@@ -1049,6 +1050,7 @@
 .toggle-button.queue .text {
   -fx-font-family: 'Source Sans Pro Semibold';
   -fx-text-fill: -fx-text-color;
+  -fx-font-size: 24px;
 }
 
 .map-pool:hover {
@@ -1387,6 +1389,25 @@
   -fx-padding: 4 0 4 0;
 }
 
+/***************** Public Chat Channel ***************************/
+
+.topic-channel {
+  -fx-padding: 0.25em 0.25em 0.25em 0.5em; /* 4 4 4 8 */
+}
+
+.topic-channel-button {
+  -fx-border-color: -darkened-color;
+}
+
+.topic-channel-button {
+  -fx-background-color: transparent;
+  -fx-border-color: transparent;
+}
+
+.topic-channel-button:hover {
+  -fx-border-color: -darkened-color;
+}
+
 /***************** Private Chat Channel ***************************/
 
 .open-emoticons-window {
@@ -1407,7 +1428,8 @@
 /***************** Live Replay Tab ***************************/
 
 .live-replay-tab .table-row-cell {
-  -fx-padding: 3px 4px;
+  -fx-cell-size: 3.5em; /* 56 */
+  -fx-padding: 0.25em 0em; /* 4 0 */
 }
 
 .live-replay-tab .table-row-cell:odd {
