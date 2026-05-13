@@ -1,11 +1,12 @@
 package com.faforever.client.query;
 
-import com.faforever.client.test.UITest;
+import com.faforever.client.test.PlatformTest;
 import com.github.rutledgepaulv.qbuilders.builders.QBuilder;
 import com.github.rutledgepaulv.qbuilders.conditions.Condition;
 import com.github.rutledgepaulv.qbuilders.properties.concrete.StringProperty;
 import com.github.rutledgepaulv.qbuilders.visitors.RSQLVisitor;
 import javafx.beans.InvalidationListener;
+import javafx.beans.property.SimpleStringProperty;
 import javafx.scene.layout.VBox;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,7 +23,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
-public class TextFilterControllerTest extends UITest {
+public class TextFilterControllerTest extends PlatformTest {
 
   private final String propertyName = "testProp";
 
@@ -80,6 +81,18 @@ public class TextFilterControllerTest extends UITest {
     Optional<List<Condition>> result = instance.getCondition();
 
     assertTrue(result.isPresent());
-    assertEquals(result.get().get(0).query(new RSQLVisitor()), property.eq("*test*").query(new RSQLVisitor()));
+    assertEquals(result.get().getFirst().query(new RSQLVisitor()), property.eq("*test*").query(new RSQLVisitor()));
+  }
+
+  @Test
+  public void testPersistentPropertyGetsText() {
+    javafx.beans.property.StringProperty property = new SimpleStringProperty();
+    property.bind(instance.textFieldProperty());
+
+    instance.textField.setText("test");
+    assertEquals(property.get(), "test");
+
+    instance.clear();
+    assertTrue(property.get().isEmpty());
   }
 }

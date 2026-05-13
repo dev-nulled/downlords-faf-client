@@ -1,7 +1,7 @@
 package com.faforever.client.query;
 
 import com.faforever.client.exception.ProgrammingError;
-import com.faforever.client.fx.Controller;
+import com.faforever.client.fx.NodeController;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.util.ReflectionUtil;
 import com.github.rutledgepaulv.qbuilders.builders.QBuilder;
@@ -16,7 +16,6 @@ import com.github.rutledgepaulv.qbuilders.properties.virtual.ListableProperty;
 import com.github.rutledgepaulv.qbuilders.properties.virtual.NumberProperty;
 import com.github.rutledgepaulv.qbuilders.properties.virtual.Property;
 import com.google.common.collect.ImmutableMap;
-import javafx.beans.binding.Bindings;
 import javafx.collections.FXCollections;
 import javafx.collections.transformation.FilteredList;
 import javafx.scene.Node;
@@ -67,7 +66,7 @@ import static com.github.rutledgepaulv.qbuilders.operators.ComparisonOperator.RE
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
 @Slf4j
-public class SpecificationController implements Controller<Node> {
+public class SpecificationController extends NodeController<Node> {
 
   private static final Map<ComparisonOperator, String> operatorToI18nKey = ImmutableMap.<ComparisonOperator, String>builder()
       .put(RE, "query.contains")
@@ -81,15 +80,14 @@ public class SpecificationController implements Controller<Node> {
       .put(NIN, "query.notIn")
       .build();
 
-  private static final Map<Class<?>, Collection<ComparisonOperator>> VALID_OPERATORS =
-      ImmutableMap.<Class<?>, Collection<ComparisonOperator>>builder()
-          .put(Number.class, Arrays.asList(EQ, NE, GT, GTE, LT, LTE, IN, NIN))
-          .put(Temporal.class, Arrays.asList(EQ, NE, GT, GTE, LT, LTE))
-          .put(String.class, Arrays.asList(EQ, NE, IN, NIN, RE, EX))
-          .put(Boolean.class, Arrays.asList(EQ, NE))
-          .put(Enum.class, Arrays.asList(EQ, NE, IN, NIN))
-          .put(ComparableVersion.class, Arrays.asList(EQ, NE, GT, GTE, LT, LTE, IN, NIN))
-          .build();
+  private static final Map<Class<?>, Collection<ComparisonOperator>> VALID_OPERATORS = ImmutableMap.<Class<?>, Collection<ComparisonOperator>>builder()
+      .put(Number.class, Arrays.asList(EQ, NE, GT, GTE, LT, LTE, IN, NIN))
+      .put(Temporal.class, Arrays.asList(EQ, NE, GT, GTE, LT, LTE))
+      .put(String.class, Arrays.asList(EQ, NE, IN, NIN, RE, EX))
+      .put(Boolean.class, Arrays.asList(EQ, NE))
+      .put(Enum.class, Arrays.asList(EQ, NE, IN, NIN))
+      .put(ComparableVersion.class, Arrays.asList(EQ, NE, GT, GTE, LT, LTE, IN, NIN))
+      .build();
   public static final String ID_PROPERTY_NAME = "id";
 
   private final I18n i18n;
@@ -107,7 +105,8 @@ public class SpecificationController implements Controller<Node> {
     comparisonOperators = new FilteredList<>(FXCollections.observableArrayList(operatorToI18nKey.keySet()));
   }
 
-  public void initialize() {
+  @Override
+  protected void onInitialize() {
     datePicker.setValue(LocalDate.now());
     datePicker.managedProperty().bind(datePicker.visibleProperty());
     datePicker.setVisible(false);
@@ -135,7 +134,7 @@ public class SpecificationController implements Controller<Node> {
     propertyField.setConverter(new StringConverter<String>() {
       @Override
       public String toString(String object) {
-        return i18n.get(properties.get(object).getI18nKey());
+        return i18n.get(properties.get(object).i18nKey());
       }
 
       @Override
@@ -174,8 +173,8 @@ public class SpecificationController implements Controller<Node> {
       datePicker.setVisible(true);
       valueField.setVisible(false);
       valueField.valueProperty()
-          .bind(Bindings.createStringBinding(() -> datePicker.getValue().atStartOfDay(ZoneId.systemDefault())
-              .format(DateTimeFormatter.ISO_INSTANT), datePicker.valueProperty()));
+          .bind(datePicker.valueProperty()
+              .map(localDate -> localDate.atStartOfDay(ZoneId.systemDefault()).format(DateTimeFormatter.ISO_INSTANT)));
     }
   }
 
@@ -225,12 +224,9 @@ public class SpecificationController implements Controller<Node> {
   }
 
   private Collection<Integer> splitInts(String value) {
-    return Arrays.stream(value.split(","))
-        .map(Integer::parseInt)
-        .collect(Collectors.toList());
+    return Arrays.stream(value.split(",")).map(Integer::parseInt).collect(Collectors.toList());
   }
 
-  @SuppressWarnings("unchecked")
   public Optional<Condition> appendTo(QBuilder qBuilder) {
     String propertyName = propertyField.getValue();
     if (propertyName == null) {
@@ -250,17 +246,17 @@ public class SpecificationController implements Controller<Node> {
     Class<?> propertyClass = getPropertyClass(propertyName);
     Property property = getProperty(qBuilder, propertyName, propertyClass);
 
-    if (property instanceof NumberProperty) {
-      return Optional.ofNullable(getNumberCondition(comparisonOperator, value, propertyClass, (NumberProperty) property));
+    if (property instanceof NumberProperty numberProperty) {
+      return Optional.ofNullable(getNumberCondition(comparisonOperator, value, propertyClass, numberProperty));
     }
-    if (property instanceof BooleanProperty) {
-      return Optional.ofNullable(getBooleanCondition(comparisonOperator, value, propertyClass, (BooleanProperty) property));
+    if (property instanceof BooleanProperty booleanProperty) {
+      return Optional.ofNullable(getBooleanCondition(comparisonOperator, value, propertyClass, booleanProperty));
     }
-    if (property instanceof InstantProperty) {
-      return Optional.ofNullable(getInstantCondition(comparisonOperator, value, propertyClass, (InstantProperty) property));
+    if (property instanceof InstantProperty instantProperty) {
+      return Optional.ofNullable(getInstantCondition(comparisonOperator, value, propertyClass, instantProperty));
     }
-    if (property instanceof EnumProperty) {
-      return Optional.ofNullable(getEquitableCondition(comparisonOperator, value, propertyClass, (EnumProperty) property));
+    if (property instanceof EnumProperty enumProperty) {
+      return Optional.ofNullable(getEquitableCondition(comparisonOperator, value, propertyClass, enumProperty));
     }
 
     return Optional.ofNullable(getStringCondition(comparisonOperator, value, propertyClass, (StringProperty) property));
@@ -318,9 +314,8 @@ public class SpecificationController implements Controller<Node> {
     return prop;
   }
 
-  @SuppressWarnings("unchecked")
-  private <T extends EquitableProperty & ListableProperty> Condition getEquitableCondition(
-      ComparisonOperator comparisonOperator, String value, Class<?> fieldType, T prop) {
+  @SuppressWarnings({"unchecked", "RedundantCast"})
+  private <T extends EquitableProperty & ListableProperty> Condition getEquitableCondition(ComparisonOperator comparisonOperator, String value, Class<?> fieldType, T prop) {
 
     if (comparisonOperator == EQ) {
       return prop.eq(value);
@@ -338,7 +333,7 @@ public class SpecificationController implements Controller<Node> {
   }
 
 
-  @SuppressWarnings("unchecked")
+  @SuppressWarnings({"unchecked", "RedundantCast"})
   private Condition getStringCondition(ComparisonOperator comparisonOperator, String value, Class<?> propertyClass, StringProperty prop) {
 
     if (comparisonOperator == EQ) {
@@ -382,8 +377,7 @@ public class SpecificationController implements Controller<Node> {
   private Condition getBooleanCondition(ComparisonOperator comparisonOperator, String value, Class<?> fieldType, BooleanProperty prop) {
     boolean booleanValue = Boolean.parseBoolean(value);
 
-    if (comparisonOperator == EQ && booleanValue
-        || comparisonOperator == NE && !booleanValue) {
+    if (comparisonOperator == EQ && booleanValue || comparisonOperator == NE && !booleanValue) {
       return prop.isTrue();
     }
 

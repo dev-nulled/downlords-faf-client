@@ -1,29 +1,38 @@
 package com.faforever.client.game;
 
-import com.faforever.client.builders.GamePlayerStatsBeanBuilder;
-import com.faforever.client.builders.PlayerBeanBuilder;
-import com.faforever.client.domain.GamePlayerStatsBean;
-import com.faforever.client.domain.PlayerBean;
+import com.faforever.client.builders.PlayerInfoBuilder;
+import com.faforever.client.domain.api.GameOutcome;
+import com.faforever.client.domain.api.GamePlayerStats;
+import com.faforever.client.domain.server.PlayerInfo;
 import com.faforever.client.i18n.I18n;
-import com.faforever.client.test.UITest;
+import com.faforever.client.replay.DisplayType;
+import com.faforever.client.test.PlatformTest;
 import com.faforever.client.theme.UiService;
 import com.faforever.client.util.RatingUtil;
+import javafx.beans.property.SimpleObjectProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableMap;
 import javafx.scene.control.Label;
+import org.instancio.Instancio;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.testfx.util.WaitForAsyncUtils;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import static org.instancio.Select.field;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-public class TeamCardControllerTest extends UITest {
+public class TeamCardControllerTest extends PlatformTest {
   @InjectMocks
   private TeamCardController instance;
 
@@ -33,29 +42,26 @@ public class TeamCardControllerTest extends UITest {
   private UiService uiService;
   @Mock
   private PlayerCardController playerCardController;
-  @Mock
-  private RatingChangeLabelController ratingChangeLabelController;
 
-  private PlayerBean player;
-  private ArrayList<PlayerBean> playerList;
-  private ObservableMap<String, List<GamePlayerStatsBean>> teams;
-  private GamePlayerStatsBean playerStats;
+  private final ArrayList<PlayerInfo> playerList = new ArrayList<>();
+
+  private ObservableMap<String, List<GamePlayerStats>> teams;
+  private GamePlayerStats playerStats;
 
   @BeforeEach
   public void setUp() throws Exception {
-    player = PlayerBeanBuilder.create().defaultValues().id(1).get();
-    playerList = new ArrayList<>();
+    PlayerInfo player = PlayerInfoBuilder.create().defaultValues().id(1).get();
     playerList.add(player);
     teams = FXCollections.observableHashMap();
 
-    when(uiService.loadFxml("theme/player_card.fxml")).thenReturn(playerCardController);
-    when(uiService.loadFxml("theme/rating_change_label.fxml")).thenReturn(ratingChangeLabelController);
-    when(playerCardController.getRoot()).thenReturn(new Label());
-    when(ratingChangeLabelController.getRoot()).thenReturn(new Label());
-    playerStats = GamePlayerStatsBeanBuilder.create()
-        .defaultValues()
-        .player(PlayerBeanBuilder.create().defaultValues().get())
-        .get();
+    lenient().when(uiService.loadFxml("theme/player_card.fxml")).thenReturn(playerCardController);
+    lenient().when(playerCardController.ratingProperty()).thenReturn(new SimpleObjectProperty<>());
+    lenient().when(playerCardController.divisionProperty()).thenReturn(new SimpleObjectProperty<>());
+    lenient().when(playerCardController.factionProperty()).thenReturn(new SimpleObjectProperty<>());
+    lenient().when(playerCardController.displayTypeProperty()).thenReturn(new SimpleObjectProperty<>());
+    lenient().when(playerCardController.playerProperty()).thenReturn(new SimpleObjectProperty<>());
+    lenient().when(playerCardController.getRoot()).thenReturn(new Label());
+    playerStats = Instancio.of(GamePlayerStats.class).set(field(GamePlayerStats::player), player).create();
 
     teams.put("2", Collections.singletonList(playerStats));
 
@@ -64,15 +70,46 @@ public class TeamCardControllerTest extends UITest {
 
   @Test
   public void setPlayersInTeam() {
-    instance.setPlayersInTeam("2", playerList, player -> RatingUtil.getRating(1000, 0), null, RatingPrecision.ROUNDED);
-    verify(i18n).get("game.tooltip.teamTitle", 1, 1000);
+    when(i18n.get("game.tooltip.teamTitle", 1)).thenReturn("Team 1");
+
+    instance.setRatingProvider(player -> 1000);
+    instance.setTeamId(2);
+    instance.setPlayers(playerList);
+    instance.setRatingPrecision(RatingPrecision.ROUNDED);
+    assertEquals("Team 1", instance.teamNameLabel.getText());
   }
 
   @Test
   public void showRatingChange() {
-    instance.setPlayersInTeam("2", playerList, player -> RatingUtil.getRating(1000, 0), null, RatingPrecision.EXACT);
-    instance.showRatingChange(teams);
-    verify(ratingChangeLabelController).setRatingChange(playerStats);
+    instance.setTeamId(2);
+    instance.setPlayers(playerList);
+    instance.setRatingProvider(player -> RatingUtil.getRating(1000, 0));
+    instance.setRatingPrecision(RatingPrecision.EXACT);
+    WaitForAsyncUtils.waitForFxEvents();
+    instance.setStats(teams.get("2"));
+    verify(playerCardController).setPlayerStats(playerStats);
+    assertTrue(instance.teamRatingLabel.isVisible());
+  }
+
+  @Test
+  public void showNoRating() {
+    instance.setTeamId(2);
+    instance.setDisplayType(DisplayType.DIVISION);
+    instance.setPlayers(playerList);
+    instance.setRatingProvider(player -> RatingUtil.getRating(1000, 0));
+    instance.setRatingPrecision(RatingPrecision.EXACT);
+    WaitForAsyncUtils.waitForFxEvents();
+    assertFalse(instance.teamRatingLabel.isVisible());
+  }
+
+  @Test
+  public void showGameResult() {
+    when(i18n.get("game.resultDraw")).thenReturn("Draw");
+
+    instance.setTeamOutcome(GameOutcome.DRAW);
+    instance.showGameResult();
+    assertEquals("Draw", instance.gameResultLabel.getText());
+    assertTrue(instance.gameResultLabel.isVisible());
   }
 
 }

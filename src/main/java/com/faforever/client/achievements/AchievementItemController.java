@@ -1,7 +1,7 @@
 package com.faforever.client.achievements;
 
-import com.faforever.client.fx.Controller;
-import com.faforever.client.fx.JavaFxUtil;
+import com.faforever.client.fx.FxApplicationThreadExecutor;
+import com.faforever.client.fx.NodeController;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.util.Assert;
 import com.faforever.commons.api.dto.AchievementDefinition;
@@ -24,10 +24,12 @@ import org.springframework.stereotype.Component;
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
 @RequiredArgsConstructor
 // TODO this class should not use API objects
-public class AchievementItemController implements Controller<Node> {
+public class AchievementItemController extends NodeController<Node> {
 
   private final I18n i18n;
   private final AchievementService achievementService;
+  private final FxApplicationThreadExecutor fxApplicationThreadExecutor;
+
   public GridPane achievementItemRoot;
   public Label nameLabel;
   public Label descriptionLabel;
@@ -37,11 +39,13 @@ public class AchievementItemController implements Controller<Node> {
   public ImageView imageView;
   private AchievementDefinition achievementDefinition;
 
-  public void initialize() {
+  @Override
+  protected void onInitialize() {
     progressBar.managedProperty().bind(progressBar.visibleProperty());
     progressLabel.managedProperty().bind(progressLabel.visibleProperty());
   }
 
+  @Override
   public Node getRoot() {
     return achievementItemRoot;
   }
@@ -82,7 +86,7 @@ public class AchievementItemController implements Controller<Node> {
       Integer currentSteps = MoreObjects.firstNonNull(playerAchievement.getCurrentSteps(), 0);
       Integer totalSteps = achievementDefinition.getTotalSteps();
       progressBar.setProgress((double) currentSteps / totalSteps);
-      JavaFxUtil.runLater(() -> progressLabel.setText(i18n.get("achievement.stepsFormat", currentSteps, totalSteps)));
+      fxApplicationThreadExecutor.execute(() -> progressLabel.setText(i18n.get("achievement.stepsFormat", currentSteps, totalSteps)));
     }
   }
 }

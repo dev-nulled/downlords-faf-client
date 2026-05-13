@@ -1,26 +1,26 @@
 package com.faforever.client.game;
 
-import com.faforever.client.domain.GameBean;
-import com.faforever.client.fx.Controller;
+import com.faforever.client.avatar.AvatarService;
+import com.faforever.client.domain.server.GameInfo;
 import com.faforever.client.fx.DecimalCell;
+import com.faforever.client.fx.FxApplicationThreadExecutor;
 import com.faforever.client.fx.IconCell;
+import com.faforever.client.fx.ImageViewHelper;
 import com.faforever.client.fx.JavaFxUtil;
+import com.faforever.client.fx.NodeController;
 import com.faforever.client.fx.StringCell;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.map.MapService;
 import com.faforever.client.map.MapService.PreviewSize;
 import com.faforever.client.player.PlayerService;
-import com.faforever.client.preferences.PreferencesService;
-import com.faforever.client.theme.UiService;
+import com.faforever.client.preferences.Preferences;
+import com.faforever.client.social.SocialService;
+import com.faforever.client.util.TimeService;
 import com.faforever.commons.lobby.GameType;
 import com.google.common.base.Joiner;
 import javafx.beans.binding.Bindings;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleObjectProperty;
-import javafx.beans.property.SimpleStringProperty;
-import javafx.beans.value.ChangeListener;
-import javafx.beans.value.ObservableValue;
-import javafx.beans.value.WeakChangeListener;
 import javafx.collections.ObservableList;
 import javafx.collections.ObservableMap;
 import javafx.collections.transformation.SortedList;
@@ -30,10 +30,10 @@ import javafx.scene.control.Label;
 import javafx.scene.control.SortEvent;
 import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
-import javafx.scene.control.TableColumn.CellDataFeatures;
 import javafx.scene.control.TableColumn.SortType;
 import javafx.scene.control.TableRow;
 import javafx.scene.control.TableView;
+import javafx.scene.control.TableView.TableViewSelectionModel;
 import javafx.scene.control.Tooltip;
 import javafx.scene.image.Image;
 import lombok.RequiredArgsConstructor;
@@ -44,65 +44,69 @@ import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
 import java.text.DecimalFormat;
+import java.time.Duration;
+import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
 @Component
 @RequiredArgsConstructor
-public class GamesTableController implements Controller<Node> {
+public class GamesTableController extends NodeController<Node> {
 
   private static final PseudoClass FRIEND_IN_GAME_PSEUDO_CLASS = PseudoClass.getPseudoClass("friendInGame");
 
-  private final ObjectProperty<GameBean> selectedGame = new SimpleObjectProperty<>();
+  private final ObjectProperty<GameInfo> selectedGame = new SimpleObjectProperty<>();
   private final MapService mapService;
-  private final JoinGameHelper joinGameHelper;
+  private final GameRunner gameRunner;
   private final I18n i18n;
-  private final UiService uiService;
-  private final PreferencesService preferencesService;
+  private final ImageViewHelper imageViewHelper;
   private final PlayerService playerService;
-  public TableView<GameBean> gamesTable;
-  public TableColumn<GameBean, Image> mapPreviewColumn;
-  public TableColumn<GameBean, String> gameTitleColumn;
-  public TableColumn<GameBean, PlayerFill> playersColumn;
-  public TableColumn<GameBean, Number> averageRatingColumn;
-  public TableColumn<GameBean, RatingRange> ratingRangeColumn;
-  public TableColumn<GameBean, String> modsColumn;
-  public TableColumn<GameBean, String> hostColumn;
-  public TableColumn<GameBean, Boolean> passwordProtectionColumn;
-  public TableColumn<GameBean, String> coopMissionName;
-  private final ChangeListener<Boolean> showModdedGamesChangedListener = (observable, oldValue, newValue) -> modsColumn.setVisible(newValue);
-  private final ChangeListener<Boolean> showPasswordProtectedGamesChangedListener = (observable, oldValue, newValue) -> passwordProtectionColumn.setVisible(newValue);
-  private GameTooltipController gameTooltipController;
+  private final SocialService socialService;
+  private final AvatarService avatarService;
+  private final Preferences preferences;
+  private final FxApplicationThreadExecutor fxApplicationThreadExecutor;
+  private final TimeService timeService;
+
+
+  public TableView<GameInfo> gamesTable;
+  public TableColumn<GameInfo, Image> mapPreviewColumn;
+  public TableColumn<GameInfo, String> gameTitleColumn;
+  public TableColumn<GameInfo, PlayerFill> playersColumn;
+  public TableColumn<GameInfo, Double> averageRatingColumn;
+  public TableColumn<GameInfo, RatingRange> ratingRangeColumn;
+  public TableColumn<GameInfo, Map<String, String>> modsColumn;
+  public TableColumn<GameInfo, String> hostColumn;
+  public TableColumn<GameInfo, Boolean> passwordProtectionColumn;
+  public TableColumn<GameInfo, String> coopMissionName;
+  public TableColumn<GameInfo, OffsetDateTime> lifetimeColumn;
+  public GameTooltipController gameTooltipController;
+
   private Tooltip tooltip;
 
-  public ObjectProperty<GameBean> selectedGameProperty() {
+  public ObjectProperty<GameInfo> selectedGameProperty() {
     return selectedGame;
   }
 
+  @Override
   public Node getRoot() {
     return gamesTable;
   }
 
-  public void initializeGameTable(ObservableList<GameBean> games) {
+  public void initializeGameTable(ObservableList<GameInfo> games) {
     initializeGameTable(games, null, true);
   }
 
-  public void initializeGameTable(ObservableList<GameBean> games, Function<String, String> coopMissionNameProvider, boolean listenToFilterPreferences) {
-    gameTooltipController = uiService.loadFxml("theme/play/game_tooltip.fxml");
-    tooltip = JavaFxUtil.createCustomTooltip(gameTooltipController.getRoot());
-    tooltip.showingProperty().addListener((observable, oldValue, newValue) -> {
-      if (newValue) {
-        gameTooltipController.displayGame();
-      } else {
-        gameTooltipController.setGame(null);
-      }
-    });
+  public void initializeGameTable(ObservableList<GameInfo> games, Function<String, String> coopMissionNameProvider,
+                                  boolean listenToFilterPreferences) {
 
-    SortedList<GameBean> sortedList = new SortedList<>(games);
+    tooltip = JavaFxUtil.createCustomTooltip(gameTooltipController.getRoot());
+
+    SortedList<GameInfo> sortedList = new SortedList<>(games);
     sortedList.comparatorProperty().bind(gamesTable.comparatorProperty());
     gamesTable.setPlaceholder(new Label(i18n.get("games.noGamesAvailable")));
     gamesTable.setRowFactory(param1 -> gamesRowFactory());
@@ -111,59 +115,81 @@ public class GamesTableController implements Controller<Node> {
     applyLastSorting(gamesTable);
     gamesTable.setOnSort(this::onColumnSorted);
 
-    passwordProtectionColumn.setCellValueFactory(param -> param.getValue().passwordProtectedProperty());
+    passwordProtectionColumn.setCellValueFactory(param -> param.getValue().passwordProtectedProperty().when(showing));
     passwordProtectionColumn.setCellFactory(param -> passwordIndicatorColumn());
 
-    mapPreviewColumn.setCellFactory(param -> new MapPreviewTableCell(uiService));
-    mapPreviewColumn.setCellValueFactory(param -> Bindings.createObjectBinding(
-        () -> mapService.loadPreview(param.getValue().getMapFolderName(), PreviewSize.SMALL),
-        param.getValue().mapFolderNameProperty()
-    ));
+    mapPreviewColumn.setCellFactory(param -> new MapPreviewTableCell(imageViewHelper));
+    mapPreviewColumn.setCellValueFactory(param -> param.getValue()
+                                                       .mapFolderNameProperty()
+                                                       .flatMap(mapFolderName -> Bindings.createObjectBinding(
+                                                           () -> mapService.loadPreview(mapFolderName,
+                                                                                        PreviewSize.SMALL),
+                                                           mapService.isInstalledBinding(mapFolderName)))
+                                                       .flatMap(
+                                                           imageViewHelper::createPlaceholderImageOnErrorObservable)
+                                                       .when(mapPreviewColumn.visibleProperty().and(showing)));
 
-    gameTitleColumn.setCellValueFactory(param -> param.getValue().titleProperty());
+    gameTitleColumn.setCellValueFactory(param -> param.getValue().titleProperty().when(showing));
     gameTitleColumn.setCellFactory(param -> new StringCell<>(StringUtils::normalizeSpace));
-    playersColumn.setCellValueFactory(param -> Bindings.createObjectBinding(
-        () -> new PlayerFill(param.getValue().getNumPlayers(), param.getValue().getMaxPlayers()),
-        param.getValue().numPlayersProperty(), param.getValue().maxPlayersProperty())
-    );
+    playersColumn.setCellValueFactory(param -> param.getValue()
+                                                    .maxPlayersProperty()
+                                                    .flatMap(max -> param.getValue()
+                                                                         .numActivePlayersProperty()
+                                                                         .map(Number::intValue)
+                                                                         .map(active -> new PlayerFill(active,
+                                                                                                       max.intValue())))
+                                                    .when(showing));
     playersColumn.setCellFactory(param -> playersCell());
-    ratingRangeColumn.setCellValueFactory(param -> new SimpleObjectProperty<>(new RatingRange(param.getValue().getRatingMin(), param.getValue().getRatingMax())));
+    ratingRangeColumn.setCellValueFactory(param -> param.getValue()
+                                                        .ratingMaxProperty()
+                                                        .flatMap(max -> param.getValue()
+                                                                             .ratingMinProperty()
+                                                                             .map(
+                                                                                 min -> min > max ? null : new RatingRange(
+                                                                                     min, max)))
+                                                        .when(ratingRangeColumn.visibleProperty().and(showing)));
     ratingRangeColumn.setCellFactory(param -> ratingTableCell());
-    hostColumn.setCellValueFactory(param -> param.getValue().hostProperty());
-    hostColumn.setCellFactory(param -> new HostTableCell(playerService));
-    modsColumn.setCellValueFactory(this::modCell);
-    modsColumn.setCellFactory(param -> new StringCell<>(String::toString));
+    hostColumn.setCellValueFactory(param -> param.getValue().hostProperty().when(showing));
+    hostColumn.setCellFactory(param -> new HostTableCell(playerService, avatarService));
+    modsColumn.setCellValueFactory(param -> param.getValue().simModsProperty().when(showing));
+    modsColumn.setCellFactory(param -> new StringCell<>(this::convertSimModsToContent));
     coopMissionName.setVisible(coopMissionNameProvider != null);
 
+    lifetimeColumn.setCellValueFactory(param -> param.getValue().hostedAtProperty().when(showing));
+    lifetimeColumn.setCellFactory(param -> new StringCell<>(offsetDateTime -> timeService.shortDurationWithoutPrecision(
+        Duration.between(offsetDateTime, OffsetDateTime.now()))));
+
     if (averageRatingColumn != null) {
-      averageRatingColumn.setCellValueFactory(param -> param.getValue().averageRatingProperty());
-      averageRatingColumn.setCellFactory(param -> new DecimalCell<>(
-          new DecimalFormat("0"),
-          number -> Math.round(number.doubleValue() / 100.0) * 100.0)
-      );
+      averageRatingColumn.setCellValueFactory(
+          param -> playerService.getAverageRatingPropertyForGame(param.getValue()).when(showing));
+      averageRatingColumn.setCellFactory(
+          param -> new DecimalCell<>(new DecimalFormat("0"), number -> Math.round(number / 100.0) * 100.0));
     }
 
     if (coopMissionNameProvider != null) {
       coopMissionName.setCellFactory(param -> new StringCell<>(name -> name));
-      coopMissionName.setCellValueFactory(param -> new SimpleObjectProperty<>(coopMissionNameProvider.apply(param.getValue().getMapFolderName())));
+      coopMissionName.setCellValueFactory(
+          param -> param.getValue().mapFolderNameProperty().map(coopMissionNameProvider).when(showing));
     }
 
-    gamesTable.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue)
-        -> JavaFxUtil.runLater(() -> selectedGame.set(newValue)));
+    selectedGameProperty().bind(
+        gamesTable.selectionModelProperty().flatMap(TableViewSelectionModel::selectedItemProperty).when(showing));
 
-    //bindings do not work as that interferes with some bidirectional bindings in the TableView itself
     if (listenToFilterPreferences && coopMissionNameProvider == null) {
-      modsColumn.setVisible(preferencesService.getPreferences().isShowModdedGames());
-      passwordProtectionColumn.setVisible(preferencesService.getPreferences().isShowPasswordProtectedGames());
-      JavaFxUtil.addListener(preferencesService.getPreferences().showModdedGamesProperty(), new WeakChangeListener<>(showModdedGamesChangedListener));
-      JavaFxUtil.addListener(preferencesService.getPreferences().showPasswordProtectedGamesProperty(), new WeakChangeListener<>(showPasswordProtectedGamesChangedListener));
+      modsColumn.visibleProperty().bind(preferences.hideModdedGamesProperty().not().when(showing));
+      passwordProtectionColumn.visibleProperty().bind(preferences.hidePrivateGamesProperty().not().when(showing));
     }
+
+    selectFirstGame();
   }
 
-  private void applyLastSorting(TableView<GameBean> gamesTable) {
-    final Map<String, SortType> lookup = new HashMap<>();
-    final ObservableList<TableColumn<GameBean, ?>> sortOrder = gamesTable.getSortOrder();
-    preferencesService.getPreferences().getGameTableSorting().forEach(lookup::put);
+  private void selectFirstGame() {
+    gamesTable.getSelectionModel().selectFirst();
+  }
+
+  private void applyLastSorting(TableView<GameInfo> gamesTable) {
+    final Map<String, SortType> lookup = new HashMap<>(preferences.getGameTableSorting());
+    final ObservableList<TableColumn<GameInfo, ?>> sortOrder = gamesTable.getSortOrder();
     sortOrder.clear();
     gamesTable.getColumns().forEach(gameTableColumn -> {
       if (lookup.containsKey(gameTableColumn.getId())) {
@@ -173,98 +199,92 @@ public class GamesTableController implements Controller<Node> {
     });
   }
 
-  private void onColumnSorted(@NotNull SortEvent<TableView<GameBean>> event) {
-    ObservableMap<String, SortType> gameListSorting = preferencesService.getPreferences().getGameTableSorting();
+  private void onColumnSorted(@NotNull SortEvent<TableView<GameInfo>> event) {
+    ObservableMap<String, SortType> gameListSorting = preferences.getGameTableSorting();
 
     gameListSorting.clear();
-    event.getSource().getSortOrder()
-        .forEach(column -> gameListSorting.put(column.getId(), column.getSortType()));
-
-    preferencesService.storeInBackground();
+    event.getSource().getSortOrder().forEach(column -> gameListSorting.put(column.getId(), column.getSortType()));
   }
 
   @NotNull
-  private ObservableValue<String> modCell(CellDataFeatures<GameBean, String> param) {
-    Map<String, String> simMods = param.getValue().getSimMods();
-    int simModCount = simMods.size();
-    List<String> modNames;
-      modNames = simMods.values().stream()
-          .limit(2)
-          .collect(Collectors.toList());
-    if (simModCount > 2) {
-      return new SimpleStringProperty(i18n.get("game.mods.twoAndMore", modNames.get(0), modNames.size() - 1));
+  private String convertSimModsToContent(Map<String, String> simMods) {
+    List<String> modNames = simMods.values().stream().limit(2).collect(Collectors.toList());
+
+    if (simMods.size() > 2) {
+      return i18n.get("game.mods.twoAndMore", modNames.getFirst(), simMods.size() - 1);
     }
-    return new SimpleStringProperty(Joiner.on(i18n.get("textSeparator")).join(modNames));
+    return Joiner.on(i18n.get("textSeparator")).join(modNames);
   }
 
   @NotNull
-  private TableRow<GameBean> gamesRowFactory() {
-    TableRow<GameBean> row = new TableRow<>() {
+  private TableRow<GameInfo> gamesRowFactory() {
+    TableRow<GameInfo> row = new TableRow<>() {
       @Override
-      protected void updateItem(GameBean game, boolean empty) {
+      protected void updateItem(GameInfo game, boolean empty) {
         super.updateItem(game, empty);
         if (empty || game == null) {
           setTooltip(null);
           pseudoClassStateChanged(FRIEND_IN_GAME_PSEUDO_CLASS, false);
         } else {
           setTooltip(tooltip);
-          pseudoClassStateChanged(FRIEND_IN_GAME_PSEUDO_CLASS, playerService.areFriendsInGame(game)
-              && game.getGameType() != GameType.COOP); // do not highlight coop games
+          pseudoClassStateChanged(FRIEND_IN_GAME_PSEUDO_CLASS, socialService.areFriendsInGame(
+              game) && game.getGameType() != GameType.COOP); // do not highlight coop games
         }
       }
     };
     row.setOnMouseClicked(event -> {
       if (event.getClickCount() == 2) {
-        GameBean game = row.getItem();
-        joinGameHelper.join(game);
+        GameInfo game = row.getItem();
+        gameRunner.join(game);
       }
     });
-    row.setOnMouseEntered(event -> {
-      if (row.getItem() == null) {
-        return;
-      }
-      GameBean game = row.getItem();
-      gameTooltipController.setGame(game);
-      if (tooltip.isShowing()) {
-        gameTooltipController.displayGame();
+    row.setOnMouseEntered(event -> gameTooltipController.setGame(row.getItem()));
+
+    row.setOnMouseExited(event -> {
+      GameInfo game = row.getItem();
+      if (Objects.equals(game, gameTooltipController.getGame())) {
+        gameTooltipController.setGame(null);
       }
     });
     return row;
   }
 
-  private TableCell<GameBean, Boolean> passwordIndicatorColumn() {
-    return new IconCell<>(
-        isPasswordProtected -> isPasswordProtected ? "lock-icon" : "");
+  private TableCell<GameInfo, Boolean> passwordIndicatorColumn() {
+    return new IconCell<>(isPasswordProtected -> isPasswordProtected ? "lock-icon" : "");
   }
 
-  private TableCell<GameBean, PlayerFill> playersCell() {
-    return new StringCell<>(playerFill -> i18n.get("game.players.format",
-        playerFill.getPlayers(), playerFill.getMaxPlayers()));
+  private TableCell<GameInfo, PlayerFill> playersCell() {
+    return new StringCell<>(
+        playerFill -> i18n.get("game.players.format", playerFill.getPlayers(), playerFill.getMaxPlayers()));
   }
 
-  private TableCell<GameBean, RatingRange> ratingTableCell() {
+  private TableCell<GameInfo, RatingRange> ratingTableCell() {
     return new StringCell<>(ratingRange -> {
-      if (ratingRange.getMin() == null && ratingRange.getMax() == null) {
+      if (ratingRange.min() == null && ratingRange.max() == null) {
         return "";
       }
 
-      if (ratingRange.getMin() != null && ratingRange.getMax() != null) {
-        return i18n.get("game.ratingFormat.minMax", ratingRange.getMin(), ratingRange.getMax());
+      if (ratingRange.min() != null && ratingRange.max() != null) {
+        return i18n.get("game.ratingFormat.minMax", ratingRange.min(), ratingRange.max());
       }
 
-      if (ratingRange.getMin() != null) {
-        return i18n.get("game.ratingFormat.minOnly", ratingRange.getMin());
+      if (ratingRange.min() != null) {
+        return i18n.get("game.ratingFormat.minOnly", ratingRange.min());
       }
 
-      return i18n.get("game.ratingFormat.maxOnly", ratingRange.getMax());
+      return i18n.get("game.ratingFormat.maxOnly", ratingRange.max());
     });
   }
 
-  public TableColumn<GameBean, Image> getMapPreviewColumn() {
+  public TableColumn<GameInfo, Image> getMapPreviewColumn() {
     return mapPreviewColumn;
   }
 
-  public TableColumn<GameBean, RatingRange> getRatingRangeColumn() {
+  public TableColumn<GameInfo, RatingRange> getRatingRangeColumn() {
     return ratingRangeColumn;
+  }
+
+  public void refreshTable() {
+    fxApplicationThreadExecutor.execute(() -> gamesTable.refresh());
   }
 }

@@ -1,26 +1,23 @@
 package com.faforever.client.game;
 
-import com.faforever.client.builders.PreferencesBuilder;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.map.generator.GenerationType;
 import com.faforever.client.map.generator.GeneratorOptions;
 import com.faforever.client.map.generator.MapGeneratorService;
 import com.faforever.client.notification.NotificationService;
 import com.faforever.client.preferences.GeneratorPrefs;
-import com.faforever.client.preferences.Preferences;
-import com.faforever.client.preferences.PreferencesService;
-import com.faforever.client.test.UITest;
+import com.faforever.client.test.PlatformTest;
 import javafx.collections.FXCollections;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.testfx.util.WaitForAsyncUtils;
+import org.mockito.Spy;
+import reactor.core.publisher.Mono;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -32,10 +29,9 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-public class GenerateMapControllerTest extends UITest {
+public class GenerateMapControllerTest extends PlatformTest {
 
-  @Mock
-  private PreferencesService preferencesService;
+
   @Mock
   private
   NotificationService notificationService;
@@ -43,44 +39,31 @@ public class GenerateMapControllerTest extends UITest {
   private MapGeneratorService mapGeneratorService;
   @Mock
   private I18n i18n;
-  @Mock
-  private CreateGameController createGameController;
+  @Spy
+  private GeneratorPrefs generatorPrefs;
 
-  private Preferences preferences;
   @InjectMocks
   private GenerateMapController instance;
 
   public void unbindProperties() {
-    GeneratorPrefs generatorPrefs = preferences.getGenerator();
     generatorPrefs.generationTypeProperty().unbind();
     generatorPrefs.spawnCountProperty().unbind();
     generatorPrefs.mapSizeInKmProperty().unbind();
     generatorPrefs.numTeamsProperty().unbind();
-    generatorPrefs.waterRandomProperty().unbind();
-    generatorPrefs.plateauRandomProperty().unbind();
-    generatorPrefs.mountainRandomProperty().unbind();
-    generatorPrefs.rampRandomProperty().unbind();
-    generatorPrefs.mexRandomProperty().unbind();
-    generatorPrefs.reclaimRandomProperty().unbind();
-    generatorPrefs.waterDensityProperty().unbind();
-    generatorPrefs.plateauDensityProperty().unbind();
-    generatorPrefs.mountainDensityProperty().unbind();
-    generatorPrefs.rampDensityProperty().unbind();
-    generatorPrefs.mexDensityProperty().unbind();
-    generatorPrefs.reclaimDensityProperty().unbind();
+    generatorPrefs.seedProperty().unbind();
+    generatorPrefs.fixedSeedProperty().unbind();
+    generatorPrefs.customStyleProperty().unbind();
     generatorPrefs.commandLineArgsProperty().unbind();
+    generatorPrefs.reclaimDensityMinProperty().unbind();
+    generatorPrefs.reclaimDensityMaxProperty().unbind();
+    generatorPrefs.resourceDensityMinProperty().unbind();
+    generatorPrefs.resourceDensityMaxProperty().unbind();
   }
 
   @BeforeEach
   public void setUp() throws Exception {
-    preferences = PreferencesBuilder.create().defaultValues()
-        .generatorPrefs()
-        .spawnCount(10)
-        .mapSize(10.0)
-        .then()
-        .get();
-
-    when(preferencesService.getPreferences()).thenReturn(preferences);
+    generatorPrefs.setSpawnCount(10);
+    generatorPrefs.setMapSizeInKm(10.0);
 
     loadFxml("theme/play/generate_map.fxml", clazz -> instance);
     unbindProperties();
@@ -88,8 +71,7 @@ public class GenerateMapControllerTest extends UITest {
 
   @Test
   public void testBadMapNameFails() {
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
+    runOnFxThreadAndWait(() -> reinitialize(instance));
     instance.previousMapName.setText("Bad");
     instance.onGenerateMap();
 
@@ -98,170 +80,127 @@ public class GenerateMapControllerTest extends UITest {
 
   @Test
   public void testSetLastSpawnCount() {
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
+    runOnFxThreadAndWait(() -> reinitialize(instance));
 
-    assertEquals(instance.spawnCountSpinner.getValue().intValue(), 10);
+    assertEquals(10, instance.spawnCountSpinner.getValue().intValue());
   }
 
   @Test
   public void testSetLastNumTeams() {
-    preferences.getGenerator().setNumTeams(5);
+    generatorPrefs.setNumTeams(5);
 
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
+    runOnFxThreadAndWait(() -> reinitialize(instance));
 
-    assertEquals(instance.numTeamsSpinner.getValue().intValue(), 5);
+    assertEquals(5, instance.numTeamsSpinner.getValue().intValue());
   }
 
   @Test
   public void testSetLastMapSize() {
 
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
+    runOnFxThreadAndWait(() -> reinitialize(instance));
 
-    assertEquals(instance.mapSizeSpinner.getValue(), 10.0);
-    assertEquals((int) instance.spawnCountSpinner.getValue(), 10);
+    assertEquals(10.0, instance.mapSizeSpinner.getValue());
+    assertEquals(10, (int) instance.spawnCountSpinner.getValue());
+  }
+
+  @Test
+  public void testSetLastSymmetry() {
+    generatorPrefs.getSymmetries().setAll("Test");
+
+    runOnFxThreadAndWait(() -> reinitialize(instance));
+
+    instance.setSymmetries(new ArrayList<>(List.of("Test")));
+
+    assertEquals(instance.symmetryCheckComboBox.getCheckModel().getCheckedItems(), List.of("Test"));
+  }
+
+  @Test
+  public void testSetLastFixedSeed() {
+    generatorPrefs.setFixedSeed(true);
+
+    runOnFxThreadAndWait(() -> reinitialize(instance));
+
+    assertTrue(instance.fixedSeedCheckBox.isSelected());
+  }
+
+  @Test
+  public void testSetLastSeed() {
+    generatorPrefs.setSeed("100");
+
+    runOnFxThreadAndWait(() -> reinitialize(instance));
+
+    assertEquals("100", instance.seedTextField.getText());
   }
 
   @Test
   public void testSetLastMapStyle() {
-    preferences.getGenerator().setMapStyle("TEST");
+    generatorPrefs.getMapStyles().setAll("TEST");
 
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
+    runOnFxThreadAndWait(() -> reinitialize(instance));
 
     instance.setStyles(new ArrayList<>(List.of("TEST")));
 
-    assertEquals(instance.mapStyleComboBox.getValue(), "TEST");
+    assertEquals(List.of("TEST"), instance.mapStyleCheckComboBox.getCheckModel().getCheckedItems());
   }
 
   @Test
-  public void testSetLastWaterRandom() {
-    preferences.getGenerator().setWaterRandom(false);
+  public void testSetLastCustomStyle() {
+    generatorPrefs.setCustomStyle(true);
 
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
+    runOnFxThreadAndWait(() -> reinitialize(instance));
 
-    assertFalse(instance.waterRandom.isSelected());
+    assertTrue(instance.customStyleCheckBox.isSelected());
   }
 
   @Test
-  public void testSetLastPlateauRandom() {
-    preferences.getGenerator().setPlateauRandom(false);
+  public void testSetLastTerrainStyle() {
+    generatorPrefs.getTerrainStyles().setAll("TEST");
 
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
+    runOnFxThreadAndWait(() -> reinitialize(instance));
 
-    assertFalse(instance.plateauRandom.isSelected());
+    instance.setTerrainStyles(new ArrayList<>(List.of("TEST")));
+
+    assertEquals(List.of("TEST"), instance.terrainCheckComboBox.getCheckModel().getCheckedItems());
   }
 
   @Test
-  public void testSetLastMountainRandom() {
-    preferences.getGenerator().setMountainRandom(false);
+  public void testSetLastTextureStyle() {
+    generatorPrefs.getTextureStyles().setAll("TEST");
 
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
+    runOnFxThreadAndWait(() -> reinitialize(instance));
 
-    assertFalse(instance.mountainRandom.isSelected());
+    instance.setTextureStyles(new ArrayList<>(List.of("TEST")));
+
+    assertEquals(List.of("TEST"), instance.biomeCheckComboBox.getCheckModel().getCheckedItems());
   }
 
   @Test
-  public void testSetLastRampRandom() {
-    preferences.getGenerator().setRampRandom(false);
+  public void testSetLastResourceStyle() {
+    generatorPrefs.getResourceStyles().setAll("TEST");
 
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
+    runOnFxThreadAndWait(() -> reinitialize(instance));
 
-    assertFalse(instance.rampRandom.isSelected());
+    instance.setResourceStyles(new ArrayList<>(List.of("TEST")));
+
+    assertEquals(List.of("TEST"), instance.resourcesCheckComboBox.getCheckModel().getCheckedItems());
   }
 
   @Test
-  public void testSetLastMexRandom() {
-    preferences.getGenerator().setMexRandom(false);
+  public void testSetLastPropStyle() {
+    generatorPrefs.getPropStyles().setAll("TEST");
 
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
+    runOnFxThreadAndWait(() -> reinitialize(instance));
 
-    assertFalse(instance.mexRandom.isSelected());
-  }
+    instance.setPropStyles(new ArrayList<>(List.of("TEST")));
 
-  @Test
-  public void testSetLastReclaimRandom() {
-    preferences.getGenerator().setReclaimRandom(false);
-
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
-
-    assertFalse(instance.reclaimRandom.isSelected());
-  }
-
-  @Test
-  public void testSetLastWaterSlider() {
-    preferences.getGenerator().setWaterDensity(71);
-
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
-
-    assertEquals(instance.waterSlider.getValue(), 71, 0);
-  }
-
-  @Test
-  public void testSetLastMountainSlider() {
-    preferences.getGenerator().setMountainDensity(71);
-
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
-
-    assertEquals(instance.mountainSlider.getValue(), 71, 0);
-  }
-
-  @Test
-  public void testSetLastPlateauSlider() {
-    preferences.getGenerator().setPlateauDensity(71);
-
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
-
-    assertEquals(instance.plateauSlider.getValue(), 71, 0);
-  }
-
-  @Test
-  public void testSetLastRampSlider() {
-    preferences.getGenerator().setRampDensity(71);
-
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
-
-    assertEquals(instance.rampSlider.getValue(), 71, 0);
-  }
-
-  @Test
-  public void testSetLastMexSlider() {
-    preferences.getGenerator().setMexDensity(71);
-
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
-
-    assertEquals(instance.mexSlider.getValue(), 71, 0);
-  }
-
-  @Test
-  public void testSetLastReclaimSlider() {
-    preferences.getGenerator().setReclaimDensity(71);
-
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
-
-    assertEquals(instance.reclaimSlider.getValue(), 71, 0);
+    assertEquals(List.of("TEST"), instance.propsCheckComboBox.getCheckModel().getCheckedItems());
   }
 
   @Test
   public void testSetLastCommandLineArgs() {
-    preferences.getGenerator().setCommandLineArgs("--help");
+    generatorPrefs.setCommandLineArgs("--help");
 
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
+    runOnFxThreadAndWait(() -> reinitialize(instance));
 
     assertEquals("--help", instance.commandLineArgsText.getText());
     assertTrue(instance.commandLineArgsText.isVisible());
@@ -270,8 +209,7 @@ public class GenerateMapControllerTest extends UITest {
 
   @Test
   public void testCommandLineArgsNotVisibleWhenNotSetInitially() {
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
+    runOnFxThreadAndWait(() -> reinitialize(instance));
 
     assertFalse(instance.commandLineArgsText.isVisible());
     assertFalse(instance.commandLineLabel.isVisible());
@@ -279,384 +217,220 @@ public class GenerateMapControllerTest extends UITest {
 
   @Test
   public void testToggleCommandLineArgs() {
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
+    runOnFxThreadAndWait(() -> reinitialize(instance));
 
     assertFalse(instance.commandLineArgsText.isVisible());
     assertFalse(instance.commandLineLabel.isVisible());
 
-    WaitForAsyncUtils.asyncFx(() -> instance.toggleCommandlineInput());
-    WaitForAsyncUtils.waitForFxEvents();
+    runOnFxThreadAndWait(() -> instance.toggleCommandlineInput());
 
     assertTrue(instance.commandLineArgsText.isVisible());
     assertTrue(instance.commandLineLabel.isVisible());
   }
 
   @Test
-  public void testStylesVisibleWhenPopulated() {
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
-
-    instance.setStyles(new ArrayList<>(List.of("TEST")));
-
-    assertTrue(instance.mapStyleLabel.isVisible());
-    assertTrue(instance.mapStyleComboBox.isVisible());
-  }
-
-  @Test
-  public void testStylesNotVisibleWhenNotPopulated() {
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
-
-    assertFalse(instance.mapStyleLabel.isVisible());
-    assertFalse(instance.mapStyleComboBox.isVisible());
-  }
-
-  @Test
-  public void testWaterSliderVisibilityWhenRandom() {
-    preferences.getGenerator().setWaterRandom(true);
-
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
-
-    assertFalse(instance.waterSliderBox.isVisible());
-  }
-
-  @Test
-  public void testPlateauSliderVisibilityWhenRandom() {
-    preferences.getGenerator().setPlateauRandom(true);
-
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
-
-    assertFalse(instance.plateauSliderBox.isVisible());
-  }
-
-  @Test
-  public void testMountainSliderVisibilityWhenRandom() {
-    preferences.getGenerator().setMountainRandom(true);
-
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
-
-    assertFalse(instance.mountainSliderBox.isVisible());
-  }
-
-  @Test
-  public void testRampSliderVisibilityWhenRandom() {
-    preferences.getGenerator().setRampRandom(true);
-
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
-
-    assertFalse(instance.rampSliderBox.isVisible());
-  }
-
-  @Test
-  public void testMexSliderVisibilityWhenRandom() {
-    preferences.getGenerator().setMexRandom(true);
-
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
-
-    assertFalse(instance.mexSliderBox.isVisible());
-  }
-
-  @Test
-  public void testReclaimSliderVisibilityWhenRandom() {
-    preferences.getGenerator().setReclaimRandom(true);
-
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
-
-    assertFalse(instance.reclaimSliderBox.isVisible());
-  }
-
-  @Test
-  public void testWaterSliderVisibilityWhenNotRandom() {
-    preferences.getGenerator().setWaterRandom(false);
-
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
-
-    assertTrue(instance.waterSliderBox.isVisible());
-  }
-
-  @Test
-  public void testPlateauSliderVisibilityWhenNotRandom() {
-    preferences.getGenerator().setPlateauRandom(false);
-
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
-
-    assertTrue(instance.plateauSliderBox.isVisible());
-  }
-
-  @Test
-  public void testMountainSliderVisibilityWhenNotRandom() {
-    preferences.getGenerator().setMountainRandom(false);
-
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
-
-    assertTrue(instance.mountainSliderBox.isVisible());
-  }
-
-  @Test
-  public void testRampSliderVisibilityWhenNotRandom() {
-    preferences.getGenerator().setRampRandom(false);
-
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
-
-    assertTrue(instance.rampSliderBox.isVisible());
-  }
-
-  @Test
-  public void testMexSliderVisibilityWhenNotRandom() {
-    preferences.getGenerator().setMexRandom(false);
-
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
-
-    assertTrue(instance.mexSliderBox.isVisible());
-  }
-
-  @Test
-  public void testReclaimSliderVisibilityWhenNotRandom() {
-    preferences.getGenerator().setReclaimRandom(false);
-
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
-
-    assertTrue(instance.reclaimSliderBox.isVisible());
-  }
-
-  @Test
   public void testOptionsNotDisabledWithoutMapName() {
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
+    runOnFxThreadAndWait(() -> reinitialize(instance));
     instance.previousMapName.setText("neroxis_map_generator");
     instance.previousMapName.setText("");
 
     assertFalse(instance.generationTypeComboBox.isDisabled());
-    assertFalse(instance.rampRandomBox.isDisabled());
-    assertFalse(instance.rampSliderBox.isDisabled());
-    assertFalse(instance.waterRandomBox.isDisabled());
-    assertFalse(instance.waterSliderBox.isDisabled());
-    assertFalse(instance.plateauRandomBox.isDisabled());
-    assertFalse(instance.plateauSliderBox.isDisabled());
-    assertFalse(instance.mountainRandomBox.isDisabled());
-    assertFalse(instance.mountainSliderBox.isDisabled());
-    assertFalse(instance.reclaimRandomBox.isDisabled());
-    assertFalse(instance.reclaimSliderBox.isDisabled());
-    assertFalse(instance.mexRandomBox.isDisabled());
-    assertFalse(instance.mexSliderBox.isDisabled());
-    assertFalse(instance.mapStyleComboBox.isDisabled());
+    assertFalse(instance.spawnCountSpinner.isDisabled());
+    assertFalse(instance.numTeamsSpinner.isDisabled());
+    assertFalse(instance.mapSizeSpinner.isDisabled());
+    assertFalse(instance.symmetryCheckComboBox.isDisabled());
+    assertFalse(instance.fixedSeedCheckBox.isDisabled());
+    assertFalse(instance.customStyleCheckBox.isDisabled());
   }
 
   @Test
   public void testOptionsDisabledWithMapName() {
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
+    runOnFxThreadAndWait(() -> reinitialize(instance));
     instance.previousMapName.setText("neroxis_map_generator");
+    instance.customStyleCheckBox.setSelected(true);
 
     assertTrue(instance.commandLineArgsText.isDisabled());
     assertTrue(instance.generationTypeComboBox.isDisabled());
-    assertTrue(instance.rampRandomBox.isDisabled());
-    assertTrue(instance.rampSliderBox.isDisabled());
-    assertTrue(instance.waterRandomBox.isDisabled());
-    assertTrue(instance.waterSliderBox.isDisabled());
-    assertTrue(instance.plateauRandomBox.isDisabled());
-    assertTrue(instance.plateauSliderBox.isDisabled());
-    assertTrue(instance.mountainRandomBox.isDisabled());
-    assertTrue(instance.mountainSliderBox.isDisabled());
-    assertTrue(instance.reclaimRandomBox.isDisabled());
-    assertTrue(instance.reclaimSliderBox.isDisabled());
-    assertTrue(instance.mexRandomBox.isDisabled());
-    assertTrue(instance.mexSliderBox.isDisabled());
-    assertTrue(instance.mapStyleComboBox.isDisabled());
+    assertTrue(instance.spawnCountSpinner.isDisabled());
+    assertTrue(instance.numTeamsSpinner.isDisabled());
+    assertTrue(instance.mapSizeSpinner.isDisabled());
+    assertTrue(instance.symmetryCheckComboBox.isDisabled());
+    assertTrue(instance.fixedSeedCheckBox.isDisabled());
+    assertTrue(instance.seedTextField.isDisabled());
+    assertTrue(instance.seedRerollButton.isDisabled());
+    assertTrue(instance.mapStyleCheckComboBox.isDisabled());
+    assertTrue(instance.customStyleCheckBox.isDisabled());
+    assertTrue(instance.terrainCheckComboBox.isDisabled());
+    assertTrue(instance.biomeCheckComboBox.isDisabled());
+    assertTrue(instance.resourcesCheckComboBox.isDisabled());
+    assertTrue(instance.resourcesDensitySlider.isDisabled());
+    assertTrue(instance.reclaimDensitySlider.isDisabled());
   }
 
   @Test
   public void testOptionsDisabledWithCommandLine() {
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
+    runOnFxThreadAndWait(() -> reinitialize(instance));
     instance.commandLineArgsText.setText("--help");
+    instance.customStyleCheckBox.setSelected(true);
 
     assertTrue(instance.generationTypeComboBox.isDisabled());
-    assertTrue(instance.rampRandomBox.isDisabled());
-    assertTrue(instance.rampSliderBox.isDisabled());
-    assertTrue(instance.waterRandomBox.isDisabled());
-    assertTrue(instance.waterSliderBox.isDisabled());
-    assertTrue(instance.plateauRandomBox.isDisabled());
-    assertTrue(instance.plateauSliderBox.isDisabled());
-    assertTrue(instance.mountainRandomBox.isDisabled());
-    assertTrue(instance.mountainSliderBox.isDisabled());
-    assertTrue(instance.reclaimRandomBox.isDisabled());
-    assertTrue(instance.reclaimSliderBox.isDisabled());
-    assertTrue(instance.mexRandomBox.isDisabled());
-    assertTrue(instance.mexSliderBox.isDisabled());
-    assertTrue(instance.mapStyleComboBox.isDisabled());
+    assertTrue(instance.spawnCountSpinner.isDisabled());
+    assertTrue(instance.numTeamsSpinner.isDisabled());
+    assertTrue(instance.mapSizeSpinner.isDisabled());
+    assertTrue(instance.symmetryCheckComboBox.isDisabled());
+    assertTrue(instance.fixedSeedCheckBox.isDisabled());
+    assertTrue(instance.seedTextField.isDisabled());
+    assertTrue(instance.seedRerollButton.isDisabled());
+    assertTrue(instance.mapStyleCheckComboBox.isDisabled());
+    assertTrue(instance.customStyleCheckBox.isDisabled());
+    assertTrue(instance.terrainCheckComboBox.isDisabled());
+    assertTrue(instance.biomeCheckComboBox.isDisabled());
+    assertTrue(instance.resourcesCheckComboBox.isDisabled());
+    assertTrue(instance.propsCheckComboBox.isDisabled());
+    assertTrue(instance.resourcesDensitySlider.isDisabled());
+    assertTrue(instance.reclaimDensitySlider.isDisabled());
   }
 
   @Test
-  public void testOptionsDisabledWithStyle() {
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
-    instance.mapStyleComboBox.setItems(FXCollections.observableList(List.of("TEST")));
-    instance.mapStyleComboBox.getSelectionModel().selectFirst();
+  public void testOptionsDisabledWithoutCustomStyle() {
+    runOnFxThreadAndWait(() -> reinitialize(instance));
+    instance.customStyleCheckBox.setSelected(false);
 
-    assertTrue(instance.rampRandomBox.isDisabled());
-    assertTrue(instance.rampSliderBox.isDisabled());
-    assertTrue(instance.waterRandomBox.isDisabled());
-    assertTrue(instance.waterSliderBox.isDisabled());
-    assertTrue(instance.plateauRandomBox.isDisabled());
-    assertTrue(instance.plateauSliderBox.isDisabled());
-    assertTrue(instance.mountainRandomBox.isDisabled());
-    assertTrue(instance.mountainSliderBox.isDisabled());
-    assertTrue(instance.reclaimRandomBox.isDisabled());
-    assertTrue(instance.reclaimSliderBox.isDisabled());
-    assertTrue(instance.mexRandomBox.isDisabled());
-    assertTrue(instance.mexSliderBox.isDisabled());
+    assertFalse(instance.mapStyleCheckComboBox.isDisabled());
+    assertTrue(instance.terrainCheckComboBox.isDisabled());
+    assertTrue(instance.biomeCheckComboBox.isDisabled());
+    assertTrue(instance.resourcesCheckComboBox.isDisabled());
+    assertTrue(instance.propsCheckComboBox.isDisabled());
+    assertTrue(instance.resourcesDensitySlider.isDisabled());
+    assertTrue(instance.reclaimDensitySlider.isDisabled());
   }
 
   @Test
-  public void testOptionsNotDisabledWithNoStyle() {
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
-    instance.mapStyleComboBox.getSelectionModel().clearSelection();
+  public void testOptionsNotDisabledWithCustomStyle() {
+    runOnFxThreadAndWait(() -> reinitialize(instance));
+    instance.customStyleCheckBox.setSelected(true);
 
-    assertFalse(instance.rampRandomBox.isDisabled());
-    assertFalse(instance.rampSliderBox.isDisabled());
-    assertFalse(instance.waterRandomBox.isDisabled());
-    assertFalse(instance.waterSliderBox.isDisabled());
-    assertFalse(instance.plateauRandomBox.isDisabled());
-    assertFalse(instance.plateauSliderBox.isDisabled());
-    assertFalse(instance.mountainRandomBox.isDisabled());
-    assertFalse(instance.mountainSliderBox.isDisabled());
-    assertFalse(instance.reclaimRandomBox.isDisabled());
-    assertFalse(instance.reclaimSliderBox.isDisabled());
-    assertFalse(instance.mexRandomBox.isDisabled());
-    assertFalse(instance.mexSliderBox.isDisabled());
+    assertTrue(instance.mapStyleCheckComboBox.isDisabled());
+    assertFalse(instance.terrainCheckComboBox.isDisabled());
+    assertFalse(instance.biomeCheckComboBox.isDisabled());
+    assertFalse(instance.resourcesCheckComboBox.isDisabled());
+    assertFalse(instance.propsCheckComboBox.isDisabled());
+    assertFalse(instance.resourcesDensitySlider.isDisabled());
+    assertFalse(instance.reclaimDensitySlider.isDisabled());
   }
 
   @Test
-  public void testOptionsNotDisabledWithRandomStyle() {
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
-    instance.mapStyleComboBox.setItems(FXCollections.observableList(List.of(MapGeneratorService.GENERATOR_RANDOM_STYLE)));
-    instance.mapStyleComboBox.getSelectionModel().selectFirst();
+  public void testSeedDisabledWithoutFixedSeed() {
+    runOnFxThreadAndWait(() -> reinitialize(instance));
+    instance.fixedSeedCheckBox.setSelected(false);
 
-    assertFalse(instance.rampRandomBox.isDisabled());
-    assertFalse(instance.rampSliderBox.isDisabled());
-    assertFalse(instance.waterRandomBox.isDisabled());
-    assertFalse(instance.waterSliderBox.isDisabled());
-    assertFalse(instance.plateauRandomBox.isDisabled());
-    assertFalse(instance.plateauSliderBox.isDisabled());
-    assertFalse(instance.mountainRandomBox.isDisabled());
-    assertFalse(instance.mountainSliderBox.isDisabled());
-    assertFalse(instance.reclaimRandomBox.isDisabled());
-    assertFalse(instance.reclaimSliderBox.isDisabled());
-    assertFalse(instance.mexRandomBox.isDisabled());
-    assertFalse(instance.mexSliderBox.isDisabled());
+    assertTrue(instance.seedTextField.isDisabled());
+    assertTrue(instance.seedRerollButton.isDisabled());
+  }
+
+  @Test
+  public void testSeedNotDisabledWithFixedSeed() {
+    runOnFxThreadAndWait(() -> reinitialize(instance));
+    instance.fixedSeedCheckBox.setSelected(true);
+
+    assertFalse(instance.seedTextField.isDisabled());
+    assertFalse(instance.seedRerollButton.isDisabled());
   }
 
   @Test
   public void testOptionsNotDisabledWithCasual() {
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
+    runOnFxThreadAndWait(() -> reinitialize(instance));
     instance.generationTypeComboBox.setValue(GenerationType.TOURNAMENT);
     instance.generationTypeComboBox.setValue(GenerationType.CASUAL);
 
-    assertFalse(instance.rampRandomBox.isDisabled());
-    assertFalse(instance.rampSliderBox.isDisabled());
-    assertFalse(instance.waterRandomBox.isDisabled());
-    assertFalse(instance.waterSliderBox.isDisabled());
-    assertFalse(instance.plateauRandomBox.isDisabled());
-    assertFalse(instance.plateauSliderBox.isDisabled());
-    assertFalse(instance.mountainRandomBox.isDisabled());
-    assertFalse(instance.mountainSliderBox.isDisabled());
-    assertFalse(instance.reclaimRandomBox.isDisabled());
-    assertFalse(instance.reclaimSliderBox.isDisabled());
-    assertFalse(instance.mexRandomBox.isDisabled());
-    assertFalse(instance.mexSliderBox.isDisabled());
-    assertFalse(instance.mapStyleComboBox.isDisabled());
+    assertFalse(instance.generationTypeComboBox.isDisabled());
+    assertFalse(instance.spawnCountSpinner.isDisabled());
+    assertFalse(instance.numTeamsSpinner.isDisabled());
+    assertFalse(instance.mapSizeSpinner.isDisabled());
+    assertFalse(instance.symmetryCheckComboBox.isDisabled());
+    assertFalse(instance.fixedSeedCheckBox.isDisabled());
+    assertFalse(instance.customStyleCheckBox.isDisabled());
   }
 
   @Test
   public void testOptionsDisabledWithTournament() {
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
+    runOnFxThreadAndWait(() -> reinitialize(instance));
     instance.generationTypeComboBox.setValue(GenerationType.TOURNAMENT);
+    instance.customStyleCheckBox.setSelected(true);
 
     assertFalse(instance.generationTypeComboBox.isDisabled());
-    assertTrue(instance.rampRandomBox.isDisabled());
-    assertTrue(instance.rampSliderBox.isDisabled());
-    assertTrue(instance.waterRandomBox.isDisabled());
-    assertTrue(instance.waterSliderBox.isDisabled());
-    assertTrue(instance.plateauRandomBox.isDisabled());
-    assertTrue(instance.plateauSliderBox.isDisabled());
-    assertTrue(instance.mountainRandomBox.isDisabled());
-    assertTrue(instance.mountainSliderBox.isDisabled());
-    assertTrue(instance.reclaimRandomBox.isDisabled());
-    assertTrue(instance.reclaimSliderBox.isDisabled());
-    assertTrue(instance.mexRandomBox.isDisabled());
-    assertTrue(instance.mexSliderBox.isDisabled());
-    assertTrue(instance.mapStyleComboBox.isDisabled());
+    assertFalse(instance.spawnCountSpinner.isDisabled());
+    assertFalse(instance.numTeamsSpinner.isDisabled());
+    assertFalse(instance.mapSizeSpinner.isDisabled());
+    assertTrue(instance.symmetryCheckComboBox.isDisabled());
+    assertTrue(instance.fixedSeedCheckBox.isDisabled());
+    assertTrue(instance.seedTextField.isDisabled());
+    assertTrue(instance.seedRerollButton.isDisabled());
+    assertTrue(instance.mapStyleCheckComboBox.isDisabled());
+    assertTrue(instance.customStyleCheckBox.isDisabled());
+    assertTrue(instance.terrainCheckComboBox.isDisabled());
+    assertTrue(instance.biomeCheckComboBox.isDisabled());
+    assertTrue(instance.resourcesCheckComboBox.isDisabled());
+    assertTrue(instance.propsCheckComboBox.isDisabled());
+    assertTrue(instance.resourcesDensitySlider.isDisabled());
+    assertTrue(instance.reclaimDensitySlider.isDisabled());
   }
 
   @Test
   public void testOptionsDisabledWithBlind() {
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
+    runOnFxThreadAndWait(() -> reinitialize(instance));
     instance.generationTypeComboBox.setValue(GenerationType.BLIND);
+    instance.customStyleCheckBox.setSelected(true);
 
     assertFalse(instance.generationTypeComboBox.isDisabled());
-    assertTrue(instance.rampRandomBox.isDisabled());
-    assertTrue(instance.rampSliderBox.isDisabled());
-    assertTrue(instance.waterRandomBox.isDisabled());
-    assertTrue(instance.waterSliderBox.isDisabled());
-    assertTrue(instance.plateauRandomBox.isDisabled());
-    assertTrue(instance.plateauSliderBox.isDisabled());
-    assertTrue(instance.mountainRandomBox.isDisabled());
-    assertTrue(instance.mountainSliderBox.isDisabled());
-    assertTrue(instance.reclaimRandomBox.isDisabled());
-    assertTrue(instance.reclaimSliderBox.isDisabled());
-    assertTrue(instance.mexRandomBox.isDisabled());
-    assertTrue(instance.mexSliderBox.isDisabled());
-    assertTrue(instance.mapStyleComboBox.isDisabled());
+    assertFalse(instance.spawnCountSpinner.isDisabled());
+    assertFalse(instance.numTeamsSpinner.isDisabled());
+    assertFalse(instance.mapSizeSpinner.isDisabled());
+    assertTrue(instance.symmetryCheckComboBox.isDisabled());
+    assertTrue(instance.fixedSeedCheckBox.isDisabled());
+    assertTrue(instance.seedTextField.isDisabled());
+    assertTrue(instance.seedRerollButton.isDisabled());
+    assertTrue(instance.mapStyleCheckComboBox.isDisabled());
+    assertTrue(instance.customStyleCheckBox.isDisabled());
+    assertTrue(instance.terrainCheckComboBox.isDisabled());
+    assertTrue(instance.biomeCheckComboBox.isDisabled());
+    assertTrue(instance.resourcesCheckComboBox.isDisabled());
+    assertTrue(instance.propsCheckComboBox.isDisabled());
+    assertTrue(instance.resourcesDensitySlider.isDisabled());
+    assertTrue(instance.reclaimDensitySlider.isDisabled());
   }
 
   @Test
   public void testOptionsDisabledWithUnexplored() {
-    WaitForAsyncUtils.asyncFx(() -> instance.initialize());
-    WaitForAsyncUtils.waitForFxEvents();
+    runOnFxThreadAndWait(() -> reinitialize(instance));
     instance.generationTypeComboBox.setValue(GenerationType.UNEXPLORED);
+    instance.customStyleCheckBox.setSelected(true);
 
     assertFalse(instance.generationTypeComboBox.isDisabled());
-    assertTrue(instance.rampRandomBox.isDisabled());
-    assertTrue(instance.rampSliderBox.isDisabled());
-    assertTrue(instance.waterRandomBox.isDisabled());
-    assertTrue(instance.waterSliderBox.isDisabled());
-    assertTrue(instance.plateauRandomBox.isDisabled());
-    assertTrue(instance.plateauSliderBox.isDisabled());
-    assertTrue(instance.mountainRandomBox.isDisabled());
-    assertTrue(instance.mountainSliderBox.isDisabled());
-    assertTrue(instance.reclaimRandomBox.isDisabled());
-    assertTrue(instance.reclaimSliderBox.isDisabled());
-    assertTrue(instance.mexRandomBox.isDisabled());
-    assertTrue(instance.mexSliderBox.isDisabled());
-    assertTrue(instance.mapStyleComboBox.isDisabled());
+    assertFalse(instance.spawnCountSpinner.isDisabled());
+    assertFalse(instance.numTeamsSpinner.isDisabled());
+    assertFalse(instance.mapSizeSpinner.isDisabled());
+    assertTrue(instance.symmetryCheckComboBox.isDisabled());
+    assertTrue(instance.fixedSeedCheckBox.isDisabled());
+    assertTrue(instance.seedTextField.isDisabled());
+    assertTrue(instance.seedRerollButton.isDisabled());
+    assertTrue(instance.mapStyleCheckComboBox.isDisabled());
+    assertTrue(instance.customStyleCheckBox.isDisabled());
+    assertTrue(instance.terrainCheckComboBox.isDisabled());
+    assertTrue(instance.biomeCheckComboBox.isDisabled());
+    assertTrue(instance.resourcesCheckComboBox.isDisabled());
+    assertTrue(instance.propsCheckComboBox.isDisabled());
+    assertTrue(instance.resourcesDensitySlider.isDisabled());
+    assertTrue(instance.reclaimDensitySlider.isDisabled());
   }
 
   @Test
   public void testGetGenerateMapWithName() {
-    runOnFxThreadAndWait(() -> instance.initialize());
+    runOnFxThreadAndWait(() -> reinitialize(instance));
     instance.previousMapName.setText("neroxis_map_generator_0.0.0_12345");
     instance.setOnCloseButtonClickedListener(() -> {});
     when(mapGeneratorService.isGeneratedMap("neroxis_map_generator_0.0.0_12345")).thenReturn(true);
-    when(mapGeneratorService.generateMap(anyString())).thenReturn(CompletableFuture.completedFuture(null));
+    when(mapGeneratorService.generateMap(anyString())).thenReturn(Mono.empty());
 
     runOnFxThreadAndWait(() -> instance.onGenerateMap());
 
@@ -665,29 +439,31 @@ public class GenerateMapControllerTest extends UITest {
   }
 
   @Test
-  public void testGetGenerateMapNoNameNoRandom() {
-    GeneratorPrefs generatorPrefs = preferences.getGenerator();
-    generatorPrefs.setWaterRandom(false);
-    generatorPrefs.setMountainRandom(false);
-    generatorPrefs.setPlateauRandom(false);
-    generatorPrefs.setRampRandom(false);
-    generatorPrefs.setMexRandom(false);
-    generatorPrefs.setReclaimRandom(false);
-    generatorPrefs.setWaterDensity(1);
-    generatorPrefs.setPlateauDensity(2);
-    generatorPrefs.setMountainDensity(3);
-    generatorPrefs.setRampDensity(4);
-    generatorPrefs.setMexDensity(5);
-    generatorPrefs.setReclaimDensity(6);
+  public void testGetGenerateMapNoNameCustomStyle() {
+    generatorPrefs.setCustomStyle(true);
+    generatorPrefs.setFixedSeed(true);
+    generatorPrefs.setSeed("100");
     generatorPrefs.setSpawnCount(2);
     generatorPrefs.setNumTeams(2);
     generatorPrefs.setMapSizeInKm(10.0);
     generatorPrefs.setGenerationType(GenerationType.CASUAL);
+    generatorPrefs.setResourceDensityMin(5);
+    generatorPrefs.setResourceDensityMax(5);
+    generatorPrefs.setReclaimDensityMin(10);
+    generatorPrefs.setReclaimDensityMax(10);
 
-    instance.mapStyleComboBox.setItems(FXCollections.observableList(List.of("TEST")));
-    instance.mapStyleComboBox.getSelectionModel().selectFirst();
+    instance.symmetryCheckComboBox.getItems().setAll(FXCollections.observableList(List.of("SYMMETRY")));
+    instance.symmetryCheckComboBox.getCheckModel().check(0);
+    instance.terrainCheckComboBox.getItems().setAll(FXCollections.observableList(List.of("TERRAIN")));
+    instance.terrainCheckComboBox.getCheckModel().check(0);
+    instance.biomeCheckComboBox.getItems().setAll(FXCollections.observableList(List.of("BIOME")));
+    instance.biomeCheckComboBox.getCheckModel().check(0);
+    instance.resourcesCheckComboBox.getItems().setAll(FXCollections.observableList(List.of("MEXES")));
+    instance.resourcesCheckComboBox.getCheckModel().check(0);
+    instance.propsCheckComboBox.getItems().setAll(FXCollections.observableList(List.of("PROPS")));
+    instance.propsCheckComboBox.getCheckModel().check(0);
 
-    runOnFxThreadAndWait(() -> instance.initialize());
+    runOnFxThreadAndWait(() -> reinitialize(instance));
 
     ArgumentCaptor<GeneratorOptions> captor = ArgumentCaptor.forClass(GeneratorOptions.class);
 
@@ -697,26 +473,26 @@ public class GenerateMapControllerTest extends UITest {
 
     GeneratorOptions result = captor.getValue();
 
-    assertEquals(1 - 1 / 127f, result.getLandDensity(), 0);
-    assertEquals(2 / 127f, result.getPlateauDensity(), 0);
-    assertEquals(3 / 127f, result.getMountainDensity(),  0);
-    assertEquals(4 / 127f, result.getRampDensity(), 0);
-    assertEquals(5 / 127f, result.getMexDensity(), 0);
-    assertEquals(6 / 127f, result.getReclaimDensity(), 0);
-    assertEquals(2, result.getSpawnCount());
-    assertEquals(512, result.getMapSize());
-    assertEquals(2, result.getNumTeams());
-    assertEquals(GenerationType.CASUAL, result.getGenerationType());
-    assertNull(result.getCommandLineArgs());
-    assertEquals("TEST", result.getStyle());
+    assertEquals("100", result.seed());
+    assertEquals("SYMMETRY", result.symmetry());
+    assertEquals(2, result.spawnCount());
+    assertEquals(512, result.mapSize());
+    assertEquals(2, result.numTeams());
+    assertEquals(GenerationType.CASUAL, result.generationType());
+    assertNull(result.commandLineArgs());
+    assertEquals("TERRAIN", result.terrainStyle());
+    assertEquals("BIOME", result.textureStyle());
+    assertEquals("MEXES", result.resourceStyle());
+    assertEquals("PROPS", result.propStyle());
+    assertEquals(10 / 127f, result.reclaimDensity());
+    assertEquals(5 / 127f, result.resourceDensity());
   }
 
   @Test
   public void testGetGenerateMapWithCommandLineArgs() {
-    GeneratorPrefs generatorPrefs = preferences.getGenerator();
     generatorPrefs.setCommandLineArgs("--test");
 
-    runOnFxThreadAndWait(() -> instance.initialize());
+    runOnFxThreadAndWait(() -> reinitialize(instance));
 
     ArgumentCaptor<GeneratorOptions> captor = ArgumentCaptor.forClass(GeneratorOptions.class);
 
@@ -726,20 +502,14 @@ public class GenerateMapControllerTest extends UITest {
 
     GeneratorOptions result = captor.getValue();
 
-    assertEquals(result.getCommandLineArgs(), "--test");
+    assertEquals("--test", result.commandLineArgs());
   }
 
   @Test
-  public void testGetGenerateMapNoNameRandom() {
-    GeneratorPrefs generatorPrefs = preferences.getGenerator();
-    generatorPrefs.setWaterRandom(true);
-    generatorPrefs.setMountainRandom(true);
-    generatorPrefs.setPlateauRandom(true);
-    generatorPrefs.setRampRandom(true);
-    generatorPrefs.setMexRandom(true);
-    generatorPrefs.setReclaimRandom(true);
+  public void testGetGenerateMapNoNameMapStyle() {
+    generatorPrefs.setCustomStyle(false);
 
-    runOnFxThreadAndWait(() -> instance.initialize());
+    runOnFxThreadAndWait(() -> reinitialize(instance));
 
     ArgumentCaptor<GeneratorOptions> captor = ArgumentCaptor.forClass(GeneratorOptions.class);
 
@@ -749,12 +519,71 @@ public class GenerateMapControllerTest extends UITest {
 
     GeneratorOptions result = captor.getValue();
 
-    assertNull(result.getLandDensity());
-    assertNull(result.getPlateauDensity());
-    assertNull(result.getMountainDensity());
-    assertNull(result.getRampDensity());
-    assertNull(result.getMexDensity());
-    assertNull(result.getReclaimDensity());
+    assertNull(result.terrainStyle());
+    assertNull(result.textureStyle());
+    assertNull(result.resourceStyle());
+    assertNull(result.propStyle());
+    assertNull(result.resourceDensity());
+    assertNull(result.reclaimDensity());
+  }
+
+  @Test
+  public void testResourceComboRandomSliderDisabled(){
+    generatorPrefs.setCustomStyle(true);
+    instance.resourcesCheckComboBox.getItems().setAll(FXCollections.observableList(List.of("RESOURCES")));
+    instance.propsCheckComboBox.getItems().setAll(FXCollections.observableList(List.of("OPTIMUS")));
+    instance.propsCheckComboBox.getCheckModel().check(0);
+
+    runOnFxThreadAndWait(() -> reinitialize(instance));
+
+    ArgumentCaptor<GeneratorOptions> captor = ArgumentCaptor.forClass(GeneratorOptions.class);
+
+    runOnFxThreadAndWait(() -> instance.onGenerateMap());
+
+    verify(mapGeneratorService).generateMap(captor.capture());
+
+    GeneratorOptions result = captor.getValue();
+    assertNull(result.resourceStyle());
+    assertEquals("RANDOM", instance.resourcesCheckComboBox.getTitle());
+    assertEquals("OPTIMUS", result.propStyle());
+    assertFalse(instance.resourcesDensitySlider.isDisabled());
+    assertFalse(instance.reclaimDensitySlider.isDisabled());
+  }
+
+  @Test
+  public void testPropComboRandomSliderDisabled(){
+    generatorPrefs.setCustomStyle(true);
+    instance.propsCheckComboBox.getItems().setAll(FXCollections.observableList(List.of("PROPS")));
+    instance.resourcesCheckComboBox.getItems().setAll(FXCollections.observableList(List.of("OPTIMUS")));
+    instance.resourcesCheckComboBox.getCheckModel().check(0);
+
+    runOnFxThreadAndWait(() -> reinitialize(instance));
+
+    ArgumentCaptor<GeneratorOptions> captor = ArgumentCaptor.forClass(GeneratorOptions.class);
+
+    runOnFxThreadAndWait(() -> instance.onGenerateMap());
+
+    verify(mapGeneratorService).generateMap(captor.capture());
+
+    GeneratorOptions result = captor.getValue();
+    assertNull(result.propStyle());
+    assertEquals("RANDOM", instance.propsCheckComboBox.getTitle());
+    assertEquals("OPTIMUS", result.resourceStyle());
+    assertFalse(instance.reclaimDensitySlider.isDisabled());
+    assertFalse(instance.resourcesDensitySlider.isDisabled());
+  }
+
+  @Test
+  public void testCustomStyleFalseAndPropAndResourceComboNotRandomSlidersDisabled(){
+
+    runOnFxThreadAndWait(() -> reinitialize(instance));
+    instance.customStyleCheckBox.setSelected(false);
+    instance.setPropStyles(new ArrayList<>(List.of("Maximus")));
+    instance.setResourceStyles(new ArrayList<>(List.of("Decimus")));
+
+
+    assertTrue(instance.reclaimDensitySlider.isDisabled());
+    assertTrue(instance.resourcesDensitySlider.isDisabled());
   }
 }
 

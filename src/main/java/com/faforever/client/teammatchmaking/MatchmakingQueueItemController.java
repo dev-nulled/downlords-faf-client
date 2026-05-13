@@ -1,20 +1,22 @@
 package com.faforever.client.teammatchmaking;
 
-import com.faforever.client.domain.MatchmakerQueueBean;
-import com.faforever.client.domain.MatchmakerQueueBean.MatchingStatus;
-import com.faforever.client.fx.Controller;
+import com.faforever.client.domain.server.MatchmakerQueueInfo;
 import com.faforever.client.fx.JavaFxUtil;
+import com.faforever.client.fx.NodeController;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.main.event.ShowMapPoolEvent;
+import com.faforever.client.navigation.NavigationHandler;
 import com.faforever.client.player.PlayerService;
-import com.faforever.client.user.UserService;
-import com.google.common.eventbus.EventBus;
+import com.faforever.client.theme.UiService;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
-import javafx.beans.InvalidationListener;
-import javafx.beans.WeakInvalidationListener;
-import javafx.beans.value.ChangeListener;
-import javafx.beans.value.WeakChangeListener;
+import javafx.beans.binding.Bindings;
+import javafx.beans.binding.BooleanBinding;
+import javafx.beans.binding.BooleanExpression;
+import javafx.beans.binding.IntegerBinding;
+import javafx.beans.property.ObjectProperty;
+import javafx.beans.property.SimpleObjectProperty;
+import javafx.beans.value.ObservableValue;
 import javafx.event.ActionEvent;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
@@ -23,76 +25,125 @@ import javafx.scene.control.ToggleButton;
 import javafx.scene.layout.VBox;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.jetbrains.annotations.VisibleForTesting;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.util.function.Consumer;
 
 @Slf4j
 @Component
 @RequiredArgsConstructor
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
-public class MatchmakingQueueItemController implements Controller<VBox> {
+public class MatchmakingQueueItemController extends NodeController<VBox> {
 
   private final static String QUEUE_I18N_PATTERN = "teammatchmaking.queue.%s";
 
-  private final UserService userService;
+  private final UiService uiService;
   private final PlayerService playerService;
   private final TeamMatchmakingService teamMatchmakingService;
   private final I18n i18n;
-  private final EventBus eventBus;
+  private final NavigationHandler navigationHandler;
 
   public VBox queueItemRoot;
   public Label playersInQueueLabel;
+  public Label activeGamesLabel;
   public Label queuePopTimeLabel;
-  public ToggleButton joinLeaveQueueButton;
-  public Label refreshingLabel;
+  public ToggleButton selectButton;
+  public Label searchingLabel;
   public Label matchFoundLabel;
   public Label matchStartingLabel;
   public Label matchCancelledLabel;
   public Button mapPoolButton;
 
-  @VisibleForTesting
-  MatchmakerQueueBean queue;
-  private InvalidationListener queueButtonStateInvalidationListener;
-  private InvalidationListener queueStateInvalidationListener;
-  private InvalidationListener queuePopulationInvalidationListener;
-  private ChangeListener<MatchingStatus> queueMatchStatusChangeListener;
+  private final ObjectProperty<MatchmakerQueueInfo> queue = new SimpleObjectProperty<>();
+  private final ObservableValue<OffsetDateTime> popTime = queue.flatMap(MatchmakerQueueInfo::queuePopTimeProperty);
+  private Timeline queuePopTimeUpdater;
+  private Consumer<MatchmakerQueueInfo> onMapPoolClickedListener;
 
   @Override
-  public void initialize() {
+  protected void onInitialize() {
     JavaFxUtil.bindManagedToVisible(matchFoundLabel, matchStartingLabel, matchCancelledLabel);
 
-    initializeListeners();
+    queue.when(showing).subscribe(((oldValue, newValue) -> {
+      if (oldValue != null) {
+        selectButton.selectedProperty().unbindBidirectional(oldValue.selectedProperty());
+      }
 
-    eventBus.register(this);
-    joinLeaveQueueButton.setTextOverrun(OverrunStyle.WORD_ELLIPSIS);
+      if (newValue != null) {
+        selectButton.selectedProperty().bindBidirectional(newValue.selectedProperty());
+      }
+    }));
+
+    selectButton.setTextOverrun(OverrunStyle.WORD_ELLIPSIS);
     mapPoolButton.setText(i18n.get("teammatchmaking.mapPool").toUpperCase());
+
+    ObservableValue<MatchingStatus> matchingStatus = queue.flatMap(MatchmakerQueueInfo::matchingStatusProperty);
+    searchingLabel.visibleProperty()
+                  .bind(matchingStatus.map(status -> status == MatchingStatus.SEARCHING).orElse(false).when(showing));
+    matchFoundLabel.visibleProperty()
+                   .bind(
+                       matchingStatus.map(status -> status == MatchingStatus.MATCH_FOUND).orElse(false).when(showing));
+    matchStartingLabel.visibleProperty()
+                      .bind(matchingStatus.map(status -> status == MatchingStatus.GAME_LAUNCHING)
+                                          .orElse(false)
+                                          .when(showing));
+    matchCancelledLabel.visibleProperty()
+                       .bind(matchingStatus.map(status -> status == MatchingStatus.MATCH_CANCELLED)
+                                           .orElse(false)
+                                           .when(showing));
+
+    selectButton.textProperty().bind(queue.flatMap(MatchmakerQueueInfo::technicalNameProperty)
+                           .map(technicalName -> i18n.getOrDefault(technicalName,
+                                                                   QUEUE_I18N_PATTERN.formatted(technicalName)))
+                           .when(showing));
+
+    playersInQueueLabel.textProperty().bind(queue.flatMap(MatchmakerQueueInfo::playersInQueueProperty)
+                                  .map(numPlayers -> i18n.get("teammatchmaking.playersInQueue", numPlayers))
+                                  .map(String::toUpperCase)
+                                  .when(showing));
+
+    activeGamesLabel.textProperty().bind(queue.flatMap(MatchmakerQueueInfo::activeGamesProperty)
+                               .map(numPlayers -> i18n.get("teammatchmaking.activeGames", numPlayers))
+                               .map(String::toUpperCase)
+                               .when(showing));
+
+    BooleanBinding partyTooBig = Bindings.size(teamMatchmakingService.getParty().getMembers())
+                                         .greaterThan(IntegerBinding.integerExpression(
+                                             queue.flatMap(MatchmakerQueueInfo::teamSizeProperty)));
+
+    BooleanExpression notPartyOwner = BooleanBinding.booleanExpression(teamMatchmakingService.getParty()
+                                                                                             .ownerProperty()
+                                                                                             .isNotEqualTo(
+                                                                                                 playerService.currentPlayerProperty()));
+
+    selectButton.disableProperty()
+                .bind(playerService.currentPlayerProperty().isNull()
+                                   .or(queue.isNull())
+                                   .or(partyTooBig)
+                                   .or(teamMatchmakingService.partyMembersNotReadyProperty())
+                                   .or(notPartyOwner)
+                                   .when(showing));
+
+    setQueuePopTimeUpdater();
   }
 
-  private void initializeListeners() {
-    queueButtonStateInvalidationListener = observable -> setQueueButtonState();
-    queueStateInvalidationListener = observable -> JavaFxUtil.runLater(() -> {
-      refreshingLabel.setVisible(false);
-      joinLeaveQueueButton.setSelected(queue.isJoined());
-    });
-    queuePopulationInvalidationListener = observable ->
-        JavaFxUtil.runLater(() -> playersInQueueLabel.setText(i18n.get("teammatchmaking.playersInQueue", queue.getPlayersInQueue()).toUpperCase()));
-    queueMatchStatusChangeListener = (observable, oldValue, newValue) -> {
-      disableMatchStatus();
-      if (newValue == null) {
-        return;
-      }
-      switch (newValue) {
-        case MATCH_FOUND -> matchFoundLabel.setVisible(true);
-        case GAME_LAUNCHING -> matchStartingLabel.setVisible(true);
-        case MATCH_CANCELLED -> matchCancelledLabel.setVisible(true);
-        default -> log.warn("Unexpected matching status: " + newValue);
-      }
-    };
+  @Override
+  public void onShow() {
+    if (queuePopTimeUpdater == null) {
+      return;
+    }
+    queuePopTimeUpdater.play();
+  }
+
+  @Override
+  public void onHide() {
+    if (queuePopTimeUpdater == null) {
+      return;
+    }
+    queuePopTimeUpdater.stop();
   }
 
   @Override
@@ -100,38 +151,20 @@ public class MatchmakingQueueItemController implements Controller<VBox> {
     return queueItemRoot;
   }
 
-  public void setQueue(MatchmakerQueueBean queue) {
-    this.queue = queue;
-    joinLeaveQueueButton.setText(i18n.getOrDefault(queue.getTechnicalName(), String.format(QUEUE_I18N_PATTERN, queue.getTechnicalName())));
-    setQueuePopTimeUpdater(queue);
-
-    JavaFxUtil.addAndTriggerListener(queue.matchingStatusProperty(), new WeakChangeListener<>(queueMatchStatusChangeListener));
-    JavaFxUtil.addAndTriggerListener(queue.playersInQueueProperty(), new WeakInvalidationListener(queuePopulationInvalidationListener));
-    JavaFxUtil.addAndTriggerListener(teamMatchmakingService.getParty().getMembers(), new WeakInvalidationListener(queueButtonStateInvalidationListener));
-    JavaFxUtil.addListener(queue.teamSizeProperty(), new WeakInvalidationListener(queueButtonStateInvalidationListener));
-    JavaFxUtil.addListener(teamMatchmakingService.getParty().ownerProperty(), new WeakInvalidationListener(queueButtonStateInvalidationListener));
-    JavaFxUtil.addListener(teamMatchmakingService.partyMembersNotReadyProperty(), new WeakInvalidationListener(queueButtonStateInvalidationListener));
-    JavaFxUtil.addListener(userService.ownPlayerProperty(), new WeakInvalidationListener(queueButtonStateInvalidationListener));
-    JavaFxUtil.addAndTriggerListener(queue.joinedProperty(), new WeakInvalidationListener(queueStateInvalidationListener));
+  public void setQueue(MatchmakerQueueInfo queue) {
+    this.queue.set(queue);
   }
 
-  private void setQueueButtonState() {
-    boolean disable = userService.getOwnPlayer() == null
-        || teamMatchmakingService.getParty().getMembers().size() > queue.getTeamSize()
-        || teamMatchmakingService.partyMembersNotReady()
-        || !teamMatchmakingService.getParty().getOwner().equals(playerService.getCurrentPlayer());
-    JavaFxUtil.runLater(() -> joinLeaveQueueButton.setDisable(disable));
-  }
-
-  private void setQueuePopTimeUpdater(MatchmakerQueueBean queue) {
-    Timeline queuePopTimeUpdater = new Timeline(1, new KeyFrame(javafx.util.Duration.seconds(0), (ActionEvent event) -> {
-      if (queue.getQueuePopTime() != null) {
+  private void setQueuePopTimeUpdater() {
+    queuePopTimeUpdater = new Timeline(new KeyFrame(javafx.util.Duration.seconds(0), (ActionEvent event) -> {
+      OffsetDateTime popTimeValue = popTime.getValue();
+      if (popTimeValue != null) {
         OffsetDateTime now = OffsetDateTime.now();
-        Duration timeUntilPopQueue = Duration.between(now, queue.getQueuePopTime());
+        Duration timeUntilPopQueue = Duration.between(now, popTimeValue);
         if (!timeUntilPopQueue.isNegative()) {
-          queuePopTimeLabel.setText(i18n.get("teammatchmaking.queuePopTimer",
-              timeUntilPopQueue.toMinutes(),
-              timeUntilPopQueue.toSecondsPart()).toUpperCase());
+          queuePopTimeLabel.setText(i18n.get("teammatchmaking.queuePopTimer", timeUntilPopQueue.toMinutes(),
+                                             timeUntilPopQueue.toSecondsPart())
+                                        .toUpperCase());
         }
       }
     }), new KeyFrame(javafx.util.Duration.seconds(1)));
@@ -139,26 +172,18 @@ public class MatchmakingQueueItemController implements Controller<VBox> {
     queuePopTimeUpdater.play();
   }
 
-  private void disableMatchStatus() {
-    matchFoundLabel.setVisible(false);
-    matchStartingLabel.setVisible(false);
-    matchCancelledLabel.setVisible(false);
+  public void setOnMapPoolClickedListener(Consumer<MatchmakerQueueInfo> onMapPoolClickedListener) {
+    this.onMapPoolClickedListener = onMapPoolClickedListener;
+  }
+  public void showMapPool() {
+    onMapPoolClickedListener.accept(this.queue.get());
   }
 
-  public void onJoinLeaveQueueClicked(ActionEvent actionEvent) {
-    if (queue.isJoined()) {
-      teamMatchmakingService.leaveQueue(queue);
-    } else {
-      boolean success = teamMatchmakingService.joinQueue(queue);
-      if (!success) {
-        joinLeaveQueueButton.setSelected(false);
-        refreshingLabel.setVisible(false);
-      }
-    }
-    refreshingLabel.setVisible(true);
+  public MatchmakerQueueInfo getQueue() {
+    return queue.get();
   }
 
-  public void showMapPool(ActionEvent actionEvent) {
-    eventBus.post(new ShowMapPoolEvent(queue));
+  public ObjectProperty<MatchmakerQueueInfo> queueProperty() {
+    return queue;
   }
 }

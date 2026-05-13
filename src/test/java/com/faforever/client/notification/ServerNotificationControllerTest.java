@@ -1,7 +1,7 @@
 package com.faforever.client.notification;
 
 import com.faforever.client.fx.WebViewConfigurer;
-import com.faforever.client.test.UITest;
+import com.faforever.client.test.PlatformTest;
 import com.faforever.client.ui.dialog.DialogLayout;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
@@ -11,7 +11,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.testfx.util.WaitForAsyncUtils;
 
-import java.util.Collections;
+import java.util.List;
 
 import static org.hamcrest.CoreMatchers.instanceOf;
 import static org.hamcrest.CoreMatchers.is;
@@ -20,7 +20,7 @@ import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.collection.IsEmptyCollection.empty;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-public class ServerNotificationControllerTest extends UITest {
+public class ServerNotificationControllerTest extends PlatformTest {
 
   @InjectMocks
   private ServerNotificationController instance;
@@ -35,36 +35,34 @@ public class ServerNotificationControllerTest extends UITest {
 
   @Test
   public void testSetNotificationWithoutActions() {
-    ImmediateNotification notification = new ImmediateNotification("title", "text", Severity.INFO);
+    ServerNotification notification = new ServerNotification("title", "text", Severity.INFO);
     instance.setNotification(notification);
 
     WaitForAsyncUtils.waitForFxEvents();
 
-    assertEquals("title", ((Label) instance.getDialogLayout().getHeading().get(0)).getText());
+    assertEquals("title", ((Label) instance.getDialogLayout().getHeading().getFirst()).getText());
     assertEquals("text", instance.errorMessageView.getEngine().getDocument().getDocumentElement().getTextContent());
     assertThat(instance.getDialogLayout().getActions(), empty());
   }
 
   @Test
   public void testSetNotificationWithActions() {
-    ImmediateNotification notification = new ImmediateNotification("title", "text", Severity.INFO,
-        Collections.singletonList(
-            new Action("actionTitle")
-        ));
+    ServerNotification notification = new ServerNotification("title", "text", Severity.INFO,
+                                                             List.of(new Action("actionTitle")));
     instance.setNotification(notification);
 
     WaitForAsyncUtils.waitForFxEvents();
 
-    assertEquals("title", ((Label) instance.getDialogLayout().getHeading().get(0)).getText());
+    assertEquals("title", ((Label) instance.getDialogLayout().getHeading().getFirst()).getText());
     assertEquals("text", instance.errorMessageView.getEngine().getDocument().getDocumentElement().getTextContent());
     assertThat(instance.getDialogLayout().getActions(), hasSize(1));
-    assertEquals("actionTitle", ((Button) instance.getDialogLayout().getActions().get(0)).getText());
+    assertEquals("actionTitle", ((Button) instance.getDialogLayout().getActions().getFirst()).getText());
   }
 
   @Test
   public void testGetRoot() throws Exception {
     assertThat(instance.getRoot(), is(instance.serverNotificationRoot));
-    assertThat(instance.getRoot().getParent(), is(instance.getDialogLayout().getBody().get(0).getParent()));
+    assertThat(instance.getRoot().getParent(), is(instance.getDialogLayout().getBody().getFirst().getParent()));
   }
 
   @Test

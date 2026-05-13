@@ -3,8 +3,8 @@ package com.faforever.client.fa;
 import com.faforever.client.preferences.ForgedAlliancePrefs;
 import com.faforever.commons.lobby.Faction;
 import com.google.common.base.Strings;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.util.Assert;
-import org.springframework.util.StringUtils;
 
 import java.net.Inet4Address;
 import java.net.URI;
@@ -26,8 +26,10 @@ public class LaunchCommandBuilder {
   private static final String DEFAULT_EXECUTABLE_DECORATOR = "\"%s\"";
 
   private Path debuggerExecutable;
-  private Float mean;
-  private Float deviation;
+  private Double mean;
+  private Double deviation;
+  private String division;
+  private String subdivision;
   private String country;
   private String clan;
   private String username;
@@ -41,7 +43,6 @@ public class LaunchCommandBuilder {
   private URI replayUri;
   private Faction faction;
   private String executableDecorator;
-  private boolean rehost;
   private Integer localReplayPort;
   private Integer numberOfGames;
   private Integer expectedPlayers;
@@ -88,13 +89,23 @@ public class LaunchCommandBuilder {
     return this;
   }
 
-  public LaunchCommandBuilder mean(Float mean) {
+  public LaunchCommandBuilder mean(Double mean) {
     this.mean = mean;
     return this;
   }
 
-  public LaunchCommandBuilder deviation(Float deviation) {
+  public LaunchCommandBuilder deviation(Double deviation) {
     this.deviation = deviation;
+    return this;
+  }
+
+  public LaunchCommandBuilder division(String division) {
+    this.division = division;
+    return this;
+  }
+
+  public LaunchCommandBuilder subdivision(String subdivision) {
+    this.subdivision = subdivision;
     return this;
   }
 
@@ -150,11 +161,6 @@ public class LaunchCommandBuilder {
 
   public LaunchCommandBuilder faction(Faction faction) {
     this.faction = faction;
-    return this;
-  }
-
-  public LaunchCommandBuilder rehost(boolean rehost) {
-    this.rehost = rehost;
     return this;
   }
 
@@ -231,6 +237,16 @@ public class LaunchCommandBuilder {
       command.add(String.valueOf(deviation));
     }
 
+    if (division != null) {
+      command.add("/division");
+      command.add(division);
+    }
+
+    if (StringUtils.isNotBlank(subdivision)) {
+      command.add("/subdivision");
+      command.add(subdivision);
+    }
+
     if (replayFile != null) {
       command.add("/replay");
       command.add(replayFile.toAbsolutePath().toString());
@@ -249,7 +265,7 @@ public class LaunchCommandBuilder {
       command.add(country);
     }
 
-    if (StringUtils.hasText(clan)) {
+    if (StringUtils.isNotBlank(clan)) {
       command.add("/clan");
       command.add(clan);
     }
@@ -257,10 +273,6 @@ public class LaunchCommandBuilder {
     if (replayId != null) {
       command.add("/replayid");
       command.add(String.valueOf(replayId));
-    }
-
-    if (rehost) {
-      command.add("/rehost");
     }
 
     if (numberOfGames != null) {
@@ -283,7 +295,7 @@ public class LaunchCommandBuilder {
       command.add(String.valueOf(mapPosition));
     }
 
-    if (StringUtils.hasText(map)) {
+    if (StringUtils.isNotBlank(map)) {
       command.add("/map");
       command.add(map);
     }

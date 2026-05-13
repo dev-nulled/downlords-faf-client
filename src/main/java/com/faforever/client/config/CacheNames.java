@@ -24,12 +24,14 @@ public final class CacheNames {
   public static final String REPLAYS_RECENT = "replaysRecent";
   public static final String REPLAYS_MINE = "replaysMine";
   public static final String REPLAYS_LIKED = "replaysLiked";
-  public static final String REMOTE_CONFIG = "remoteConfig";
   public static final String MAP_GENERATOR = "mapGenerator";
   public static final String MAP_GENERATOR_STYLES = "mapGeneratorStyles";
   public static final String THEME_IMAGES = "themeImages";
+  public static final String THEME_URLS = "themeURLs";
+  public static final String IMAGES = "images";
   public static final String MOD_THUMBNAIL = "modThumbnail";
   public static final String COOP_MAPS = "coopMaps";
+  public static final String COOP_SCENARIOS = "coopScenarios";
   public static final String AVAILABLE_AVATARS = "availableAvatars";
   public static final String NEWS = "news";
   public static final String RATING_HISTORY = "ratingHistory";
@@ -40,6 +42,7 @@ public final class CacheNames {
   public static final String MATCHMAKER_QUEUES = "matchmakerQueues";
   public static final String MATCHMAKER_POOLS = "matchmakerPools";
   public static final String MODERATION_REPORTS = "moderationReports";
+  public static final String COTURN = "coturn";
 
   private CacheNames() {
     throw new AssertionError("Not instantiatable");

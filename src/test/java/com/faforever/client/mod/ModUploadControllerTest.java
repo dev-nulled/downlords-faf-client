@@ -2,21 +2,22 @@ package com.faforever.client.mod;
 
 import com.faforever.client.api.FafApiAccessor;
 import com.faforever.client.config.ClientProperties;
-import com.faforever.client.domain.ModVersionBean;
+import com.faforever.client.domain.api.ModVersion;
 import com.faforever.client.fx.PlatformService;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.notification.NotificationService;
-import com.faforever.client.preferences.PreferencesService;
+import com.faforever.client.preferences.DataPrefs;
 import com.faforever.client.reporting.ReportingService;
-import com.faforever.client.test.UITest;
-import com.google.common.eventbus.EventBus;
+import com.faforever.client.test.PlatformTest;
 import org.hamcrest.Matchers;
+import org.instancio.Instancio;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
+import org.springframework.web.reactive.function.client.WebClient;
 
 import java.nio.file.Path;
 import java.util.concurrent.ExecutorService;
@@ -25,13 +26,13 @@ import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
-public class ModUploadControllerTest extends UITest {
+public class ModUploadControllerTest extends PlatformTest {
 
   @TempDir
   public Path modFolder;
@@ -52,25 +53,27 @@ public class ModUploadControllerTest extends UITest {
   @Mock
   private PlatformService platformService;
   @Spy
-  private ClientProperties cLientProperties = new ClientProperties();
+  private ClientProperties cLientProperties;
+  @Spy
+  private DataPrefs dataPrefs;
 
   @Mock
   private I18n i18n;
-  @Mock
-  private EventBus eventBus;
-  @Mock
-  private PreferencesService preferencesService;
+
   @Mock
   private FafApiAccessor fafApiAccessor;
 
+  @Mock
+  private WebClient defaultWebClient;
+
   @BeforeEach
   public void setUp() throws Exception {
-    doAnswer(invocation -> {
+    lenient().doAnswer(invocation -> {
       ((Runnable) invocation.getArgument(0)).run();
       return null;
     }).when(executorService).execute(any());
 
-    modUploadTask = new ModUploadTask(preferencesService, fafApiAccessor, i18n) {
+    modUploadTask = new ModUploadTask(fafApiAccessor, i18n, dataPrefs, defaultWebClient) {
       @Override
       protected Void call() {
         return null;
@@ -82,7 +85,7 @@ public class ModUploadControllerTest extends UITest {
 
   @Test
   public void testSetModPath() throws Exception {
-    when(modService.extractModInfo(any())).thenReturn(new ModVersionBean());
+    when(modService.extractModInfo(any())).thenReturn(Instancio.create(ModVersion.class));
 
     instance.setModPath(modFolder);
 

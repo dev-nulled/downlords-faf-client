@@ -74,13 +74,13 @@
                     <Label fx:id="durationLabel" graphicTextGap="10.0" text="&lt;Duration&gt;"
                            GridPane.columnIndex="3" GridPane.rowIndex="2">
                         <graphic>
-                            <Region styleClass="icon,duration-icon"/>
+                            <Region styleClass="icon,world-duration-icon" minWidth="30"/>
                         </graphic>
                     </Label>
                     <Label fx:id="replayDurationLabel" graphicTextGap="10.0" text="&lt;Duration&gt;"
                            GridPane.columnIndex="3" GridPane.rowIndex="3">
                         <graphic>
-                            <Region styleClass="icon,duration-icon"/>
+                            <Region styleClass="icon,game-duration-icon" minWidth="30"/>
                         </graphic>
                     </Label>
                     <Label fx:id="playerCountLabel" graphicTextGap="10.0" text="&lt;PlayerCount&gt;"
@@ -115,7 +115,7 @@
                     <HBox alignment="TOP_RIGHT" prefWidth="100.0" GridPane.columnIndex="1"
                           GridPane.columnSpan="2147483647">
                         <TextField fx:id="replayIdField" alignment="CENTER_RIGHT" editable="false"
-                                   maxWidth="100.0" promptText="&lt;ReplayID&gt;" text="#123456789"/>
+                                   maxWidth="100.0"/>
                         <Button fx:id="copyButton" onAction="#copyLink"
                                 prefHeight="25.0" text="Copy link for chat"/>
                     </HBox>
@@ -128,7 +128,7 @@
                     <Label maxWidth="1.7976931348623157E308" styleClass="h2" text="%game.lineUp"
                            HBox.hgrow="ALWAYS"/>
                     <Button fx:id="showRatingChangeButton" alignment="CENTER" mnemonicParsing="false"
-                            onAction="#showRatingChange" text="%game.showRatingChange"/>
+                            onAction="#showRatingChange" text="%game.showGameResult"/>
                     <Label fx:id="notRatedReasonLabel" alignment="CENTER"/>
                 </HBox>
                 <HBox fx:id="teamsContainer" alignment="TOP_CENTER" spacing="20.0"/>

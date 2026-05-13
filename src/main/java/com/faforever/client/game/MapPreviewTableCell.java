@@ -1,20 +1,24 @@
 package com.faforever.client.game;
 
-import com.faforever.client.domain.GameBean;
-import com.faforever.client.fx.Controller;
-import com.faforever.client.theme.UiService;
+import com.faforever.client.domain.server.GameInfo;
+import com.faforever.client.fx.ImageViewHelper;
 import javafx.scene.control.TableCell;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 
-public class MapPreviewTableCell extends TableCell<GameBean, Image> {
+public class MapPreviewTableCell extends TableCell<GameInfo, Image> {
 
-  private final ImageView imageVew;
+  private final ImageView imageView;
+  private final ImageViewHelper imageViewHelper;
 
-  public MapPreviewTableCell(UiService uiService) {
-    Controller<ImageView> controller = uiService.loadFxml("theme/vault/map/map_preview_table_cell.fxml");
-    imageVew = controller.getRoot();
-    setGraphic(imageVew);
+  public MapPreviewTableCell(ImageViewHelper imageViewHelper) {
+    this.imageViewHelper = imageViewHelper;
+
+    imageView = new ImageView();
+    imageView.setFitWidth(36.0);
+    imageView.setFitHeight(36.0);
+    imageView.setSmooth(true);
+    imageView.setPreserveRatio(true);
   }
 
   @Override
@@ -25,8 +29,8 @@ public class MapPreviewTableCell extends TableCell<GameBean, Image> {
       setText(null);
       setGraphic(null);
     } else {
-      imageVew.setImage(item);
-      setGraphic(imageVew);
+      imageView.imageProperty().bind(imageViewHelper.createPlaceholderImageOnErrorObservable(item));
+      setGraphic(imageView);
     }
   }
 }

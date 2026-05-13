@@ -1,7 +1,7 @@
 package com.faforever.client.notification;
 
-import com.faforever.client.fx.Controller;
-import com.faforever.client.fx.JavaFxUtil;
+import com.faforever.client.fx.FxApplicationThreadExecutor;
+import com.faforever.client.fx.NodeController;
 import com.faforever.client.fx.WebViewConfigurer;
 import com.faforever.client.ui.dialog.DialogLayout;
 import javafx.scene.Node;
@@ -12,6 +12,7 @@ import javafx.scene.control.TextArea;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.scene.web.WebView;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
@@ -23,22 +24,21 @@ import java.util.stream.Collectors;
 
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
-public class ServerNotificationController implements Controller<Node> {
+@RequiredArgsConstructor
+public class ServerNotificationController extends NodeController<Node> {
 
   private final WebViewConfigurer webViewConfigurer;
-  private final DialogLayout dialogLayout;
+  private final FxApplicationThreadExecutor fxApplicationThreadExecutor;
+
+  private final DialogLayout dialogLayout = new DialogLayout();
   public WebView errorMessageView;
   public Label exceptionAreaTitleLabel;
   public TextArea exceptionTextArea;
   public VBox serverNotificationRoot;
   private Runnable closeListener;
 
-  public ServerNotificationController(WebViewConfigurer webViewConfigurer) {
-    this.webViewConfigurer = webViewConfigurer;
-    dialogLayout = new DialogLayout();
-  }
-
-  public void initialize() {
+  @Override
+  protected void onInitialize() {
     exceptionAreaTitleLabel.managedProperty().bind(exceptionAreaTitleLabel.visibleProperty());
     exceptionAreaTitleLabel.visibleProperty().bind(exceptionTextArea.visibleProperty());
     exceptionTextArea.managedProperty().bind(exceptionTextArea.visibleProperty());
@@ -48,9 +48,9 @@ public class ServerNotificationController implements Controller<Node> {
     dialogLayout.setBody(serverNotificationRoot);
   }
 
-  public ServerNotificationController setNotification(ImmediateNotification notification) {
+  public void setNotification(ServerNotification notification) {
     StringWriter writer = new StringWriter();
-    Throwable throwable = notification.getThrowable();
+    Throwable throwable = notification.throwable();
     if (throwable != null) {
       throwable.printStackTrace(new PrintWriter(writer));
       exceptionTextArea.setVisible(true);
@@ -59,22 +59,21 @@ public class ServerNotificationController implements Controller<Node> {
       exceptionTextArea.setVisible(false);
     }
 
-    dialogLayout.setHeading(new Label(notification.getTitle()));
-    JavaFxUtil.runLater(() -> errorMessageView.getEngine().loadContent(notification.getText()));
+    dialogLayout.setHeading(new Label(notification.title()));
+    fxApplicationThreadExecutor.execute(() -> errorMessageView.getEngine().loadContent(notification.text()));
 
-    Optional.ofNullable(notification.getActions())
+    Optional.ofNullable(notification.actions())
         .map(actions -> actions.stream().map(this::createButton).collect(Collectors.toList()))
         .ifPresent(dialogLayout::setActions);
-    if (notification.getCustomUI() != null) {
-      serverNotificationRoot.getChildren().add(notification.getCustomUI());
+    if (notification.customUI() != null) {
+      serverNotificationRoot.getChildren().add(notification.customUI());
     }
-    return this;
   }
 
   private Button createButton(Action action) {
     Button button = new Button(action.getTitle());
     button.setOnAction(event -> {
-      action.call(event);
+      action.run();
       if (action.getType() == Action.Type.OK_DONE) {
         dismiss();
       }
@@ -94,13 +93,13 @@ public class ServerNotificationController implements Controller<Node> {
     closeListener.run();
   }
 
+  @Override
   public Region getRoot() {
     return serverNotificationRoot;
   }
 
-  public ServerNotificationController setCloseListener(Runnable closeListener) {
+  public void setCloseListener(Runnable closeListener) {
     this.closeListener = closeListener;
-    return this;
   }
 
   public DialogLayout getDialogLayout() {

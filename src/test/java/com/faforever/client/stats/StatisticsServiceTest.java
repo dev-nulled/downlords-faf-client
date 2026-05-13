@@ -1,18 +1,16 @@
 package com.faforever.client.stats;
 
 import com.faforever.client.api.FafApiAccessor;
-import com.faforever.client.builders.LeaderboardBeanBuilder;
-import com.faforever.client.builders.LeaderboardRatingJournalBeanBuilder;
-import com.faforever.client.builders.PlayerBeanBuilder;
-import com.faforever.client.domain.LeaderboardBean;
-import com.faforever.client.domain.LeaderboardRatingJournalBean;
-import com.faforever.client.domain.PlayerBean;
-import com.faforever.client.mapstruct.CycleAvoidingMappingContext;
+import com.faforever.client.builders.PlayerInfoBuilder;
+import com.faforever.client.domain.api.Leaderboard;
+import com.faforever.client.domain.api.LeaderboardRatingJournal;
+import com.faforever.client.domain.server.PlayerInfo;
 import com.faforever.client.mapstruct.LeaderboardMapper;
 import com.faforever.client.mapstruct.MapperSetup;
 import com.faforever.client.test.ElideMatchers;
 import com.faforever.client.test.ServiceTest;
 import com.faforever.commons.api.elide.ElideEntity;
+import org.instancio.Instancio;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mapstruct.factory.Mappers;
@@ -20,12 +18,11 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import reactor.core.publisher.Flux;
+import reactor.test.StepVerifier;
 
-import java.util.List;
+import java.time.OffsetDateTime;
 
 import static com.faforever.commons.api.elide.ElideNavigator.qBuilder;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.contains;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.verify;
@@ -38,7 +35,7 @@ public class StatisticsServiceTest extends ServiceTest {
 
   @InjectMocks
   private StatisticsService instance;
-  private LeaderboardBean leaderboard;
+  private Leaderboard leaderboard;
   @Spy
   private LeaderboardMapper leaderboardMapper = Mappers.getMapper(LeaderboardMapper.class);
 
@@ -46,21 +43,46 @@ public class StatisticsServiceTest extends ServiceTest {
   public void setUp() throws Exception {
     MapperSetup.injectMappers(leaderboardMapper);
     when(fafApiAccessor.getMaxPageSize()).thenReturn(10000);
-    leaderboard = LeaderboardBeanBuilder.create().defaultValues().get();
+    leaderboard = Instancio.create(Leaderboard.class);
   }
 
   @Test
   public void testGetStatisticsForPlayer() throws Exception {
-    LeaderboardRatingJournalBean leaderboardRatingJournalBean = LeaderboardRatingJournalBeanBuilder.create().defaultValues().get();
-    PlayerBean player = PlayerBeanBuilder.create().defaultValues().username("junit").get();
-    Flux<ElideEntity> resultFlux = Flux.just(leaderboardMapper.map(leaderboardRatingJournalBean, new CycleAvoidingMappingContext()));
-    when(fafApiAccessor.getMany(any())).thenReturn(resultFlux);
-    List<LeaderboardRatingJournalBean> results = instance.getRatingHistory(player, leaderboard).join();
-    verify(fafApiAccessor).getMany(argThat(
+    LeaderboardRatingJournal leaderboardRatingJournal = Instancio.create(LeaderboardRatingJournal.class);
+    PlayerInfo player = PlayerInfoBuilder.create().defaultValues().username("junit").get();
+    Flux<ElideEntity> resultFlux = Flux.just(leaderboardMapper.map(leaderboardRatingJournal));
+    when(fafApiAccessor.getAll(any())).thenReturn(resultFlux);
+    StepVerifier.create(instance.getRatingHistory(player, leaderboard, null)).expectNextCount(1)
+                .expectComplete()
+                .verify();
+    verify(fafApiAccessor).getAll(argThat(
         ElideMatchers.hasFilter(qBuilder().intNum("gamePlayerStats.player.id").eq(player.getId()).and()
-            .intNum("leaderboard.id").eq(leaderboard.getId()))
+                                          .intNum("leaderboard.id")
+                                          .eq(leaderboard.id()))
     ));
-    verify(fafApiAccessor).getMany(argThat(ElideMatchers.hasPageSize(10000)));
-    assertThat(results, contains(leaderboardRatingJournalBean));
+    verify(fafApiAccessor).getAll(argThat(ElideMatchers.hasPageSize(10000)));
+  }
+
+  @Test
+  public void testGetStatisticsForPlayerWithSince() throws Exception {
+    LeaderboardRatingJournal leaderboardRatingJournal = Instancio.create(LeaderboardRatingJournal.class);
+    PlayerInfo player = PlayerInfoBuilder.create().defaultValues().username("junit").get();
+    OffsetDateTime since = OffsetDateTime.now().minusDays(1);
+    Flux<ElideEntity> resultFlux = Flux.just(leaderboardMapper.map(leaderboardRatingJournal));
+    when(fafApiAccessor.getAll(any())).thenReturn(resultFlux);
+    StepVerifier.create(instance.getRatingHistory(player, leaderboard, since)).expectNextCount(1)
+                .expectComplete()
+                .verify();
+    verify(fafApiAccessor).getAll(argThat(
+        ElideMatchers.hasFilter(qBuilder().instant("gamePlayerStats.scoreTime")
+                                          .after(since.toInstant(), false)
+                                          .and()
+                                          .intNum("gamePlayerStats.player.id")
+                                          .eq(player.getId())
+                                          .and()
+                                          .intNum("leaderboard.id")
+                                          .eq(leaderboard.id()))
+    ));
+    verify(fafApiAccessor).getAll(argThat(ElideMatchers.hasPageSize(10000)));
   }
 }

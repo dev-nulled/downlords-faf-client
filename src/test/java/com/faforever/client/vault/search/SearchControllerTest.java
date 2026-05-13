@@ -1,14 +1,13 @@
 package com.faforever.client.vault.search;
 
 import com.faforever.client.i18n.I18n;
-import com.faforever.client.preferences.Preferences;
-import com.faforever.client.preferences.PreferencesService;
+import com.faforever.client.preferences.VaultPrefs;
 import com.faforever.client.query.FilterNodeController;
 import com.faforever.client.query.LogicalNodeController;
 import com.faforever.client.query.SearchablePropertyMappings;
 import com.faforever.client.query.SearchablePropertyMappings.Property;
 import com.faforever.client.query.SpecificationController;
-import com.faforever.client.test.UITest;
+import com.faforever.client.test.PlatformTest;
 import com.faforever.client.theme.UiService;
 import com.faforever.client.ui.dialog.Dialog;
 import com.faforever.client.vault.search.SearchController.SearchConfig;
@@ -28,6 +27,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.testfx.util.WaitForAsyncUtils;
 
 import java.util.Collections;
@@ -41,11 +41,12 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-public class SearchControllerTest extends UITest {
+public class SearchControllerTest extends PlatformTest {
 
   @InjectMocks
   private SearchController instance;
@@ -58,8 +59,7 @@ public class SearchControllerTest extends UITest {
   private LogicalNodeController logicalNodeController;
   @Mock
   private Consumer<SearchConfig> searchListener;
-  @Mock
-  private PreferencesService preferencesService;
+
   @Mock
   private I18n i18n;
   @Mock
@@ -69,10 +69,12 @@ public class SearchControllerTest extends UITest {
   private SavedQueriesController savedQueriesController;
   @Mock
   private SaveQueryController saveQueryController;
+  @Spy
+  private VaultPrefs vaultPrefs;
 
   @BeforeEach
   public void setUp() throws Exception {
-    when(uiService.loadFxml("theme/vault/search/logical_node.fxml")).thenAnswer(invocation -> {
+    lenient().when(uiService.loadFxml("theme/vault/search/logical_node.fxml")).thenAnswer(invocation -> {
       LogicalNodeController controller = mock(LogicalNodeController.class);
       controller.logicalOperatorField = new ComboBox<>();
       controller.specificationController = mock(SpecificationController.class);
@@ -82,10 +84,9 @@ public class SearchControllerTest extends UITest {
       when(controller.getRoot()).thenReturn(new Pane());
       return controller;
     });
-    when(uiService.loadFxml("theme/vault/search/save_query.fxml")).thenReturn(saveQueryController);
-    when(uiService.loadFxml("theme/vault/search/saved_queries.fxml")).thenReturn(savedQueriesController);
-    when(uiService.showInDialog(any(), any(), any())).thenReturn(mock(Dialog.class));
-    when(preferencesService.getPreferences()).thenReturn(new Preferences());
+    lenient().when(uiService.loadFxml("theme/vault/search/save_query.fxml")).thenReturn(saveQueryController);
+    lenient().when(uiService.loadFxml("theme/vault/search/saved_queries.fxml")).thenReturn(savedQueriesController);
+    lenient().when(uiService.showInDialog(any(), any(), any())).thenReturn(mock(Dialog.class));
 
     instance.setSavedQueries(savedQueries);
 
@@ -100,7 +101,7 @@ public class SearchControllerTest extends UITest {
     });
 
     instance.setSearchableProperties(SearchablePropertyMappings.GAME_PROPERTY_MAPPING);
-    instance.setSortConfig(preferencesService.getPreferences().getVault().onlineReplaySortConfigProperty());
+    instance.setSortConfig(vaultPrefs.onlineReplaySortConfigProperty());
   }
 
   @Test
@@ -222,8 +223,8 @@ public class SearchControllerTest extends UITest {
 
     instance.onSearchButtonClicked();
 
-    SortConfig mapSortConfig = preferencesService.getPreferences().getVault().getOnlineReplaySortConfig();
-    assertEquals(mapSortConfig.getSortOrder(), SortOrder.ASC);
+    SortConfig mapSortConfig = vaultPrefs.getOnlineReplaySortConfig();
+    assertEquals(mapSortConfig.sortOrder(), SortOrder.ASC);
     verify(searchListener).accept(new SearchConfig(mapSortConfig, "query"));
   }
 

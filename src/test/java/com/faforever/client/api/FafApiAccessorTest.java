@@ -1,15 +1,12 @@
 package com.faforever.client.api;
 
-import com.faforever.client.builders.ReplayReviewBeanBuilder;
 import com.faforever.client.config.ClientProperties;
 import com.faforever.client.config.ClientProperties.Api;
 import com.faforever.client.config.JsonApiConfig;
-import com.faforever.client.domain.ReplayReviewBean;
-import com.faforever.client.mapstruct.CycleAvoidingMappingContext;
+import com.faforever.client.domain.api.ReplayReview;
 import com.faforever.client.mapstruct.MapperSetup;
 import com.faforever.client.mapstruct.ReviewMapper;
 import com.faforever.client.test.ServiceTest;
-import com.faforever.client.user.event.LoggedOutEvent;
 import com.faforever.commons.api.dto.ApiException;
 import com.faforever.commons.api.dto.Game;
 import com.faforever.commons.api.dto.GameReview;
@@ -22,17 +19,16 @@ import com.github.jasminb.jsonapi.ResourceConverter;
 import com.github.jasminb.jsonapi.models.errors.Error;
 import com.github.rutledgepaulv.qbuilders.builders.QBuilder;
 import com.github.rutledgepaulv.qbuilders.visitors.RSQLVisitor;
-import com.google.common.eventbus.EventBus;
 import io.netty.resolver.DefaultAddressResolverGroup;
 import okhttp3.HttpUrl;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
+import org.instancio.Instancio;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.mapstruct.factory.Mappers;
-import org.mockito.Mock;
 import org.mockito.Spy;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.util.LinkedMultiValueMap;
@@ -58,10 +54,6 @@ public class FafApiAccessorTest extends ServiceTest {
 
   private FafApiAccessor instance;
 
-  @Mock
-  private EventBus eventBus;
-  @Mock
-  private OAuthTokenFilter oAuthTokenFilter;
   @TempDir
   public Path tempDirectory;
   private ClientProperties clientProperties;
@@ -78,6 +70,9 @@ public class FafApiAccessorTest extends ServiceTest {
 
   @BeforeEach
   public void setUp() throws Exception {
+    mockApi = new MockWebServer();
+    mockApi.start();
+
     MapperSetup.injectMappers(reviewMapper);
     ObjectMapper objectMapper = new ObjectMapper();
     objectMapper.registerModule(new JavaTimeModule());
@@ -86,22 +81,20 @@ public class FafApiAccessorTest extends ServiceTest {
     JsonApiWriter jsonApiWriter = new JsonApiWriter(resourceConverter);
     HttpClient httpClient = HttpClient.create().resolver(DefaultAddressResolverGroup.INSTANCE);
     ReactorClientHttpConnector clientHttpConnector = new ReactorClientHttpConnector(httpClient);
-    WebClient.Builder webClientBuilder = WebClient.builder()
+
+    WebClient webClient = WebClient.builder()
+        .baseUrl(String.format("http://localhost:%s", mockApi.getPort()))
         .clientConnector(clientHttpConnector)
         .codecs(clientCodecConfigurer -> {
           clientCodecConfigurer.customCodecs().register(jsonApiReader);
           clientCodecConfigurer.customCodecs().register(jsonApiWriter);
-        });
-
-    mockApi = new MockWebServer();
-    mockApi.start();
+        }).build();
 
     clientProperties = new ClientProperties();
     Api api = clientProperties.getApi();
     api.setMaxPageSize(100);
-    api.setBaseUrl(String.format("http://localhost:%s", mockApi.getPort()));
     api.setRetryBackoffSeconds(0);
-    instance = new FafApiAccessor(eventBus, clientProperties, oAuthTokenFilter, webClientBuilder);
+    instance = new FafApiAccessor(clientProperties, () -> webClient);
     instance.afterPropertiesSet();
     instance.authorize();
   }
@@ -137,22 +130,15 @@ public class FafApiAccessorTest extends ServiceTest {
   }
 
   @Test
+  public void testReset() {
+    instance.reset();
+    RuntimeException exception = assertThrows(RuntimeException.class, () -> WaitForAsyncUtils.waitForAsync(1000, () -> instance.getMe()));
+    assertEquals(TimeoutException.class, exception.getCause().getClass());
+  }
+
+  @Test
   public void testGetMaxPageSize() {
     assertEquals(100, instance.getMaxPageSize());
-  }
-
-  @Test
-  public void testSessionExpired() {
-    instance.onSessionExpiredEvent(new SessionExpiredEvent());
-    RuntimeException exception = assertThrows(RuntimeException.class, () -> WaitForAsyncUtils.waitForAsync(1000, () -> instance.getMe()));
-    assertEquals(TimeoutException.class, exception.getCause().getClass());
-  }
-
-  @Test
-  public void testLoggedOut() {
-    instance.onLoggedOutEvent(new LoggedOutEvent());
-    RuntimeException exception = assertThrows(RuntimeException.class, () -> WaitForAsyncUtils.waitForAsync(1000, () -> instance.getMe()));
-    assertEquals(TimeoutException.class, exception.getCause().getClass());
   }
 
   @Test
@@ -165,8 +151,8 @@ public class FafApiAccessorTest extends ServiceTest {
 
   @Test
   public void testPost() throws Exception {
-    ReplayReviewBean reviewBean = ReplayReviewBeanBuilder.create().defaultValues().id(0).get();
-    GameReview review = reviewMapper.map(reviewBean, new CycleAvoidingMappingContext());
+    ReplayReview reviewBean = Instancio.create(ReplayReview.class);
+    GameReview review = reviewMapper.map(reviewBean);
 
     prepareJsonApiResponse(review);
     StepVerifier.create(instance.post(ElideNavigator.of(GameReview.class).collection(), review))
@@ -176,8 +162,8 @@ public class FafApiAccessorTest extends ServiceTest {
 
   @Test
   public void testPatch() throws Exception {
-    ReplayReviewBean reviewBean = ReplayReviewBeanBuilder.create().defaultValues().id(0).get();
-    GameReview review = reviewMapper.map(reviewBean, new CycleAvoidingMappingContext());
+    ReplayReview reviewBean = Instancio.create(ReplayReview.class);
+    GameReview review = reviewMapper.map(reviewBean);
 
     prepareVoidResponse();
     StepVerifier.create(instance.patch(ElideNavigator.of(review), review))
@@ -186,8 +172,8 @@ public class FafApiAccessorTest extends ServiceTest {
 
   @Test
   public void testDelete() throws Exception {
-    ReplayReviewBean reviewBean = ReplayReviewBeanBuilder.create().defaultValues().id(0).get();
-    GameReview review = reviewMapper.map(reviewBean, new CycleAvoidingMappingContext());
+    ReplayReview reviewBean = Instancio.create(ReplayReview.class);
+    GameReview review = reviewMapper.map(reviewBean);
 
     prepareVoidResponse();
     StepVerifier.create(instance.delete(ElideNavigator.of(review)))
@@ -196,8 +182,8 @@ public class FafApiAccessorTest extends ServiceTest {
 
   @Test
   public void testGetOne() throws Exception {
-    ReplayReviewBean reviewBean = ReplayReviewBeanBuilder.create().defaultValues().id(0).get();
-    GameReview review = reviewMapper.map(reviewBean, new CycleAvoidingMappingContext());
+    ReplayReview reviewBean = Instancio.create(ReplayReview.class);
+    GameReview review = reviewMapper.map(reviewBean);
 
     prepareJsonApiResponse(review);
     StepVerifier.create(instance.getOne(ElideNavigator.of(review)))
@@ -216,12 +202,12 @@ public class FafApiAccessorTest extends ServiceTest {
   }
 
   @Test
-  public void testGetManyNoNavigator() throws Exception {
-    ReplayReviewBean reviewBean = ReplayReviewBeanBuilder.create().defaultValues().id(0).get();
-    GameReview review = reviewMapper.map(reviewBean, new CycleAvoidingMappingContext());
+  public void testGetAllNoNavigator() throws Exception {
+    ReplayReview reviewBean = Instancio.create(ReplayReview.class);
+    GameReview review = reviewMapper.map(reviewBean);
 
     prepareJsonApiResponse(List.of(review));
-    StepVerifier.create(instance.getMany(GameReview.class, "/data/gameReview", 1, Map.of("param", "test")))
+    StepVerifier.create(instance.getAll(GameReview.class, "/data/gameReview", 1, Map.of("param", "test")))
         .expectNext(review)
         .verifyComplete();
     HttpUrl requestedUrl = mockApi.takeRequest().getRequestUrl();
@@ -232,12 +218,12 @@ public class FafApiAccessorTest extends ServiceTest {
   }
 
   @Test
-  public void testGetManyNavigatorEnrichment() throws Exception {
+  public void testGetAllNavigatorEnrichment() throws Exception {
     FafApiAccessor.FILTERS.forEach((clazz, filters) -> {
       try {
         prepareJsonApiResponse(List.of());
 
-        StepVerifier.create(instance.getMany(ElideNavigator.of(clazz).collection()))
+        StepVerifier.create(instance.getAll(ElideNavigator.of(clazz).collection()))
             .verifyComplete();
 
         HttpUrl requestedUrl = mockApi.takeRequest().getRequestUrl();
@@ -251,7 +237,7 @@ public class FafApiAccessorTest extends ServiceTest {
       try {
         prepareJsonApiResponse(List.of());
 
-        StepVerifier.create(instance.getMany(ElideNavigator.of(clazz).collection()))
+        StepVerifier.create(instance.getAll(ElideNavigator.of(clazz).collection()))
             .verifyComplete();
 
         HttpUrl requestedUrl = mockApi.takeRequest().getRequestUrl();
@@ -264,7 +250,7 @@ public class FafApiAccessorTest extends ServiceTest {
   }
 
   @Test
-  public void testGetManyWithPageCountNavigatorEnrichment() throws Exception {
+  public void testGetAllWithPageCountNavigatorEnrichment() throws Exception {
     FafApiAccessor.FILTERS.forEach((clazz, filters) -> {
       try {
         prepareJsonApiResponse(List.of());
@@ -300,10 +286,10 @@ public class FafApiAccessorTest extends ServiceTest {
   }
 
   @Test
-  public void testGetManyWithCustomFilter() throws Exception {
+  public void testGetAllWithCustomFilter() throws Exception {
     prepareJsonApiResponse(List.of());
 
-    StepVerifier.create(instance.getMany(ElideNavigator.of(Game.class).collection(), "MyVeryOwnFilter"))
+    StepVerifier.create(instance.getAll(ElideNavigator.of(Game.class).collection(), "MyVeryOwnFilter"))
         .verifyComplete();
 
     HttpUrl requestedUrl = mockApi.takeRequest().getRequestUrl();
@@ -311,7 +297,9 @@ public class FafApiAccessorTest extends ServiceTest {
 
     prepareJsonApiResponse(List.of());
 
-    StepVerifier.create(instance.getMany(ElideNavigator.of(Game.class).collection().setFilter(qBuilder().intNum("test").eq(1)), "MyVeryOwnFilter"))
+    StepVerifier.create(
+                    instance.getAll(ElideNavigator.of(Game.class).collection().setFilter(qBuilder().intNum("test").eq(1)),
+                                    "MyVeryOwnFilter"))
         .verifyComplete();
 
     requestedUrl = mockApi.takeRequest().getRequestUrl();
@@ -319,7 +307,7 @@ public class FafApiAccessorTest extends ServiceTest {
   }
 
   @Test
-  public void testGetManyWithPageTotalWithCustomFilter() throws Exception {
+  public void testGetAllWithPageTotalWithCustomFilter() throws Exception {
     prepareJsonApiResponse(List.of());
 
     StepVerifier.create(instance.getManyWithPageCount(ElideNavigator.of(Game.class).collection(), "MyVeryOwnFilter"))
@@ -331,7 +319,7 @@ public class FafApiAccessorTest extends ServiceTest {
   }
 
   @Test
-  public void testGetManyBadRequest() throws Exception {
+  public void testGetAllBadRequest() throws Exception {
     Error error = new Error();
     error.setId("0");
     error.setStatus("test");
@@ -363,7 +351,7 @@ public class FafApiAccessorTest extends ServiceTest {
 
     prepareErrorResponse(403);
 
-    StepVerifier.create(instance.getMany(ElideNavigator.of(Game.class).collection()))
+    StepVerifier.create(instance.getAll(ElideNavigator.of(Game.class).collection()))
         .verifyError();
   }
 
@@ -376,7 +364,7 @@ public class FafApiAccessorTest extends ServiceTest {
 
     prepareErrorResponse(500);
 
-    StepVerifier.create(instance.getMany(ElideNavigator.of(Game.class).collection()))
+    StepVerifier.create(instance.getAll(ElideNavigator.of(Game.class).collection()))
         .verifyError();
   }
 
@@ -397,7 +385,7 @@ public class FafApiAccessorTest extends ServiceTest {
     }
     prepareJsonApiResponse(List.of());
 
-    StepVerifier.create(instance.getMany(ElideNavigator.of(Game.class).collection()))
+    StepVerifier.create(instance.getAll(ElideNavigator.of(Game.class).collection()))
         .verifyComplete();
   }
 
@@ -415,20 +403,20 @@ public class FafApiAccessorTest extends ServiceTest {
       prepareErrorResponse(503);
     }
 
-    StepVerifier.create(instance.getMany(ElideNavigator.of(Game.class).collection()))
+    StepVerifier.create(instance.getAll(ElideNavigator.of(Game.class).collection()))
         .verifyError();
   }
 
   @Test
   public void testUnknownError() throws Exception {
-    prepareErrorResponse(600);
+    prepareErrorResponse(599);
 
     StepVerifier.create(instance.getManyWithPageCount(ElideNavigator.of(Game.class).collection()))
         .verifyError();
 
-    prepareErrorResponse(600);
+    prepareErrorResponse(599);
 
-    StepVerifier.create(instance.getMany(ElideNavigator.of(Game.class).collection()))
+    StepVerifier.create(instance.getAll(ElideNavigator.of(Game.class).collection()))
         .verifyError();
   }
 }

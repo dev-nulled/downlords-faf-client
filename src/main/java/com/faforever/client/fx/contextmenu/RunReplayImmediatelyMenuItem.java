@@ -1,6 +1,6 @@
 package com.faforever.client.fx.contextmenu;
 
-import com.faforever.client.domain.GameBean;
+import com.faforever.client.domain.server.GameInfo;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.replay.LiveReplayService;
 import com.faforever.client.replay.TrackingLiveReplay;
@@ -16,7 +16,7 @@ import static com.faforever.client.replay.TrackingLiveReplayAction.RUN_REPLAY;
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
 @RequiredArgsConstructor
-public class RunReplayImmediatelyMenuItem extends AbstractMenuItem<GameBean> {
+public class RunReplayImmediatelyMenuItem extends AbstractMenuItem<GameInfo> {
 
   private final I18n i18n;
   private final LiveReplayService liveReplayService;
@@ -32,7 +32,7 @@ public class RunReplayImmediatelyMenuItem extends AbstractMenuItem<GameBean> {
   }
 
   @Override
-  protected boolean isItemVisible() {
+  protected boolean isDisplayed() {
     boolean isValid = object != null && object.getStartTime() != null;
     if (!isValid) {
       return false;
@@ -40,7 +40,7 @@ public class RunReplayImmediatelyMenuItem extends AbstractMenuItem<GameBean> {
 
     Optional<TrackingLiveReplay> trackingLiveReplayOptional = liveReplayService.getTrackingLiveReplay();
     return trackingLiveReplayOptional.isEmpty() || trackingLiveReplayOptional.stream()
-        .anyMatch(trackingLiveReplay -> !trackingLiveReplay.getGameId().equals(object.getId()) || trackingLiveReplay.getAction() != RUN_REPLAY);
+        .anyMatch(trackingLiveReplay -> !trackingLiveReplay.gameId().equals(object.getId()) || trackingLiveReplay.action() != RUN_REPLAY);
   }
 
   @Override

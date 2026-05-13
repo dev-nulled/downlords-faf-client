@@ -1,16 +1,12 @@
 package com.faforever.client.game;
 
-import com.faforever.client.builders.GameBeanBuilder;
-import com.faforever.client.builders.PreferencesBuilder;
-import com.faforever.client.domain.GameBean;
+import com.faforever.client.domain.server.GameInfo;
+import com.faforever.client.filter.CustomGamesFilterController;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.preferences.Preferences;
-import com.faforever.client.preferences.PreferencesService;
-import com.faforever.client.test.UITest;
+import com.faforever.client.replay.WatchButtonController;
+import com.faforever.client.test.PlatformTest;
 import com.faforever.client.theme.UiService;
-import com.faforever.client.vault.replay.WatchButtonController;
-import com.faforever.commons.lobby.GameType;
-import com.google.common.eventbus.EventBus;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.collections.FXCollections;
@@ -20,31 +16,26 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.testfx.util.WaitForAsyncUtils;
+import org.mockito.Spy;
 
-import java.util.Map;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-public class CustomGamesControllerTest extends UITest {
+public class CustomGamesControllerTest extends PlatformTest {
 
   @InjectMocks
   private CustomGamesController instance;
   @Mock
   private GameService gameService;
   @Mock
-  private PreferencesService preferencesService;
+  private GameRunner gameRunner;
   @Mock
   private UiService uiService;
   @Mock
   private GamesTableController gamesTableController;
-  @Mock
-  private EventBus eventBus;
   @Mock
   private GameDetailController gameDetailController;
   @Mock
@@ -53,30 +44,38 @@ public class CustomGamesControllerTest extends UITest {
   private I18n i18n;
   @Mock
   private GamesTilesContainerController gamesTilesContainerController;
-
-  private ObservableList<GameBean> games;
+  @Mock
+  private CustomGamesFilterController customGamesFilterController;
+  @Mock
+  private GameTooltipController gameTooltipController;
+  @Spy
   private Preferences preferences;
+
+  private ObservableList<GameInfo> games;
 
   @BeforeEach
   public void setUp() throws Exception {
     games = FXCollections.observableArrayList();
 
-    preferences = PreferencesBuilder.create().defaultValues()
-        .gamesViewMode("tableButton")
-        .showGameDetailsSidePane(true)
-        .get();
+    preferences.setGamesViewMode("tableButton");
+    preferences.setShowGameDetailsSidePane(true);
 
-    when(gameService.getGames()).thenReturn(games);
-    when(gameService.gameRunningProperty()).thenReturn(new SimpleBooleanProperty());
-    when(preferencesService.getPreferences()).thenReturn(preferences);
-    when(uiService.loadFxml("theme/play/games_table.fxml")).thenReturn(gamesTableController);
-    when(uiService.loadFxml("theme/play/games_tiles_container.fxml")).thenReturn(gamesTilesContainerController);
-    when(gamesTilesContainerController.getRoot()).thenReturn(new Pane());
-    when(gamesTableController.getRoot()).thenReturn(new Pane());
-    when(gamesTableController.selectedGameProperty()).thenReturn(new SimpleObjectProperty<>());
-    when(gamesTilesContainerController.selectedGameProperty()).thenReturn(new SimpleObjectProperty<>());
-
-    when(gameDetailController.getRoot()).thenReturn(new Pane());
+    lenient().when(gameService.getGames()).thenReturn(games);
+    lenient().when(gameRunner.runningProperty()).thenReturn(new SimpleBooleanProperty());
+    lenient().when(gameDetailController.gameProperty()).thenReturn(new SimpleObjectProperty<>());
+    lenient().when(gamesTilesContainerController.getRoot()).thenReturn(new Pane());
+    lenient().when(gamesTableController.getRoot()).thenReturn(new Pane());
+    lenient().when(gamesTableController.selectedGameProperty()).thenReturn(new SimpleObjectProperty<>());
+    lenient().when(uiService.loadFxml("theme/filter/filter.fxml", CustomGamesFilterController.class))
+             .thenReturn(customGamesFilterController);
+    lenient().when(uiService.loadFxml("theme/play/games_table.fxml")).thenReturn(gamesTableController);
+    lenient().when(uiService.loadFxml("theme/play/games_tiles_container.fxml"))
+             .thenReturn(gamesTilesContainerController);
+    lenient().when(customGamesFilterController.filterActiveProperty()).thenReturn(new SimpleBooleanProperty());
+    lenient().when(customGamesFilterController.predicateProperty())
+             .thenReturn(new SimpleObjectProperty<>(item -> true));
+    lenient().when(gamesTilesContainerController.sortingOrderProperty()).thenReturn(new SimpleObjectProperty<>());
+    lenient().when(gameDetailController.getRoot()).thenReturn(new Pane());
 
     loadFxml("theme/play/custom_games.fxml", clazz -> {
       if (clazz == GameDetailController.class) {
@@ -85,15 +84,16 @@ public class CustomGamesControllerTest extends UITest {
       if (clazz == WatchButtonController.class) {
         return watchButtonController;
       }
+      if (clazz == GameTooltipController.class) {
+        return gameTooltipController;
+      }
       return instance;
     });
-    verify(gameDetailController).setGame(null);
   }
 
   @Test
   public void testSetSelectedGameShowsDetailPane() {
     instance.toggleGameDetailPaneButton.setSelected(true);
-    instance.setSelectedGame(GameBeanBuilder.create().defaultValues().get());
     assertTrue(instance.gameDetailPane.isVisible());
   }
 
@@ -101,56 +101,22 @@ public class CustomGamesControllerTest extends UITest {
   public void testSetSelectedGameDoesNotShowDetailPaneIfDisabled() {
     instance.toggleGameDetailPaneButton.setSelected(false);
     preferences.setShowGameDetailsSidePane(false);
-    instance.setSelectedGame(GameBeanBuilder.create().defaultValues().get());
     assertFalse(instance.gameDetailPane.isVisible());
   }
 
   @Test
-  public void testUpdateFilters() {
-    GameBean game = GameBeanBuilder.create().defaultValues().get();
-    GameBean gameWithMod = GameBeanBuilder.create().defaultValues().simMods(Map.of("123-456-789", "Fake mod name")).get();
-    GameBean gameWithPW = GameBeanBuilder.create().defaultValues().password("password").passwordProtected(true).get();
-    GameBean gameWithModAndPW = GameBeanBuilder.create().defaultValues().simMods(Map.of("123-456-789", "Fake mod name")).password("password").passwordProtected(true).get();
-    GameBean matchmakerGame = GameBeanBuilder.create().defaultValues().gameType(GameType.MATCHMAKER).get();
+  public void testDisplayTiles() {
+    when(gamesTilesContainerController.selectedGameProperty()).thenReturn(new SimpleObjectProperty<>());
 
-
-    ObservableList<GameBean> games = FXCollections.observableArrayList();
-    games.addAll(game, gameWithMod, gameWithPW, gameWithModAndPW, matchmakerGame);
-    runOnFxThreadAndWait(() -> instance.setFilteredList(games));
-
-    instance.showModdedGamesCheckBox.setSelected(false);
-    instance.showModdedGamesCheckBox.setSelected(true);
-    instance.showPasswordProtectedGamesCheckBox.setSelected(true);
-    WaitForAsyncUtils.waitForFxEvents();
-    assertEquals(4, instance.filteredItems.size());
-
-    instance.showModdedGamesCheckBox.setSelected(false);
-    WaitForAsyncUtils.waitForFxEvents();
-    assertEquals(2, instance.filteredItems.size());
-
-    instance.showPasswordProtectedGamesCheckBox.setSelected(false);
-    WaitForAsyncUtils.waitForFxEvents();
-    assertEquals(1, instance.filteredItems.size());
-
-    instance.showModdedGamesCheckBox.setSelected(true);
-    WaitForAsyncUtils.waitForFxEvents();
-    assertEquals(2, instance.filteredItems.size());
-  }
-
-  @Test
-  public void testTiles() {
-    instance.tilesButton.fire();
-    WaitForAsyncUtils.waitForFxEvents();
-    verify(gamesTilesContainerController).createTiledFlowPane(games, instance.chooseSortingTypeChoiceBox);
+    runOnFxThreadAndWait(() -> instance.tilesButton.fire());
+    verify(gamesTilesContainerController).createTiledFlowPane(games);
   }
 
   @Test
   public void testHideSidePane() {
-    instance.toggleGameDetailPaneButton.fire();
-    WaitForAsyncUtils.waitForFxEvents();
+    runOnFxThreadAndWait(() -> instance.toggleGameDetailPaneButton.fire());
 
-    assertFalse(preferencesService.getPreferences().isShowGameDetailsSidePane());
-    verify(preferencesService, atLeast(2)).storeInBackground();
+    assertFalse(preferences.isShowGameDetailsSidePane());
 
     assertFalse(instance.gameDetailPane.isManaged());
     assertFalse(instance.gameDetailPane.isVisible());

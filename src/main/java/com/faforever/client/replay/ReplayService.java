@@ -3,26 +3,26 @@ package com.faforever.client.replay;
 import com.faforever.client.api.FafApiAccessor;
 import com.faforever.client.config.CacheNames;
 import com.faforever.client.config.ClientProperties;
-import com.faforever.client.domain.FeaturedModBean;
-import com.faforever.client.domain.MapBean;
-import com.faforever.client.domain.MapVersionBean;
-import com.faforever.client.domain.ReplayBean;
-import com.faforever.client.domain.ReplayBean.ChatMessage;
-import com.faforever.client.domain.ReplayBean.GameOption;
+import com.faforever.client.domain.api.FeaturedMod;
+import com.faforever.client.domain.api.LeagueScoreJournal;
+import com.faforever.client.domain.api.Map;
+import com.faforever.client.domain.api.MapVersion;
+import com.faforever.client.domain.api.Replay;
+import com.faforever.client.domain.api.Replay.ChatMessage;
+import com.faforever.client.domain.api.Replay.GameOption;
+import com.faforever.client.featuredmod.FeaturedModService;
 import com.faforever.client.fx.PlatformService;
-import com.faforever.client.game.GameService;
 import com.faforever.client.game.KnownFeaturedMod;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.map.MapService;
-import com.faforever.client.mapstruct.CycleAvoidingMappingContext;
 import com.faforever.client.mapstruct.ReplayMapper;
-import com.faforever.client.mod.ModService;
 import com.faforever.client.notification.Action;
 import com.faforever.client.notification.NotificationService;
 import com.faforever.client.notification.PersistentNotification;
-import com.faforever.client.preferences.PreferencesService;
+import com.faforever.client.preferences.DataPrefs;
+import com.faforever.client.preferences.ReplayHistoryPrefs;
 import com.faforever.client.task.TaskService;
-import com.faforever.client.user.UserService;
+import com.faforever.client.user.LoginService;
 import com.faforever.client.util.FileSizeReader;
 import com.faforever.client.vault.search.SearchController.SearchConfig;
 import com.faforever.client.vault.search.SearchController.SortConfig;
@@ -35,14 +35,16 @@ import com.faforever.commons.api.elide.ElideNavigatorOnId;
 import com.faforever.commons.replay.ReplayDataParser;
 import com.faforever.commons.replay.ReplayMetadata;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.compress.compressors.CompressorException;
+import org.jetbrains.annotations.NotNull;
+import org.springframework.beans.factory.ObjectFactory;
 import org.springframework.cache.annotation.Cacheable;
-import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Lazy;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.util.function.Tuple2;
 
@@ -61,11 +63,10 @@ import java.time.temporal.ChronoUnit;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -74,7 +75,6 @@ import java.util.stream.StreamSupport;
 
 import static com.faforever.client.notification.Severity.WARN;
 import static com.faforever.commons.api.elide.ElideNavigator.qBuilder;
-import static java.util.Collections.emptyMap;
 import static java.util.Collections.singletonList;
 import static java.util.stream.Collectors.toList;
 
@@ -90,20 +90,25 @@ public class ReplayService {
   private static final Pattern invalidCharacters = Pattern.compile("[?@*%{}<>|\"]");
 
   private final ClientProperties clientProperties;
-  private final PreferencesService preferencesService;
-  private final UserService userService;
+  private final LoginService loginService;
   private final ReplayFileReader replayFileReader;
   private final NotificationService notificationService;
-  private final GameService gameService;
+  private final ReplayRunner replayRunner;
   private final TaskService taskService;
   private final I18n i18n;
-  private final ApplicationContext applicationContext;
   private final PlatformService platformService;
   private final FafApiAccessor fafApiAccessor;
-  private final ModService modService;
+  private final FeaturedModService featuredModService;
   private final MapService mapService;
   private final FileSizeReader fileSizeReader;
   private final ReplayMapper replayMapper;
+  private final DataPrefs dataPrefs;
+  private final ObjectFactory<ReplayDownloadTask> replayDownloadTaskFactory;
+  private final ReplayHistoryPrefs replayHistory;
+  private final Cache<@NotNull Path, @NotNull Replay> replayCache = CacheBuilder.newBuilder()
+                                                                                .maximumSize(500)
+                                                                                .expireAfterWrite(20, TimeUnit.MINUTES)
+                                                                                .build();
 
   @VisibleForTesting
   static Integer parseSupComVersion(ReplayDataParser parser) {
@@ -113,7 +118,15 @@ public class ReplayService {
 
   @VisibleForTesting
   static String parseMapFolderName(ReplayDataParser parser) {
-    String mapPath = parser.getMap();
+    // Prefer the scenario file path as that contains all the information to actually launch the map. The map in the
+    // parser is just the scmap which may have a different folder and will not contain all the info to launch the map
+    // or even may not be a map in the vault like in the case of any coop map.
+    String mapPath = parser.getGameOptions()
+                           .stream()
+                           .filter(gameOption -> "ScenarioFile".equals(gameOption.getKey()))
+                           .findFirst()
+                           .map(gameOption -> (String) gameOption.getValue())
+                           .orElse(parser.getMap());
     //mapPath looks like /maps/my_awesome_map.v008/my_awesome_map.lua
     Matcher matcher = invalidCharacters.matcher(mapPath);
     if (matcher.find()) {
@@ -124,10 +137,12 @@ public class ReplayService {
 
   @VisibleForTesting
   static Set<String> parseModUIDs(ReplayDataParser parser) {
-    return parser.getMods().values().stream()
-        .map(map -> (String) map.getOrDefault("uid", null))
-        .filter(Objects::nonNull)
-        .collect(Collectors.toSet());
+    return parser.getMods()
+                 .values()
+                 .stream()
+                 .map(map -> (String) map.getOrDefault("uid", null))
+                 .filter(Objects::nonNull)
+                 .collect(Collectors.toSet());
   }
 
   @VisibleForTesting
@@ -139,11 +154,10 @@ public class ReplayService {
     return KnownFeaturedMod.DEFAULT.getTechnicalName();
   }
 
-  @Async
-  public CompletableFuture<Tuple2<List<ReplayBean>, Integer>> loadLocalReplayPage(int pageSize, int page) throws IOException {
+  public Mono<Tuple2<List<Replay>, Integer>> loadLocalReplayPage(int pageSize, int page) throws IOException {
     String replayFileGlob = clientProperties.getReplay().getReplayFileGlob();
 
-    Path replaysDirectory = preferencesService.getPreferences().getData().getReplaysDirectory();
+    Path replaysDirectory = dataPrefs.getReplaysDirectory();
     if (Files.notExists(replaysDirectory)) {
       Files.createDirectories(replaysDirectory);
     }
@@ -151,52 +165,60 @@ public class ReplayService {
     int skippedReplays = pageSize * (page - 1);
 
     try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(replaysDirectory, replayFileGlob)) {
-      Stream<Path> filesStream = StreamSupport.stream(directoryStream.spliterator(), false)
-          .sorted(Comparator.comparing(path -> {
-            try {
-              return Files.getLastModifiedTime((Path) path);
-            } catch (IOException e) {
-              log.warn("Could not get last modified time of file {}", path, e);
-              return FileTime.from(Instant.EPOCH);
-            }
-          }).reversed());
+      List<Path> filesList = StreamSupport.stream(directoryStream.spliterator(), false)
+                                          .sorted(Comparator.comparing(path -> {
+                                            try {
+                                              return Files.getLastModifiedTime((Path) path);
+                                            } catch (IOException e) {
+                                              log.warn("Could not get last modified time of file {}", path, e);
+                                              return FileTime.from(Instant.EPOCH);
+                                            }
+                                          }).reversed())
+                                          .toList();
 
-      List<Path> filesList = filesStream.collect(Collectors.toList());
       int numPages = filesList.size() / pageSize;
 
-      List<CompletableFuture<ReplayBean>> replayFutures = filesList.stream()
-          .skip(skippedReplays)
-          .limit(pageSize)
-          .map(this::tryLoadingLocalReplay)
-          .filter(e -> !e.isCompletedExceptionally())
-          .collect(Collectors.toList());
+      List<CompletableFuture<Replay>> replayFutures = filesList.stream()
+                                                               .skip(skippedReplays)
+                                                               .limit(pageSize)
+                                                               .map(this::tryLoadingLocalReplay)
+                                                               .filter(e -> !e.isCompletedExceptionally())
+                                                               .toList();
 
       return Mono.fromFuture(CompletableFuture.allOf(replayFutures.toArray(new CompletableFuture[0]))
-          .thenApply(ignoredVoid ->
-              replayFutures.stream()
-                  .map(CompletableFuture::join)
-                  .filter(Objects::nonNull)
-                  .collect(Collectors.toList()))
-      ).zipWith(Mono.just(numPages)).toFuture();
+                                              .thenApply(_ -> replayFutures.stream()
+                                                                           .map(CompletableFuture::join)
+                                                                           .filter(Objects::nonNull)
+                                                                           .collect(Collectors.toList())))
+                 .zipWith(Mono.just(numPages));
     }
   }
 
-
-  private CompletableFuture<ReplayBean> tryLoadingLocalReplay(Path replayFile) {
+  private CompletableFuture<Replay> tryLoadingLocalReplay(Path replayFile) {
     try {
+      final Replay cachedReplay = this.replayCache.getIfPresent(replayFile);
+      if (cachedReplay != null) {
+        return CompletableFuture.completedFuture(cachedReplay);
+      }
+
       ReplayDataParser replayData = replayFileReader.parseReplay(replayFile);
       ReplayMetadata replayMetadata = replayData.getMetadata();
 
-      CompletableFuture<FeaturedModBean> featuredModFuture = modService.getFeaturedMod(replayMetadata.getFeaturedMod());
-      CompletableFuture<Optional<MapVersionBean>> mapVersionFuture = mapService.findByMapFolderName(replayMetadata.getMapname());
+      CompletableFuture<FeaturedMod> featuredModFuture = featuredModService.getFeaturedMod(
+          replayMetadata.getFeaturedMod()).toFuture();
+      CompletableFuture<MapVersion> mapVersionFuture = mapService.findByMapFolderName(replayMetadata.getMapname())
+                                                                 .toFuture();
 
-      return CompletableFuture.allOf(featuredModFuture, mapVersionFuture).thenApply(ignoredVoid -> {
-        MapVersionBean mapVersion = mapVersionFuture.join().orElse(null);
-        FeaturedModBean featuredMod = featuredModFuture.join();
+      return CompletableFuture.allOf(featuredModFuture, mapVersionFuture).thenApply(_ -> {
+        MapVersion mapVersion = mapVersionFuture.join();
+        FeaturedMod featuredMod = featuredModFuture.join();
         if (mapVersion == null) {
           log.warn("Could not find map for replay file `{}`", replayFile);
         }
-        return replayMapper.map(replayData, replayFile, featuredMod, mapVersion);
+
+        final Replay replay = replayMapper.map(replayData, replayFile, featuredMod, mapVersion);
+        this.replayCache.put(replayFile, replay);
+        return replay;
       }).exceptionally(throwable -> {
         log.warn("Could not read replay file `{}`", replayFile, throwable);
         moveCorruptedReplayFile(replayFile);
@@ -210,7 +232,7 @@ public class ReplayService {
   }
 
   private void moveCorruptedReplayFile(Path replayFile) {
-    Path corruptedReplaysDirectory = preferencesService.getPreferences().getData().getCorruptedReplaysDirectory();
+    Path corruptedReplaysDirectory = dataPrefs.getCorruptedReplaysDirectory();
     try {
       Files.createDirectories(corruptedReplaysDirectory);
     } catch (IOException e) {
@@ -229,12 +251,11 @@ public class ReplayService {
       return;
     }
 
-    notificationService.addNotification(new PersistentNotification(
-        i18n.get("corruptedReplayFiles.notification"), WARN,
-        singletonList(
-            new Action(i18n.get("corruptedReplayFiles.show"), event -> platformService.reveal(replayFile))
-        )
-    ));
+    notificationService.addNotification(new PersistentNotification(i18n.get("corruptedReplayFiles.notification"), WARN,
+                                                                   singletonList(
+                                                                       new Action(i18n.get("corruptedReplayFiles.show"),
+                                                                                  () -> platformService.reveal(
+                                                                                      replayFile)))));
   }
 
   public boolean deleteReplayFile(Path replayFile) {
@@ -248,16 +269,17 @@ public class ReplayService {
     return false;
   }
 
-  public void runReplay(ReplayBean item) {
-    if (item.getReplayFile() != null) {
+  public void runReplay(Replay item) {
+    if (item.replayFile() != null) {
       try {
-        runReplayFile(item.getReplayFile());
+        runReplayFile(item.replayFile());
+        replayHistory.getWatchedReplays().add(item.id());
       } catch (Exception e) {
-        log.error("Could not read replay file `{}`", item.getReplayFile(), e);
+        log.error("Could not read replay file `{}`", item.replayFile(), e);
         notificationService.addImmediateErrorNotification(e, "replay.couldNotParse");
       }
     } else {
-      runOnlineReplay(item.getId());
+      runOnlineReplay(item.id());
     }
   }
 
@@ -267,7 +289,7 @@ public class ReplayService {
   }
 
   public CompletableFuture<Path> downloadReplay(int id) {
-    ReplayDownloadTask task = applicationContext.getBean(ReplayDownloadTask.class);
+    ReplayDownloadTask task = replayDownloadTaskFactory.getObject();
     task.setReplayId(id);
     return taskService.submitTask(task).getFuture();
   }
@@ -275,36 +297,28 @@ public class ReplayService {
   /**
    * Reads the specified replay file in order to add more information to the specified replay instance.
    */
-  public void enrich(ReplayBean replay, Path path) {
-    try {
-      ReplayDataParser replayDataParser = replayFileReader.parseReplay(path);
-      replay.getChatMessages().setAll(replayDataParser.getChatMessages().stream()
-          .map(chatMessage -> new ChatMessage(chatMessage.getTime(), chatMessage.getSender(), chatMessage.getMessage()))
-          .collect(Collectors.toList())
-      );
-      replay.getGameOptions().setAll(replayDataParser.getGameOptions().stream()
-          .map(gameOption -> new GameOption(gameOption.getKey(), gameOption.getValue()))
-          .collect(Collectors.toList())
-      );
-      replay.getGameOptions().add(0, new GameOption("FAF Version", String.valueOf(parseSupComVersion(replayDataParser))));
-      if (replay.getMapVersion() == null) {
-        MapVersionBean mapVersion = new MapVersionBean();
-        MapBean map = new MapBean();
-        mapVersion.setMap(map);
-        String mapFolderName = parseMapFolderName(replayDataParser);
-        mapVersion.setFolderName(mapFolderName);
-        mapVersion.setMap(map);
-        map.setDisplayName(mapFolderName);
-        replay.setMapVersion(mapVersion);
-      }
-    } catch (Exception e) {
-      log.error("Could not read replay file `{}`", path, e);
-    }
+  public ReplayDetails loadReplayDetails(Path path) throws IOException {
+    ReplayDataParser replayDataParser = replayFileReader.parseReplay(path);
+    List<ChatMessage> chatMessages = replayDataParser.getChatMessages().stream().map(replayMapper::map).toList();
+    List<GameOption> gameOptions = Stream.concat(
+        Stream.of(new GameOption("FAF Version", String.valueOf(parseSupComVersion(replayDataParser)))),
+        replayDataParser.getGameOptions()
+                        .stream()
+                        .map(replayMapper::map)
+                        .sorted(Comparator.comparing(GameOption::key, String.CASE_INSENSITIVE_ORDER))).toList();
+
+    String mapFolderName = parseMapFolderName(replayDataParser);
+    Map map = new Map(null, mapFolderName, 0, null, false, null, null);
+    MapVersion mapVersion = new MapVersion(null, mapFolderName, 0, null, 0, null, null, false, false, null, null, null,
+                                           map, null);
+
+    return new ReplayDetails(chatMessages, gameOptions, mapVersion);
   }
 
-  public CompletableFuture<Integer> getFileSize(ReplayBean replay) {
+  public CompletableFuture<Integer> getFileSize(Replay replay) {
     try {
-      return fileSizeReader.getFileSize(new URL(String.format(clientProperties.getVault().getReplayDownloadUrlFormat(), replay.getId())));
+      return fileSizeReader.getFileSize(
+          new URL(String.format(clientProperties.getVault().getReplayDownloadUrlFormat(), replay.id())));
     } catch (MalformedURLException e) {
       log.error("Could not open connection to download replay", e);
       return CompletableFuture.completedFuture(-1);
@@ -312,14 +326,17 @@ public class ReplayService {
   }
 
 
-  public boolean replayChangedRating(ReplayBean replay) {
-    return replay.getTeamPlayerStats().values().stream()
-        .flatMap(Collection::stream)
-        .flatMap(playerStats -> playerStats.getLeaderboardRatingJournals().stream())
-        .anyMatch(ratingJournal -> ratingJournal.getMeanAfter() != null && ratingJournal.getDeviationAfter() != null);
+  public boolean replayChangedRating(Replay replay) {
+    return replay.teamPlayerStats()
+                 .values()
+                 .stream()
+                 .flatMap(Collection::stream)
+                 .flatMap(playerStats -> playerStats.leaderboardRatingJournals().stream())
+                 .anyMatch(
+                     ratingJournal -> ratingJournal.meanAfter() != null && ratingJournal.deviationAfter() != null);
   }
 
-  public void runReplayFile(Path path) throws IOException, CompressorException {
+  public void runReplayFile(Path path) throws IOException {
     log.info("Starting replay file: `{}`", path.toAbsolutePath());
 
     String fileName = path.getFileName().toString();
@@ -331,49 +348,49 @@ public class ReplayService {
   }
 
   private void runOnlineReplay(int replayId) {
-    downloadReplay(replayId)
-        .thenAccept((path) -> {
-          try {
-            runReplayFile(path);
-          } catch (IOException | CompressorException e) {
-            throw new RuntimeException(e);
-          }
-        })
-        .exceptionally(throwable -> {
-          if (throwable.getCause() instanceof FileNotFoundException) {
-            log.warn("Replay not available on server yet", throwable);
-            notificationService.addImmediateWarnNotification("replayNotAvailable", replayId);
-          } else {
-            log.error("Replay could not be started", throwable);
-            notificationService.addImmediateErrorNotification(throwable, "replayCouldNotBeStarted", replayId);
-          }
-          return null;
-        });
+    downloadReplay(replayId).thenAccept((path) -> {
+      try {
+        runReplayFile(path);
+        replayHistory.getWatchedReplays().add(replayId);
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    }).exceptionally(throwable -> {
+      if (throwable.getCause() instanceof FileNotFoundException) {
+        log.warn("Replay not available on server yet", throwable);
+        notificationService.addImmediateWarnNotification("replayNotAvailable", replayId);
+      } else {
+        log.error("Replay could not be started", throwable);
+        notificationService.addImmediateErrorNotification(throwable, "replayCouldNotBeStarted", replayId);
+      }
+      return null;
+    });
   }
 
-  private void runFafReplayFile(Path path) throws IOException, CompressorException {
+  private void runFafReplayFile(Path path) throws IOException {
     ReplayDataParser replayData = replayFileReader.parseReplay(path);
-    byte[] rawReplayBytes = replayData.getData();
+    byte[] rawReplayBytes = replayData.getRawReplayData();
 
-    Path tempSupComReplayFile = preferencesService.getPreferences().getData().getCacheDirectory().resolve(TEMP_SCFA_REPLAY_FILE_NAME);
+    Path tempSupComReplayFile = dataPrefs.getCacheDirectory().resolve(TEMP_SCFA_REPLAY_FILE_NAME);
 
     Files.createDirectories(tempSupComReplayFile.getParent());
-    Files.copy(new ByteArrayInputStream(rawReplayBytes), tempSupComReplayFile, StandardCopyOption.REPLACE_EXISTING);
+    Files.copy(new ByteArrayInputStream(rawReplayBytes), tempSupComReplayFile,
+               StandardCopyOption.REPLACE_EXISTING);
 
     ReplayMetadata replayMetadata = replayData.getMetadata();
     String gameType = replayMetadata.getFeaturedMod();
     Integer replayId = replayMetadata.getUid();
-    Map<String, Integer> modVersions = replayMetadata.getFeaturedModVersions();
+    java.util.Map<String, Integer> modVersions = replayMetadata.getFeaturedModVersions();
     String mapName = parseMapFolderName(replayData);
 
     Set<String> simMods = parseModUIDs(replayData);
 
     Integer version = parseSupComVersion(replayData);
 
-    gameService.runWithReplay(tempSupComReplayFile, replayId, gameType, version, modVersions, simMods, mapName);
+    replayRunner.runWithReplay(tempSupComReplayFile, replayId, gameType, version, modVersions, simMods, mapName);
   }
 
-  private void runSupComReplayFile(Path path) throws IOException, CompressorException {
+  private void runSupComReplayFile(Path path) throws IOException {
     ReplayDataParser replayData = replayFileReader.parseReplay(path);
 
     Integer version = parseSupComVersion(replayData);
@@ -382,75 +399,99 @@ public class ReplayService {
     String gameType = guessModByFileName(fileName);
     Set<String> simMods = parseModUIDs(replayData);
 
-    gameService.runWithReplay(path, null, gameType, version, emptyMap(), simMods, mapName);
+    replayRunner.runWithReplay(path, null, gameType, version, java.util.Map.of(), simMods, mapName);
   }
 
   @Cacheable(value = CacheNames.REPLAYS_RECENT, sync = true)
-  public CompletableFuture<Tuple2<List<ReplayBean>, Integer>> getNewestReplaysWithPageCount(int count, int page) {
-    ElideNavigatorOnCollection<Game> navigator = ElideNavigator.of(Game.class).collection()
-        .setFilter(qBuilder().instant("endTime").after(Instant.now().minus(1, ChronoUnit.DAYS).truncatedTo(ChronoUnit.DAYS), false))
-        .addSortingRule("endTime", false);
-    return getReplayPage(navigator, count, page);
+  public Mono<Tuple2<List<Replay>, Integer>> getNewestReplaysWithPageCount(int count, int page) {
+    ElideNavigatorOnCollection<Game> navigator = ElideNavigator.of(Game.class)
+                                                               .collection()
+                                                               .setFilter(qBuilder().instant("endTime")
+                                                                                    .after(Instant.now()
+                                                                                                  .minus(1,
+                                                                                                         ChronoUnit.DAYS)
+                                                                                                  .truncatedTo(
+                                                                                                      ChronoUnit.DAYS),
+                                                                                           false))
+                                                               .addSortingRule("endTime", false);
+    return getReplayPage(navigator, count, page).cache();
   }
 
   @Cacheable(value = CacheNames.REPLAYS_SEARCH, sync = true)
-  public CompletableFuture<Tuple2<List<ReplayBean>, Integer>> getReplaysForPlayerWithPageCount(int playerId, int count, int page) {
-    ElideNavigatorOnCollection<Game> navigator = ElideNavigator.of(Game.class).collection()
-        .setFilter(qBuilder().intNum("playerStats.player.id").eq(playerId).and().instant("endTime").after(Instant.now().minus(365, ChronoUnit.DAYS).truncatedTo(ChronoUnit.DAYS), false))
-        .addSortingRule("endTime", false);
-    return getReplayPage(navigator, count, page);
+  public Mono<Tuple2<List<Replay>, Integer>> getReplaysForPlayerWithPageCount(int playerId, int count, int page) {
+    ElideNavigatorOnCollection<Game> navigator = ElideNavigator.of(Game.class)
+                                                               .collection()
+                                                               .setFilter(qBuilder().intNum("playerStats.player.id")
+                                                                                    .eq(playerId)
+                                                                                    .and()
+                                                                                    .instant("endTime")
+                                                                                    .after(Instant.now()
+                                                                                                  .minus(365,
+                                                                                                         ChronoUnit.DAYS)
+                                                                                                  .truncatedTo(
+                                                                                                      ChronoUnit.DAYS),
+                                                                                           false))
+                                                               .addSortingRule("endTime", false);
+    return getReplayPage(navigator, count, page).cache();
   }
 
   @Cacheable(value = CacheNames.REPLAYS_LIKED, sync = true)
-  public CompletableFuture<Tuple2<List<ReplayBean>, Integer>> getHighestRatedReplaysWithPageCount(int count, int page) {
-    ElideNavigatorOnCollection<GameReviewsSummary> navigator = ElideNavigator.of(GameReviewsSummary.class).collection()
-        .addSortingRule("lowerBound", false)
-        .pageSize(count)
-        .pageNumber(page);
+  public Mono<Tuple2<List<Replay>, Integer>> getHighestRatedReplaysWithPageCount(int count, int page) {
+    ElideNavigatorOnCollection<GameReviewsSummary> navigator = ElideNavigator.of(GameReviewsSummary.class)
+                                                                             .collection()
+                                                                             .addSortingRule("lowerBound", false)
+                                                                             .pageSize(count)
+                                                                             .pageNumber(page);
     return fafApiAccessor.getManyWithPageCount(navigator)
-        .map(tuple -> tuple.mapT1(mods ->
-            mods.stream().map(dto -> replayMapper.map(dto.getGame(), new CycleAvoidingMappingContext())).collect(toList())
-        ))
-        .toFuture();
+                         .map(tuple -> tuple.mapT1(mods -> mods.stream()
+                                                               .map(GameReviewsSummary::getGame)
+                                                               .map(replayMapper::map)
+                                                               .collect(toList())))
+                         .cache();
   }
 
   @Cacheable(value = CacheNames.REPLAYS_SEARCH, sync = true)
-  public CompletableFuture<Tuple2<List<ReplayBean>, Integer>> findByQueryWithPageCount(SearchConfig searchConfig, int count, int page) {
-    SortConfig sortConfig = searchConfig.getSortConfig();
-    ElideNavigatorOnCollection<Game> navigator = ElideNavigator.of(Game.class).collection()
-        .addSortingRule(sortConfig.getSortProperty(), sortConfig.getSortOrder().equals(SortOrder.ASC));
-    return getReplayPage(navigator, searchConfig.getSearchQuery(), count, page);
+  public Mono<Tuple2<List<Replay>, Integer>> findByQueryWithPageCount(SearchConfig searchConfig, int count, int page) {
+    SortConfig sortConfig = searchConfig.sortConfig();
+    ElideNavigatorOnCollection<Game> navigator = ElideNavigator.of(Game.class)
+                                                               .collection()
+                                                               .addSortingRule(sortConfig.sortProperty(),
+                                                                               sortConfig.sortOrder()
+                                                                                         .equals(SortOrder.ASC));
+    return getReplayPage(navigator, searchConfig.searchQuery(), count, page).cache();
   }
 
   @Cacheable(value = CacheNames.REPLAYS_SEARCH, sync = true)
-  public CompletableFuture<Optional<ReplayBean>> findById(int id) {
+  public Mono<Replay> findById(int id) {
     ElideNavigatorOnId<Game> navigator = ElideNavigator.of(Game.class).id(String.valueOf(id));
-    return fafApiAccessor.getOne(navigator)
-        .map(dto -> replayMapper.map(dto, new CycleAvoidingMappingContext()))
-        .toFuture()
-        .thenApply(Optional::ofNullable);
+    return fafApiAccessor.getOne(navigator).map(replayMapper::map).cache();
   }
 
   @Cacheable(value = CacheNames.REPLAYS_MINE, sync = true)
-  public CompletableFuture<Tuple2<List<ReplayBean>, Integer>> getOwnReplaysWithPageCount(int count, int page) {
-    return getReplaysForPlayerWithPageCount(userService.getUserId(), count, page);
+  public Mono<Tuple2<List<Replay>, Integer>> getOwnReplaysWithPageCount(int count, int page) {
+    return getReplaysForPlayerWithPageCount(loginService.getUserId(), count, page).cache();
   }
 
-  private CompletableFuture<Tuple2<List<ReplayBean>, Integer>> getReplayPage(ElideNavigatorOnCollection<Game> navigator, int count, int page) {
-    navigator.pageSize(count).pageNumber(page);
-    return fafApiAccessor.getManyWithPageCount(navigator)
-        .map(tuple -> tuple.mapT1(mods ->
-            mods.stream().map(dto -> replayMapper.map(dto, new CycleAvoidingMappingContext())).collect(toList())
-        ))
-        .toFuture();
+  private Mono<Tuple2<List<Replay>, Integer>> getReplayPage(ElideNavigatorOnCollection<Game> navigator, int count,
+                                                            int page) {
+    return getReplayPage(navigator, "", count, page);
   }
 
-  private CompletableFuture<Tuple2<List<ReplayBean>, Integer>> getReplayPage(ElideNavigatorOnCollection<Game> navigator, String customFilter, int count, int page) {
+  private Mono<Tuple2<List<Replay>, Integer>> getReplayPage(ElideNavigatorOnCollection<Game> navigator,
+                                                            String customFilter, int count, int page) {
     navigator.pageNumber(page).pageSize(count);
     return fafApiAccessor.getManyWithPageCount(navigator, customFilter)
-        .map(tuple -> tuple.mapT1(mods ->
-            mods.stream().map(dto -> replayMapper.map(dto, new CycleAvoidingMappingContext())).collect(toList())
-        ))
-        .toFuture();
+                         .map(tuple -> tuple.mapT1(mods -> mods.stream().map(replayMapper::map).collect(toList())));
+  }
+
+  public Flux<LeagueScoreJournal> getLeagueScoreJournalForReplay(Replay replay) {
+    ElideNavigatorOnCollection<com.faforever.commons.api.dto.LeagueScoreJournal> navigator = ElideNavigator.of(
+                                                                                                               com.faforever.commons.api.dto.LeagueScoreJournal.class)
+                                                                                                           .collection()
+                                                                                                           .setFilter(
+                                                                                                               qBuilder().intNum(
+                                                                                                                             "gameId")
+                                                                                                                         .eq(replay.id()));
+    return fafApiAccessor.getAll(navigator).map(replayMapper::map).cache();
   }
 }

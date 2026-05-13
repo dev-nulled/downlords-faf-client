@@ -1,49 +1,54 @@
 package com.faforever.client.update;
 
 import com.faforever.client.fx.PlatformService;
+import com.faforever.client.fx.SimpleChangeListener;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.notification.Action;
 import com.faforever.client.notification.NotificationService;
 import com.faforever.client.notification.PersistentNotification;
-import com.faforever.client.preferences.PreferencesService;
+import com.faforever.client.os.OperatingSystem;
+import com.faforever.client.preferences.Preferences;
 import com.faforever.client.task.TaskService;
-import com.faforever.client.user.event.LoggedInEvent;
+import com.faforever.client.user.LoginService;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.eventbus.EventBus;
-import com.google.common.eventbus.Subscribe;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.InitializingBean;
-import org.springframework.context.ApplicationContext;
+import org.springframework.beans.factory.ObjectFactory;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 import static com.faforever.client.notification.Severity.INFO;
 import static com.faforever.client.notification.Severity.WARN;
 import static com.faforever.commons.io.Bytes.formatSize;
-import static java.util.Arrays.asList;
 import static java.util.Collections.singletonList;
 
 
 @Lazy
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class ClientUpdateService implements InitializingBean {
 
+  private final OperatingSystem operatingSystem;
   private final TaskService taskService;
   private final NotificationService notificationService;
   private final I18n i18n;
   private final PlatformService platformService;
-  private final ApplicationContext applicationContext;
-  private final PreferencesService preferencesService;
-  private final EventBus eventBus;
+  private final LoginService loginService;
+  private final Preferences preferences;
+  private final ObjectFactory<CheckForBetaUpdateTask> checkForBetaUpdateTaskFactory;
+  private final ObjectFactory<CheckForUpdateTask> checkForUpdateTaskFactory;
+  private final ObjectFactory<DownloadUpdateTask> downloadUpdateTaskFactory;
 
   private CompletableFuture<UpdateInfo> updateInfoFuture;
-  private CompletableFuture<UpdateInfo> updateInfoBetaFuture;
 
   public static class InstallerExecutionException extends UncheckedIOException {
     public InstallerExecutionException(String message, IOException cause) {
@@ -51,34 +56,17 @@ public class ClientUpdateService implements InitializingBean {
     }
   }
 
-  public ClientUpdateService(
-      TaskService taskService,
-      NotificationService notificationService,
-      I18n i18n,
-      PlatformService platformService,
-      ApplicationContext applicationContext,
-      PreferencesService preferencesService,
-      EventBus eventBus) {
-    this.taskService = taskService;
-    this.notificationService = notificationService;
-    this.i18n = i18n;
-    this.platformService = platformService;
-    this.applicationContext = applicationContext;
-    this.preferencesService = preferencesService;
-    this.eventBus = eventBus;
-
-    log.info("Current version: {}", Version.getCurrentVersion());
-  }
-
   @Override
   public void afterPropertiesSet() {
-    eventBus.register(this);
+    log.info("Current version: {}", Version.getCurrentVersion());
 
-    CheckForUpdateTask task = applicationContext.getBean(CheckForUpdateTask.class);
-    this.updateInfoFuture = taskService.submitTask(task).getFuture();
+    loginService.loggedInProperty().addListener((SimpleChangeListener<Boolean>) newValue -> {
+      if (newValue) {
+        checkForUpdateInBackground();
+      }
+    });
 
-    CheckForBetaUpdateTask betaTask = applicationContext.getBean(CheckForBetaUpdateTask.class);
-    this.updateInfoBetaFuture = taskService.submitTask(betaTask).getFuture();
+    this.updateInfoFuture = taskService.submitTask(checkForUpdateTaskFactory.getObject()).getFuture();
   }
 
   /**
@@ -89,16 +77,11 @@ public class ClientUpdateService implements InitializingBean {
   }
 
   public void checkForUpdateInBackground() {
-    if (preferencesService.getPreferences().getPreReleaseCheckEnabled()) {
+    if (preferences.isPreReleaseCheckEnabled()) {
       checkForBetaUpdateInBackground();
     } else {
       checkForRegularUpdateInBackground();
     }
-  }
-
-  @Subscribe
-  public void onLoggedInEvent(LoggedInEvent loggedInEvent) {
-    checkForUpdateInBackground();
   }
 
   /**
@@ -112,7 +95,7 @@ public class ClientUpdateService implements InitializingBean {
    * Creates an update notification with actions to download and install latest beta release
    */
   private void checkForBetaUpdateInBackground() {
-    notificationOnUpdate(updateInfoBetaFuture);
+    notificationOnUpdate(taskService.submitTask(checkForBetaUpdateTaskFactory.getObject()).getFuture());
   }
 
   private void notificationOnUpdate(CompletableFuture<UpdateInfo> updateInfoSupplier) {
@@ -121,17 +104,26 @@ public class ClientUpdateService implements InitializingBean {
         return;
       }
 
-      if (!Version.shouldUpdate(Version.getCurrentVersion(), updateInfo.getName())) {
+      if (!Version.shouldUpdate(Version.getCurrentVersion(), updateInfo.name())) {
         return;
       }
 
+      List<Action> actions = new ArrayList<>();
+
+      if (operatingSystem.supportsUpdateInstall()) {
+        actions.add(new Action(i18n.get("clientUpdateAvailable.downloadAndInstall"),
+                               () -> downloadAndInstallInBackground(updateInfo)));
+      }
+
+      actions.add(new Action(i18n.get("clientUpdateAvailable.releaseNotes"), Action.Type.OK_STAY,
+                             () -> platformService.showDocument(updateInfo.releaseNotesUrl().toExternalForm())
+      ));
+
       notificationService.addNotification(new PersistentNotification(
-          i18n.get(updateInfo.isPrerelease() ? "clientUpdateAvailable.prereleaseNotification" : "clientUpdateAvailable.notification", updateInfo.getName(), formatSize(updateInfo.getSize(), i18n.getUserSpecificLocale())),
-          INFO, asList(
-          new Action(i18n.get("clientUpdateAvailable.downloadAndInstall"), event -> downloadAndInstallInBackground(updateInfo)),
-          new Action(i18n.get("clientUpdateAvailable.releaseNotes"), Action.Type.OK_STAY,
-              event -> platformService.showDocument(updateInfo.getReleaseNotesUrl().toExternalForm())
-          )))
+          i18n.get(
+              updateInfo.prerelease() ? "clientUpdateAvailable.prereleaseNotification" : "clientUpdateAvailable.notification",
+              updateInfo.name(), formatSize(updateInfo.size(), i18n.getUserSpecificLocale())),
+          INFO, actions)
       );
     }).exceptionally(throwable -> {
       log.error("Client update check failed", throwable);
@@ -156,7 +148,7 @@ public class ClientUpdateService implements InitializingBean {
   }
 
   public DownloadUpdateTask downloadAndInstallInBackground(UpdateInfo updateInfo) {
-    DownloadUpdateTask task = applicationContext.getBean(DownloadUpdateTask.class);
+    DownloadUpdateTask task = downloadUpdateTaskFactory.getObject();
     task.setUpdateInfo(updateInfo);
 
     taskService.submitTask(task).getFuture()
@@ -165,7 +157,8 @@ public class ClientUpdateService implements InitializingBean {
           log.error("Error while downloading client update", throwable);
           notificationService.addNotification(
               new PersistentNotification(i18n.get("clientUpdateDownloadFailed.notification"), WARN, singletonList(
-                  new Action(i18n.get("clientUpdateDownloadFailed.retry"), event -> downloadAndInstallInBackground(updateInfo))
+                  new Action(i18n.get("clientUpdateDownloadFailed.retry"),
+                             () -> downloadAndInstallInBackground(updateInfo))
               ))
           );
           return null;

@@ -1,13 +1,12 @@
 package com.faforever.client.fx;
 
-import com.faforever.client.test.UITest;
+import com.faforever.client.test.PlatformTest;
 import javafx.scene.control.TextField;
 import javafx.scene.paint.Color;
 import org.junit.jupiter.api.Test;
 import org.testfx.util.WaitForAsyncUtils;
 
 import java.nio.file.Path;
-import java.nio.file.Paths;
 
 import static com.faforever.client.fx.JavaFxUtil.PATH_STRING_CONVERTER;
 import static com.faforever.client.test.IsUtilityClassMatcher.isUtilityClass;
@@ -15,7 +14,7 @@ import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
 
-public class JavaFxUtilTest extends UITest {
+public class JavaFxUtilTest extends PlatformTest {
 
   @Test
   public void testPathToStringConverter() throws Exception {
@@ -37,12 +36,6 @@ public class JavaFxUtilTest extends UITest {
   @Test
   public void testIsUtilityClass() throws Exception {
     assertThat(JavaFxUtil.class, isUtilityClass());
-  }
-
-  @Test
-  public void testFixTooltipDuration() throws Exception {
-    JavaFxUtil.fixTooltipDuration();
-    // Smoke test, no assertions
   }
 
   @Test

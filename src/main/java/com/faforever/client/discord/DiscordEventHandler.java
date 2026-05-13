@@ -1,9 +1,12 @@
 package com.faforever.client.discord;
 
-
+import com.faforever.client.domain.server.GameInfo;
+import com.faforever.client.game.GameRunner;
+import com.faforever.client.game.GameService;
 import com.faforever.client.notification.NotificationService;
+import com.faforever.client.preferences.Preferences;
+import com.faforever.client.replay.ReplayRunner;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.eventbus.EventBus;
 import lombok.extern.slf4j.Slf4j;
 import net.arikia.dev.drpc.DiscordEventHandlers;
 import net.arikia.dev.drpc.DiscordRPC;
@@ -14,14 +17,23 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @Component
 public class DiscordEventHandler extends DiscordEventHandlers {
-  private final EventBus eventBus;
   private final NotificationService notificationService;
+  private final GameRunner gameRunner;
+  private final ReplayRunner replayRunner;
+  private final GameService gameService;
   private final ObjectMapper objectMapper;
+  private final Preferences preferences;
 
-  public DiscordEventHandler(EventBus eventBus, NotificationService notificationService, ObjectMapper objectMapper) {
-    this.eventBus = eventBus;
+  public DiscordEventHandler(NotificationService notificationService,
+                             GameRunner gameRunner, ReplayRunner replayRunner, GameService gameService,
+                             ObjectMapper objectMapper,
+                             Preferences preferences) {
     this.notificationService = notificationService;
+    this.gameRunner = gameRunner;
+    this.replayRunner = replayRunner;
+    this.gameService = gameService;
     this.objectMapper = objectMapper;
+    this.preferences = preferences;
     ready = this::onDiscordReady;
     disconnected = this::onDisconnected;
     errored = this::onError;
@@ -35,9 +47,16 @@ public class DiscordEventHandler extends DiscordEventHandlers {
   }
 
   private void onJoinGame(String joinSecret) {
+    boolean disallowJoinsViaDiscord = preferences.isDisallowJoinsViaDiscord();
+    if (disallowJoinsViaDiscord) {
+      log.info("Join was requested via Discord but was rejected due to it being disabled in settings");
+      return;
+    }
+
     try {
       DiscordJoinSecret discordJoinSecret = objectMapper.readValue(joinSecret, DiscordJoinSecret.class);
-      eventBus.post(new DiscordJoinEvent(discordJoinSecret.getGameId()));
+      GameInfo gameInfo = gameService.getByUid(discordJoinSecret.gameId()).orElseThrow();
+      gameRunner.join(gameInfo);
     } catch (Exception e) {
       log.error("Could not join game from discord rich presence", e);
       notificationService.addImmediateErrorNotification(e, "discord.couldNotOpen");
@@ -47,7 +66,8 @@ public class DiscordEventHandler extends DiscordEventHandlers {
   private void onSpectate(String spectateSecret) {
     try {
       DiscordSpectateSecret discordSpectateSecret = objectMapper.readValue(spectateSecret, DiscordSpectateSecret.class);
-      eventBus.post(new DiscordSpectateEvent(discordSpectateSecret.getGameId()));
+      GameInfo game = gameService.getByUid(discordSpectateSecret.gameId()).orElseThrow();
+      replayRunner.runWithLiveReplay(game);
     } catch (Exception e) {
       log.error("Could not join game from discord rich presence", e);
       notificationService.addImmediateErrorNotification(e, "discord.couldNotOpen");

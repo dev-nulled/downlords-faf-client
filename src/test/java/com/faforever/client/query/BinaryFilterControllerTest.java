@@ -1,11 +1,13 @@
 package com.faforever.client.query;
 
-import com.faforever.client.test.UITest;
+import com.faforever.client.test.PlatformTest;
 import com.github.rutledgepaulv.qbuilders.builders.QBuilder;
 import com.github.rutledgepaulv.qbuilders.conditions.Condition;
 import com.github.rutledgepaulv.qbuilders.properties.concrete.StringProperty;
 import com.github.rutledgepaulv.qbuilders.visitors.RSQLVisitor;
 import javafx.beans.InvalidationListener;
+import javafx.beans.property.BooleanProperty;
+import javafx.beans.property.SimpleBooleanProperty;
 import javafx.scene.layout.GridPane;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -16,12 +18,13 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
-public class BinaryFilterControllerTest extends UITest {
+public class BinaryFilterControllerTest extends PlatformTest {
 
   private final String propertyName = "testProp";
   private final String firstValue = "True";
@@ -88,7 +91,8 @@ public class BinaryFilterControllerTest extends UITest {
     instance.secondCheckBox.setSelected(false);
 
     assertTrue(instance.getCondition().isPresent());
-    assertEquals(instance.getCondition().get().get(0).query(new RSQLVisitor()), property.in(firstValue).query(new RSQLVisitor()));
+    assertEquals(instance.getCondition().get().getFirst().query(new RSQLVisitor()),
+                 property.in(firstValue).query(new RSQLVisitor()));
 
     property = new QBuilder<>().string(propertyName);
     instance.secondCheckBox.setSelected(true);
@@ -97,6 +101,24 @@ public class BinaryFilterControllerTest extends UITest {
     Optional<List<Condition>> result = instance.getCondition();
 
     assertTrue(result.isPresent());
-    assertEquals(result.get().get(0).query(new RSQLVisitor()), property.in(secondValue).query(new RSQLVisitor()));
+    assertEquals(result.get().getFirst().query(new RSQLVisitor()), property.in(secondValue).query(new RSQLVisitor()));
+  }
+
+  @Test
+  public void testPersistentPropertiesGetValue() {
+    BooleanProperty firstProperty = new SimpleBooleanProperty();
+    BooleanProperty secondProperty = new SimpleBooleanProperty();
+    firstProperty.bind(instance.firstSelectedProperty());
+    secondProperty.bind(instance.secondSelectedProperty());
+
+    instance.firstCheckBox.setSelected(true);
+    instance.secondCheckBox.setSelected(true);
+    assertTrue(firstProperty.get());
+    assertTrue(secondProperty.get());
+
+    instance.firstCheckBox.setSelected(false);
+    instance.secondCheckBox.setSelected(false);
+    assertFalse(firstProperty.get());
+    assertFalse(secondProperty.get());
   }
 }

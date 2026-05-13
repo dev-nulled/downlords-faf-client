@@ -1,7 +1,6 @@
 package com.faforever.client.map.generator;
 
 import lombok.Builder;
-import lombok.Value;
 import org.apache.maven.artifact.versioning.ComparableVersion;
 
 import java.nio.file.Path;
@@ -10,34 +9,33 @@ import java.util.Arrays;
 import java.util.List;
 
 @Builder
-@Value
-public class GeneratorCommand {
-
-  Path generatorExecutableFile;
-  ComparableVersion version;
-  String mapName;
-  GeneratorOptions generatorOptions;
-  Integer spawnCount;
-  Integer numTeams;
-  Integer mapSize;
-  String seed;
-  Float landDensity;
-  Float plateauDensity;
-  Float mountainDensity;
-  Float rampDensity;
-  Float mexDensity;
-  Float reclaimDensity;
-  GenerationType generationType;
-  String style;
-  String biome;
-  String commandLineArgs;
+public record GeneratorCommand(
+    Path javaExecutable,
+    Path generatorExecutableFile,
+    ComparableVersion version,
+    String mapName,
+    GeneratorOptions generatorOptions,
+    Integer spawnCount,
+    Integer numTeams,
+    Integer mapSize,
+    String seed,
+    GenerationType generationType,
+    String symmetry,
+    String style,
+    String terrainStyle,
+    String textureStyle,
+    String resourceStyle,
+    String propStyle, Float reclaimDensity, Float resourceDensity,
+    String commandLineArgs
+) {
 
   public List<String> getCommand() {
-    String javaPath = Path.of(System.getProperty("java.home")).resolve("bin").resolve(org.bridj.Platform.isWindows() ? "java.exe" : "java").toAbsolutePath().toString();
+    String javaPath = javaExecutable.toAbsolutePath().toString();
     if (generatorExecutableFile == null) {
       throw new IllegalStateException("Map generator path not set");
     }
-    List<String> command = new ArrayList<>(List.of(javaPath, "-jar", generatorExecutableFile.toAbsolutePath().toString()));
+    List<String> command = new ArrayList<>(
+        List.of(javaPath, "-jar", generatorExecutableFile.toAbsolutePath().toString()));
     if (version.compareTo(new ComparableVersion("1")) >= 0) {
       if (commandLineArgs != null) {
         command.addAll(Arrays.asList(commandLineArgs.split(" ")));
@@ -53,7 +51,9 @@ public class GeneratorCommand {
         throw new IllegalStateException("Map generation parameters not properly set");
       }
 
-      command.addAll(Arrays.asList("--map-size", mapSize.toString(), "--spawn-count", spawnCount.toString(), "--num-teams", numTeams.toString()));
+      command.addAll(
+          Arrays.asList("--map-size", mapSize.toString(), "--spawn-count", spawnCount.toString(), "--num-teams",
+                        numTeams.toString()));
 
       if (generationType != null && generationType != GenerationType.CASUAL) {
         switch (generationType) {
@@ -64,43 +64,47 @@ public class GeneratorCommand {
         return command;
       }
 
-      if (style != null && !style.equals(MapGeneratorService.GENERATOR_RANDOM_STYLE)) {
+      if (seed != null) {
+        command.addAll(Arrays.asList("--seed", seed));
+      }
+
+      if (symmetry != null) {
+        command.addAll(Arrays.asList("--terrain-symmetry", symmetry));
+      }
+
+      if (style != null) {
         command.addAll(Arrays.asList("--style", style));
         return command;
       }
 
-      if (landDensity != null) {
-        command.addAll(Arrays.asList("--land-density", landDensity.toString()));
+      if (terrainStyle != null) {
+        command.addAll(Arrays.asList("--terrain-style", terrainStyle));
       }
 
-      if (mountainDensity != null) {
-        command.addAll(Arrays.asList("--mountain-density", mountainDensity.toString()));
+      if (textureStyle != null) {
+        command.addAll(Arrays.asList("--texture-style", textureStyle));
       }
 
-      if (plateauDensity != null) {
-        command.addAll(Arrays.asList("--plateau-density", plateauDensity.toString()));
+      if (resourceStyle != null) {
+        command.addAll(Arrays.asList("--resource-style", resourceStyle));
       }
 
-      if (rampDensity != null) {
-        command.addAll(Arrays.asList("--ramp-density", rampDensity.toString()));
+      if (propStyle != null) {
+        command.addAll(Arrays.asList("--prop-style", propStyle));
       }
 
-      if (mexDensity != null) {
-        command.addAll(Arrays.asList("--mex-density", mexDensity.toString()));
+      if (resourceDensity != null) {
+        command.addAll(Arrays.asList("--resource-density", String.valueOf(resourceDensity)));
       }
 
       if (reclaimDensity != null) {
-        command.addAll(Arrays.asList("--reclaim-density", reclaimDensity.toString()));
-      }
-
-      if (biome != null) {
-        command.addAll(Arrays.asList("--biome", biome));
+        command.addAll(Arrays.asList("--reclaim-density", String.valueOf(reclaimDensity)));
       }
 
       return command;
     } else {
       return Arrays.asList(javaPath, "-jar", generatorExecutableFile.toAbsolutePath().toString(), ".",
-          String.valueOf(seed), version.toString(), mapName);
+                           String.valueOf(seed), version.toString(), mapName);
     }
   }
 }

@@ -74,6 +74,7 @@ public class ClientConfigurationBuilder {
       return new OAuthEndpointBuilder();
     }
 
+    @Override
     public OAuthEndpointBuilder defaultValues() {
       return this;
     }
@@ -88,6 +89,7 @@ public class ClientConfigurationBuilder {
       return this;
     }
 
+    @Override
     public OAuthEndpoint get() {
       return oAuthEndpoint;
     }
@@ -130,10 +132,10 @@ public class ClientConfigurationBuilder {
 
     public ServerEndpointsBuilder defaultValues() {
       lobby("lobby", 8001);
-      irc("irc", 6667);
-      liveReplay("liveReplay", 15000);
+      chat("irc", 6667);
       api("api");
       oauth("oauth");
+      name("test");
       return this;
     }
 
@@ -147,13 +149,8 @@ public class ClientConfigurationBuilder {
       return this;
     }
 
-    public ServerEndpointsBuilder irc(String host, int port) {
-      serverEndpoints.setIrc(SocketEndpointBuilder.create().host(host).port(port).get());
-      return this;
-    }
-
-    public ServerEndpointsBuilder liveReplay(String host, int port) {
-      serverEndpoints.setLiveReplay(SocketEndpointBuilder.create().host(host).port(port).get());
+    public ServerEndpointsBuilder chat(String host, int port) {
+      serverEndpoints.setChat(SocketEndpointBuilder.create().host(host).port(port).get());
       return this;
     }
 

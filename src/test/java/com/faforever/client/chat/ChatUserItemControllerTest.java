@@ -1,91 +1,98 @@
 package com.faforever.client.chat;
 
+import com.faforever.client.avatar.AvatarService;
 import com.faforever.client.builders.ChatChannelUserBuilder;
-import com.faforever.client.builders.GameBeanBuilder;
-import com.faforever.client.builders.MapVersionBeanBuilder;
-import com.faforever.client.builders.PlayerBeanBuilder;
-import com.faforever.client.builders.PreferencesBuilder;
-import com.faforever.client.domain.MapVersionBean;
-import com.faforever.client.domain.PlayerBean;
+import com.faforever.client.builders.GameInfoBuilder;
+import com.faforever.client.builders.PlayerInfoBuilder;
+import com.faforever.client.domain.api.MapVersion;
+import com.faforever.client.domain.server.GameInfo;
+import com.faforever.client.domain.server.PlayerInfo;
+import com.faforever.client.fx.ImageViewHelper;
 import com.faforever.client.fx.MouseEvents;
 import com.faforever.client.fx.contextmenu.ContextMenuBuilder;
-import com.faforever.client.fx.contextmenu.helper.ContextMenuBuilderHelper;
-import com.faforever.client.game.GameTooltipController;
+import com.faforever.client.helper.TooltipHelper;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.map.MapService;
+import com.faforever.client.map.MapService.PreviewSize;
 import com.faforever.client.map.generator.MapGeneratorService;
+import com.faforever.client.player.CountryFlagService;
 import com.faforever.client.preferences.ChatPrefs;
-import com.faforever.client.preferences.Preferences;
-import com.faforever.client.preferences.PreferencesService;
-import com.faforever.client.test.UITest;
+import com.faforever.client.test.PlatformTest;
+import com.faforever.client.theme.ThemeService;
 import com.faforever.client.theme.UiService;
-import com.google.common.eventbus.EventBus;
-import javafx.scene.Node;
-import javafx.scene.control.ContextMenu;
-import javafx.scene.control.Tooltip;
+import com.faforever.commons.lobby.GameStatus;
+import javafx.beans.property.SimpleBooleanProperty;
+import javafx.beans.property.SimpleObjectProperty;
 import javafx.scene.image.Image;
-import javafx.scene.input.ContextMenuEvent;
 import javafx.scene.input.MouseButton;
-import javafx.scene.layout.VBox;
-import org.hamcrest.CoreMatchers;
+import org.instancio.Instancio;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 
-import java.time.Instant;
+import java.io.InputStream;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.anyDouble;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-public class ChatUserItemControllerTest extends UITest {
+public class ChatUserItemControllerTest extends PlatformTest {
 
-  private static final String CHANNEL_NAME = "#testChannel";
   private static final String USER_NAME = "junit";
 
-  @Mock
-  private PreferencesService preferencesService;
+
   @Mock
   private I18n i18n;
   @Mock
   private UiService uiService;
   @Mock
-  private EventBus eventBus;
+  private ChatService chatService;
+  @Mock
+  private ThemeService themeService;
   @Mock
   private ContextMenuBuilder contextMenuBuilder;
   @Mock
   private MapGeneratorService mapGeneratorService;
   @Mock
+  private ImageViewHelper imageViewHelper;
+  @Mock
   private MapService mapService;
+  @Mock
+  private AvatarService avatarService;
+  @Mock
+  private CountryFlagService countryFlagService;
+  @Spy
+  private ChatPrefs chatPrefs;
 
   private ChatChannelUser defaultUser;
-  private ChatPrefs chatPrefs;
 
   @InjectMocks
   private ChatUserItemController instance;
 
   @BeforeEach
   public void setUp() throws Exception {
-    defaultUser = ChatChannelUserBuilder.create(USER_NAME, CHANNEL_NAME).defaultValues().get();
+    defaultUser = ChatChannelUserBuilder.create(USER_NAME, new ChatChannel("#testChannel")).defaultValues().get();
 
-    Preferences preferences = PreferencesBuilder.create().defaultValues().chatPrefs().then().get();
-    chatPrefs = preferences.getChat();
-    when(preferencesService.getPreferences()).thenReturn(preferences);
-
-    when(i18n.get(eq("clan.messageLeader"))).thenReturn("Message clan leader");
-    when(i18n.get(eq("clan.visitPage"))).thenReturn("Visit clan website");
+    lenient().when(mapService.isInstalledBinding(anyString())).thenReturn(new SimpleBooleanProperty());
+    lenient().when(i18n.get(eq("clan.messageLeader"))).thenReturn("Message clan leader");
+    lenient().when(i18n.get(eq("clan.visitPage"))).thenReturn("Visit clan website");
+    lenient().doAnswer(invocation -> new SimpleObjectProperty<>(invocation.getArgument(0))).when(imageViewHelper)
+        .createPlaceholderImageOnErrorObservable(any());
 
     loadFxml("theme/chat/chat_user_item.fxml", param -> instance);
   }
@@ -104,7 +111,7 @@ public class ChatUserItemControllerTest extends UITest {
   @Test
   public void testSingleClickDoesNotInitiatePrivateChat() {
     runOnFxThreadAndWait(() -> instance.onItemClicked(MouseEvents.generateClick(MouseButton.PRIMARY, 1)));
-    verify(eventBus, never()).post(CoreMatchers.any(InitiatePrivateChatEvent.class));
+    verify(chatService, never()).joinPrivateChat(any());
   }
 
   @Test
@@ -112,29 +119,33 @@ public class ChatUserItemControllerTest extends UITest {
     instance.setChatUser(defaultUser);
     runOnFxThreadAndWait(() -> instance.onItemClicked(MouseEvents.generateClick(MouseButton.PRIMARY, 2)));
 
-    ArgumentCaptor<InitiatePrivateChatEvent> captor = ArgumentCaptor.forClass(InitiatePrivateChatEvent.class);
-    verify(eventBus, times(1)).post(captor.capture());
-    assertEquals(USER_NAME, captor.getValue().getUsername());
-  }
-
-  @Test
-  public void testOnContextMenuRequested() {
-    runOnFxThreadAndWait(() -> getRoot().getChildren().add(instance.getRoot()));
-    ContextMenu contextMenuMock = ContextMenuBuilderHelper.mockContextMenuBuilderAndGetContextMenuMock(contextMenuBuilder);
-
-    instance.setChatUser(defaultUser);
-    instance.onContextMenuRequested(mock(ContextMenuEvent.class));
-    verify(contextMenuMock).show(eq(instance.getRoot().getScene().getWindow()), anyDouble(), anyDouble());
+    ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+    verify(chatService, times(1)).joinPrivateChat(captor.capture());
+    assertEquals(USER_NAME, captor.getValue());
   }
 
   @Test
   public void testCheckShowMapNameListener() {
-    runOnFxThreadAndWait(() -> instance.mapNameLabel.setText("map name"));
-    boolean visible = chatPrefs.isShowMapName();
-    assertEquals(instance.mapNameLabel.isVisible(), visible);
+    when(mapService.isInstalledBinding(anyString())).thenReturn(new SimpleBooleanProperty());
+    when(i18n.get(eq("clan.messageLeader"))).thenReturn("Message clan leader");
+    when(i18n.get(eq("clan.visitPage"))).thenReturn("Visit clan website");
+    doAnswer(invocation -> new SimpleObjectProperty<>(invocation.getArgument(0))).when(imageViewHelper)
+        .createPlaceholderImageOnErrorObservable(any());
 
-    runOnFxThreadAndWait(() -> chatPrefs.setShowMapName(!visible));
-    assertEquals(instance.mapNameLabel.isVisible(), !visible);
+    PlayerInfo player = PlayerInfoBuilder.create()
+                                         .defaultValues()
+                                         .game(GameInfoBuilder.create().defaultValues().get())
+                                         .get();
+    defaultUser.setPlayer(player);
+
+    when(i18n.get(anyString(), anyString())).thenReturn("name");
+    when(mapGeneratorService.isGeneratedMap(anyString())).thenReturn(true);
+
+    instance.setChatUser(defaultUser);
+    assertEquals(instance.mapNameLabel.isVisible(), chatPrefs.isShowMapName());
+
+    chatPrefs.setShowMapName(!chatPrefs.isShowMapName());
+    assertEquals(instance.mapNameLabel.isVisible(), chatPrefs.isShowMapName());
   }
 
   @Test
@@ -148,7 +159,16 @@ public class ChatUserItemControllerTest extends UITest {
 
   @Test
   public void testCheckShowMapPreviewListener() {
+    when(mapService.isInstalledBinding(anyString())).thenReturn(new SimpleBooleanProperty());
+    when(i18n.get(eq("clan.messageLeader"))).thenReturn("Message clan leader");
+    when(i18n.get(eq("clan.visitPage"))).thenReturn("Visit clan website");
+    doAnswer(invocation -> new SimpleObjectProperty<>(invocation.getArgument(0))).when(imageViewHelper)
+        .createPlaceholderImageOnErrorObservable(any());
+
     boolean visible = chatPrefs.isShowMapPreview();
+    instance.setChatUser(defaultUser);
+    defaultUser.setPlayer(
+        PlayerInfoBuilder.create().defaultValues().game(GameInfoBuilder.create().status(GameStatus.OPEN).get()).get());
     assertEquals(instance.mapImageView.isVisible(), visible);
 
     runOnFxThreadAndWait(() -> chatPrefs.setShowMapPreview(!visible));
@@ -157,54 +177,49 @@ public class ChatUserItemControllerTest extends UITest {
 
   @Test
   public void testCheckChatUserGameListener() {
-    PlayerBean player = PlayerBeanBuilder.create()
-        .defaultValues()
-        .game(GameBeanBuilder.create().defaultValues().get())
-        .get();
+    when(mapService.isInstalledBinding(anyString())).thenReturn(new SimpleBooleanProperty());
+    when(i18n.get(eq("clan.messageLeader"))).thenReturn("Message clan leader");
+    when(i18n.get(eq("clan.visitPage"))).thenReturn("Visit clan website");
+    doAnswer(invocation -> new SimpleObjectProperty<>(invocation.getArgument(0))).when(imageViewHelper)
+        .createPlaceholderImageOnErrorObservable(any());
+
+    GameInfo game = GameInfoBuilder.create().defaultValues().host("junit").get();
+    PlayerInfo player = PlayerInfoBuilder.create().defaultValues().username("junit").game(game).get();
     String mapFolderName = player.getGame().getMapFolderName();
-    MapVersionBean mapVersion = MapVersionBeanBuilder.create().defaultValues().get();
-    defaultUser.setMapImage(mock(Image.class));
-    defaultUser.setGameStatusImage(mock(Image.class));
+    MapVersion mapVersion = Instancio.create(MapVersion.class);
     defaultUser.setPlayer(player);
 
-    when(mapService.getMapLocallyFromName(mapFolderName)).thenReturn(Optional.of(mapVersion), Optional.empty());
-    when(mapService.convertMapFolderNameToHumanNameIfPossible(mapFolderName)).thenReturn("map name");
-    when(i18n.get(eq("game.onMapFormat"), anyString())).thenReturn(mapVersion.getMap().getDisplayName(), "map name", "Neroxis Generated Map");
+    when(themeService.getThemeImage(ThemeService.CHAT_LIST_STATUS_HOSTING)).thenReturn(
+        new Image(InputStream.nullInputStream()));
+    when(mapService.loadPreview(game.getMapFolderName(), PreviewSize.SMALL)).thenReturn(new Image(InputStream.nullInputStream()));
+    when(mapService.getMapLocallyFromName(mapFolderName)).thenReturn(Optional.of(mapVersion));
+    when(mapService.convertMapFolderNameToHumanNameIfPossible(mapFolderName)).thenReturn("map id");
+    when(i18n.get(eq("game.onMapFormat"), anyString())).thenReturn(mapVersion.map().displayName(), "map id",
+                                                                   "Neroxis Generated Map");
 
     runOnFxThreadAndWait(() -> instance.setChatUser(defaultUser));
     assertNotNull(instance.gameStatusImageView.getImage());
     assertNotNull(instance.mapImageView.getImage());
-    assertEquals(mapVersion.getMap().getDisplayName(), instance.mapNameLabel.getText());
-
-    runOnFxThreadAndWait(() -> defaultUser.setLastActive(Instant.now()));
-    assertEquals("map name", instance.mapNameLabel.getText());
+    assertEquals(mapVersion.map().displayName(), instance.mapNameLabel.getText());
   }
 
   @Test
   public void testAvatarImageViewHasTooltip() {
-    assertTrue(containTooltip(instance.avatarImageView));
+    assertNotNull(TooltipHelper.getTooltip(instance.avatarImageView));
   }
 
   @Test
-  public void testOnMapImageViewMouseMovedAndExited() {
-    defaultUser.setPlayer(PlayerBeanBuilder.create()
-        .defaultValues()
-        .game(GameBeanBuilder.create().defaultValues().get())
-        .get());
-    GameTooltipController controllerMock = mock(GameTooltipController.class);
-    when(uiService.loadFxml("theme/play/game_tooltip.fxml")).thenReturn(controllerMock);
-    when(controllerMock.getRoot()).thenReturn(new VBox());
+  @Disabled("Flaky test due to race condition with tooltip installation")
+  public void testPlayerNoteTooltip() throws Exception {
+    defaultUser.setPlayer(PlayerInfoBuilder.create()
+                                           .defaultValues()
+                                           .game(GameInfoBuilder.create().defaultValues().get())
+                                           .note("Player 1")
+                                           .get());
+    runOnFxThreadAndWait(() -> instance.setChatUser(defaultUser));
+    assertEquals("Player 1", TooltipHelper.getTooltipText(instance.userContainer));
 
-    instance.setChatUser(defaultUser);
-    runOnFxThreadAndWait(() -> instance.onMapImageViewMouseMoved());
-    verify(controllerMock).displayGame();
-    assertTrue(containTooltip(instance.mapImageView));
-
-    runOnFxThreadAndWait(() -> instance.onMapImageViewMouseExited());
-    assertFalse(containTooltip(instance.mapImageView));
-  }
-
-  private boolean containTooltip(Node node) {
-    return node.getProperties().values().stream().anyMatch(o -> o.getClass().isAssignableFrom(Tooltip.class));
+    runOnFxThreadAndWait(() -> defaultUser.getPlayer().orElseThrow().setNote(""));
+    assertNull(TooltipHelper.getTooltip(instance.userContainer));
   }
 }

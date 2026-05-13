@@ -1,11 +1,14 @@
 package com.faforever.client.patch;
 
 import com.faforever.client.config.ClientProperties;
-import com.faforever.client.fa.ForgedAllianceService;
+import com.faforever.client.fa.ForgedAllianceLaunchService;
 import com.faforever.client.fx.PlatformService;
 import com.faforever.client.game.error.GameUpdateException;
 import com.faforever.client.i18n.I18n;
-import com.faforever.client.preferences.PreferencesService;
+import com.faforever.client.os.OperatingSystem;
+import com.faforever.client.os.OsWindows;
+import com.faforever.client.preferences.DataPrefs;
+import com.faforever.client.preferences.ForgedAlliancePrefs;
 import com.faforever.client.task.CompletableTask;
 import com.faforever.client.task.ResourceLocks;
 import com.faforever.client.util.Assert;
@@ -57,22 +60,30 @@ public class GameBinariesUpdateTaskImpl extends CompletableTask<Void> implements
       "zlibwapi.dll"
   );
 
-  private final ForgedAllianceService forgedAllianceService;
+  private final ForgedAllianceLaunchService forgedAllianceLaunchService;
   private final I18n i18n;
-  private final PreferencesService preferencesService;
   private final PlatformService platformService;
+  private final OperatingSystem operatingSystem;
+  private final DataPrefs dataPrefs;
+  private final ForgedAlliancePrefs forgedAlliancePrefs;
 
   private final String fafExeUrl;
 
   private Integer version;
+  private boolean forReplays;
 
-  public GameBinariesUpdateTaskImpl(ForgedAllianceService forgedAllianceService, I18n i18n, PreferencesService preferencesService, PlatformService platformService, ClientProperties clientProperties) {
+  public GameBinariesUpdateTaskImpl(ForgedAllianceLaunchService forgedAllianceLaunchService, I18n i18n,
+                                    PlatformService platformService, OperatingSystem operatingSystem,
+                                    DataPrefs dataPrefs, ForgedAlliancePrefs forgedAlliancePrefs,
+                                    ClientProperties clientProperties) {
     super(Priority.HIGH);
 
-    this.forgedAllianceService = forgedAllianceService;
+    this.forgedAllianceLaunchService = forgedAllianceLaunchService;
     this.i18n = i18n;
-    this.preferencesService = preferencesService;
     this.platformService = platformService;
+    this.operatingSystem = operatingSystem;
+    this.dataPrefs = dataPrefs;
+    this.forgedAlliancePrefs = forgedAlliancePrefs;
 
     this.fafExeUrl = clientProperties.getForgedAlliance().getExeUrl();
   }
@@ -83,11 +94,18 @@ public class GameBinariesUpdateTaskImpl extends CompletableTask<Void> implements
     Assert.checkNullIllegalState(version, "Field 'version' must not be null");
     log.info("Updating binaries to `{}`", version);
 
-    Path exePath = forgedAllianceService.getExecutablePath();
+    Path exePath;
+    if (forReplays) {
+      exePath = forgedAllianceLaunchService.getReplayExecutablePath();
+    } else {
+      exePath = forgedAllianceLaunchService.getExecutablePath();
+    }
 
     copyGameFilesToFafBinDirectory();
     downloadFafExeIfNecessary(exePath);
-    ForgedAllianceExePatcher.patchVersion(exePath, version);
+    if (ForgedAllianceExePatcher.readVersion(exePath) != version) {
+      ForgedAllianceExePatcher.patchVersion(exePath, version);
+    }
     log.trace("Binaries have been updated successfully");
     return null;
   }
@@ -120,9 +138,14 @@ public class GameBinariesUpdateTaskImpl extends CompletableTask<Void> implements
   void copyGameFilesToFafBinDirectory() {
     log.trace("Copying Forged Alliance binaries FAF folder");
 
-    Path fafBinDirectory = preferencesService.getPreferences().getData().getBinDirectory();
+    Path fafBinDirectory;
+    if (forReplays) {
+      fafBinDirectory = dataPrefs.getReplayBinDirectory();
+    } else {
+      fafBinDirectory = dataPrefs.getBinDirectory();
+    }
 
-    Path faBinPath = preferencesService.getPreferences().getForgedAlliance().getInstallationPath().resolve("bin");
+    Path faBinPath = forgedAlliancePrefs.getInstallationPath().resolve("bin");
 
     try (Stream<Path> faBinPathStream = Files.list(faBinPath)) {
       createDirectories(fafBinDirectory);
@@ -137,7 +160,7 @@ public class GameBinariesUpdateTaskImpl extends CompletableTask<Void> implements
                 copy(source, destination, REPLACE_EXISTING);
               }
 
-              if (org.bridj.Platform.isWindows()) {
+              if (operatingSystem instanceof OsWindows) {
                 setAttribute(destination, "dos:readonly", false);
               }
             } catch (IOException e) {
@@ -156,5 +179,10 @@ public class GameBinariesUpdateTaskImpl extends CompletableTask<Void> implements
       throw new IllegalArgumentException("Versions of featured preferences mods must be integers");
     }
     this.version = Integer.parseInt(versionString);
+  }
+
+  @Override
+  public void setForReplays(boolean forReplays) {
+    this.forReplays = forReplays;
   }
 }

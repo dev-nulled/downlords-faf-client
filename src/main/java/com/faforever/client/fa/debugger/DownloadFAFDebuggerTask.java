@@ -1,7 +1,7 @@
 package com.faforever.client.fa.debugger;
 
 import com.faforever.client.config.ClientProperties;
-import com.faforever.client.fa.ForgedAllianceService;
+import com.faforever.client.fa.ForgedAllianceLaunchService;
 import com.faforever.client.fx.PlatformService;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.task.CompletableTask;
@@ -9,6 +9,7 @@ import com.faforever.client.task.ResourceLocks;
 import com.faforever.client.update.GitHubRelease;
 import com.faforever.commons.io.ByteCopier;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.context.annotation.Scope;
 import org.springframework.http.MediaType;
@@ -16,7 +17,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
-import javax.inject.Inject;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -34,26 +34,27 @@ public class DownloadFAFDebuggerTask extends CompletableTask<Void> {
   private final ClientProperties clientProperties;
   private final I18n i18n;
   private final PlatformService platformService;
-  private final ForgedAllianceService forgedAllianceService;
-  private final WebClient webClient;
+  private final ForgedAllianceLaunchService forgedAllianceLaunchService;
+  private final WebClient defaultWebClient;
 
-  @Inject
-  public DownloadFAFDebuggerTask(ClientProperties clientProperties, I18n i18n, PlatformService platformService, ForgedAllianceService forgedAllianceService,
-                                 WebClient.Builder webClientBuilder) {
+  @Autowired
+  public DownloadFAFDebuggerTask(ClientProperties clientProperties, I18n i18n, PlatformService platformService,
+                                 ForgedAllianceLaunchService forgedAllianceLaunchService,
+                                 WebClient defaultWebClient) {
     super(Priority.HIGH);
 
     this.clientProperties = clientProperties;
     this.i18n = i18n;
     this.platformService = platformService;
-    this.forgedAllianceService = forgedAllianceService;
-    this.webClient = webClientBuilder.build();
+    this.forgedAllianceLaunchService = forgedAllianceLaunchService;
+    this.defaultWebClient = defaultWebClient;
   }
 
   @Override
   protected Void call() throws Exception {
     updateTitle(i18n.get("game.fa.downloadDebugger.title"));
 
-    String version = webClient.get()
+    String version = defaultWebClient.get()
         .uri(clientProperties.getFafDebugger().getQueryLatestVersionUrl())
         .accept(MediaType.parseMediaType("application/vnd.github.v3+json"))
         .retrieve()
@@ -66,7 +67,7 @@ public class DownloadFAFDebuggerTask extends CompletableTask<Void> {
 
     URLConnection urlConnection = url.openConnection();
 
-    Path targetFile = forgedAllianceService.getDebuggerExecutablePath();
+    Path targetFile = forgedAllianceLaunchService.getDebuggerExecutablePath();
     Path tempFile = Files.createTempFile(targetFile.getParent(), "debugger", null);
 
     ResourceLocks.acquireDownloadLock();

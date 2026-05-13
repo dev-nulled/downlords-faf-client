@@ -1,31 +1,29 @@
 package com.faforever.client.avatar;
 
-import com.faforever.client.avatar.event.AvatarChangedEvent;
-import com.faforever.client.builders.AvatarBeanBuilder;
-import com.faforever.client.domain.AvatarBean;
+import com.faforever.client.builders.PlayerInfoBuilder;
 import com.faforever.client.mapstruct.AvatarMapper;
 import com.faforever.client.mapstruct.MapperSetup;
+import com.faforever.client.player.PlayerService;
 import com.faforever.client.remote.AssetService;
 import com.faforever.client.remote.FafServerAccessor;
 import com.faforever.client.test.ServiceTest;
-import com.google.common.eventbus.EventBus;
+import org.instancio.Instancio;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mapstruct.factory.Mappers;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.net.URI;
 import java.net.URL;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.instancio.Select.field;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -39,8 +37,7 @@ public class AvatarServiceTest extends ServiceTest {
   @Mock
   private AssetService assetService;
   @Mock
-  private EventBus eventBus;
-
+  private PlayerService playerService;
   @Spy
   private AvatarMapper avatarMapper = Mappers.getMapper(AvatarMapper.class);
 
@@ -54,9 +51,12 @@ public class AvatarServiceTest extends ServiceTest {
 
   @Test
   public void testLoadAvatar() throws Exception {
-    AvatarBean avatarBean = AvatarBeanBuilder.create().url(getClass().getResource("/theme/images/default_achievement.png").toURI().toURL()).get();
-    instance.loadAvatar(avatarBean);
-    verify(assetService).loadAndCacheImage(avatarBean.getUrl(), Path.of("avatars"), null);
+    Avatar avatar = Instancio.of(Avatar.class).set(field(Avatar::url),
+                                          getClass().getResource("/theme/images/default_achievement.png")
+                                                    .toURI()
+                                                    .toURL()).create();
+    instance.loadAvatar(avatar);
+    verify(assetService).loadAndCacheImage(avatar.url(), Path.of("avatars"));
   }
 
   @Test
@@ -74,16 +74,11 @@ public class AvatarServiceTest extends ServiceTest {
 
   @Test
   public void changeAvatar() throws Exception {
-    URL url = new URL("https://example.com");
-    instance.changeAvatar(AvatarBeanBuilder.create().url(url).description("Description").get());
+    when(playerService.getCurrentPlayer()).thenReturn(PlayerInfoBuilder.create().get());
 
-    ArgumentCaptor<AvatarChangedEvent> eventCaptor = ArgumentCaptor.forClass(AvatarChangedEvent.class);
-    verify(eventBus).post(eventCaptor.capture());
+    URL url = URI.create("https://example.com").toURL();
+    instance.changeAvatar(Instancio.of(Avatar.class).set(field(Avatar::url), url).create());
 
-    AvatarBean avatar = eventCaptor.getValue().getAvatar();
-    assertNotNull(avatar);
-    assertEquals(url, avatar.getUrl());
-    assertEquals("Description", avatar.getDescription());
     verify(fafServerAccessor).selectAvatar(url);
   }
 }

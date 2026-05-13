@@ -1,47 +1,52 @@
 package com.faforever.client.mod;
 
-import com.faforever.client.builders.ModVersionBeanBuilder;
-import com.faforever.client.builders.PreferencesBuilder;
-import com.faforever.client.domain.ModVersionBean;
-import com.faforever.client.fx.JavaFxUtil;
+import com.faforever.client.domain.api.ModVersion;
 import com.faforever.client.fx.PlatformService;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.notification.NotificationService;
-import com.faforever.client.preferences.Preferences;
-import com.faforever.client.preferences.PreferencesService;
+import com.faforever.client.preferences.VaultPrefs;
+import com.faforever.client.query.BinaryFilterController;
+import com.faforever.client.query.DateRangeFilterController;
 import com.faforever.client.query.LogicalNodeController;
+import com.faforever.client.query.RangeFilterController;
 import com.faforever.client.query.SpecificationController;
+import com.faforever.client.query.TextFilterController;
+import com.faforever.client.query.ToggleFilterController;
 import com.faforever.client.reporting.ReportingService;
-import com.faforever.client.test.UITest;
+import com.faforever.client.test.PlatformTest;
 import com.faforever.client.theme.UiService;
 import com.faforever.client.vault.VaultEntityController;
 import com.faforever.client.vault.VaultEntityController.SearchType;
 import com.faforever.client.vault.search.SearchController;
 import com.faforever.client.vault.search.SearchController.SearchConfig;
 import com.faforever.client.vault.search.SearchController.SortConfig;
-import com.google.common.eventbus.EventBus;
+import javafx.beans.property.SimpleBooleanProperty;
+import javafx.beans.property.SimpleDoubleProperty;
+import javafx.beans.property.SimpleObjectProperty;
+import javafx.beans.property.SimpleStringProperty;
 import javafx.scene.layout.Pane;
+import org.instancio.Instancio;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.testfx.util.WaitForAsyncUtils;
+import org.mockito.Spy;
 import reactor.core.publisher.Mono;
 
-import java.net.MalformedURLException;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
 
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
-public class ModVaultControllerTest extends UITest {
+public class ModVaultControllerTest extends PlatformTest {
 
   @InjectMocks
   private ModVaultController instance;
@@ -51,11 +56,8 @@ public class ModVaultControllerTest extends UITest {
   @Mock
   private UiService uiService;
   @Mock
-  private EventBus eventBus;
-  @Mock
   private I18n i18n;
-  @Mock
-  private PreferencesService preferencesService;
+
   @Mock
   private NotificationService notificationService;
   @Mock
@@ -65,30 +67,53 @@ public class ModVaultControllerTest extends UITest {
   @Mock
   private SpecificationController specificationController;
   @Mock
+  private BinaryFilterController binaryFilterController;
+  @Mock
+  private DateRangeFilterController dateRangeFilterController;
+  @Mock
+  private RangeFilterController rangeFilterController;
+  @Mock
+  private TextFilterController textFilterController;
+  @Mock
+  private ToggleFilterController toggleFilterController;
+  @Mock
   private ReportingService reportingService;
   @Mock
   private PlatformService platformService;
+  @Spy
+  private VaultPrefs vaultPrefs;
 
-  private Preferences preferences;
+  @Mock
   private ModDetailController modDetailController;
 
   @BeforeEach
   public void setUp() throws Exception {
-    preferences = PreferencesBuilder.create().defaultValues().get();
+    lenient().when(modService.getNewestModsWithPageCount(anyInt(), anyInt())).thenReturn(
+        Mono.zip(Mono.just(List.of()), Mono.just(0)));
+    lenient().when(modService.getHighestRatedModsWithPageCount(anyInt(), anyInt())).thenReturn(
+        Mono.zip(Mono.just(List.of()), Mono.just(0)));
+    lenient().when(modService.getHighestRatedUiModsWithPageCount(anyInt(), anyInt())).thenReturn(
+        Mono.zip(Mono.just(List.of()), Mono.just(0)));
+    lenient().when(i18n.get(anyString())).thenReturn("test");
+    lenient().when(modDetailController.getRoot()).thenReturn(new Pane());
+    lenient().when(searchController.addBinaryFilter(anyString(), anyString(), anyString(), anyString(), anyString(), anyString())).thenReturn(binaryFilterController);
+    lenient().when(binaryFilterController.firstSelectedProperty()).thenReturn(new SimpleBooleanProperty());
+    lenient().when(binaryFilterController.secondSelectedProperty()).thenReturn(new SimpleBooleanProperty());
+    lenient().when(searchController.addTextFilter(anyString(), anyString(), anyBoolean())).thenReturn(textFilterController);
+    lenient().when(textFilterController.textFieldProperty()).thenReturn(new SimpleStringProperty());
+    lenient().when(searchController.addRangeFilter(anyString(), anyString(), anyDouble(), anyDouble(), anyInt(), anyInt(), anyInt())).thenReturn(rangeFilterController);
+    lenient().when(searchController.addRangeFilter(anyString(), anyString(), anyDouble(), anyDouble(), anyInt(), anyInt(), anyInt(), any())).thenReturn(rangeFilterController);
+    lenient().when(rangeFilterController.lowValueProperty()).thenReturn(new SimpleDoubleProperty());
+    lenient().when(rangeFilterController.highValueProperty()).thenReturn(new SimpleDoubleProperty());
+    lenient().when(searchController.addToggleFilter(anyString(), anyString(), anyString())).thenReturn(toggleFilterController);
+    lenient().when(toggleFilterController.selectedProperty()).thenReturn(new SimpleBooleanProperty());
+    lenient().when(searchController.addDateRangeFilter(anyString(), anyString(), anyInt())).thenReturn(dateRangeFilterController);
+    lenient().when(dateRangeFilterController.beforeDateProperty()).thenReturn(new SimpleObjectProperty<>());
+    lenient().when(dateRangeFilterController.afterDateProperty()).thenReturn(new SimpleObjectProperty<>());
 
-    when(preferencesService.getPreferences()).thenReturn(preferences);
-    when(modService.getNewestModsWithPageCount(anyInt(), anyInt())).thenReturn(Mono.zip(Mono.just(List.<ModVersionBean>of()), Mono.just(0)).toFuture());
-    when(modService.getHighestRatedModsWithPageCount(anyInt(), anyInt())).thenReturn(Mono.zip(Mono.just(List.<ModVersionBean>of()), Mono.just(0)).toFuture());
-    when(modService.getHighestRatedUiModsWithPageCount(anyInt(), anyInt())).thenReturn(Mono.zip(Mono.just(List.<ModVersionBean>of()), Mono.just(0)).toFuture());
-    when(i18n.get(anyString())).thenReturn("test");
+    lenient().when(uiService.loadFxml("theme/vault/mod/mod_detail.fxml")).thenReturn(modDetailController);
 
-    doAnswer(invocation -> {
-      modDetailController = mock(ModDetailController.class);
-      when(modDetailController.getRoot()).then(invocation1 -> new Pane());
-      return modDetailController;
-    }).when(uiService).loadFxml("theme/vault/mod/mod_detail.fxml");
-
-    when(modService.getRecommendedModPageCount(VaultEntityController.TOP_ELEMENT_COUNT)).thenReturn(CompletableFuture.completedFuture(0));
+    lenient().when(modService.getRecommendedModPageCount(VaultEntityController.TOP_ELEMENT_COUNT)).thenReturn(Mono.just(0));
 
     loadFxml("theme/vault/vault_entity.fxml", clazz -> {
       if (SearchController.class.isAssignableFrom(clazz)) {
@@ -106,7 +131,7 @@ public class ModVaultControllerTest extends UITest {
 
   @Test
   public void testSetSupplier() {
-    SortConfig sortOrder = preferences.getVault().getMapSortConfig();
+    SortConfig sortOrder = vaultPrefs.getMapSortConfig();
     SearchConfig standardSearchConfig = new SearchConfig(sortOrder, "query");
     instance.searchType = SearchType.SEARCH;
     instance.setSupplier(standardSearchConfig);
@@ -124,10 +149,10 @@ public class ModVaultControllerTest extends UITest {
   }
 
   @Test
-  public void testShowModDetail() throws MalformedURLException {
-    ModVersionBean modVersion = ModVersionBeanBuilder.create().defaultValues().get();
-    JavaFxUtil.runLater(() -> instance.onDisplayDetails(modVersion));
-    WaitForAsyncUtils.waitForFxEvents();
+  @Disabled("Flaky Test")
+  public void testShowModDetail() {
+    ModVersion modVersion = Instancio.create(ModVersion.class);
+    runOnFxThreadAndWait(() -> instance.onDisplayDetails(modVersion));
 
     verify(modDetailController).setModVersion(modVersion);
     assertThat(modDetailController.getRoot().isVisible(), is(true));

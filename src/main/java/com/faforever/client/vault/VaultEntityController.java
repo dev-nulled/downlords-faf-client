@@ -1,11 +1,12 @@
 package com.faforever.client.vault;
 
-import com.faforever.client.fx.AbstractViewController;
+import com.faforever.client.fx.FxApplicationThreadExecutor;
 import com.faforever.client.fx.JavaFxUtil;
+import com.faforever.client.fx.NodeController;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.main.event.NavigateEvent;
 import com.faforever.client.notification.NotificationService;
-import com.faforever.client.preferences.PreferencesService;
+import com.faforever.client.preferences.VaultPrefs;
 import com.faforever.client.reporting.ReportingService;
 import com.faforever.client.theme.UiService;
 import com.faforever.client.util.ConcurrentUtil;
@@ -13,9 +14,9 @@ import com.faforever.client.vault.search.SearchController;
 import com.faforever.client.vault.search.SearchController.SearchConfig;
 import com.faforever.commons.api.dto.ApiException;
 import javafx.beans.binding.Bindings;
-import javafx.beans.binding.BooleanBinding;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleObjectProperty;
+import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
@@ -23,36 +24,48 @@ import javafx.scene.control.ComboBox;
 import javafx.scene.control.Pagination;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Separator;
-import javafx.scene.layout.AnchorPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
-import lombok.Value;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.jetbrains.annotations.NotNull;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
+import reactor.core.publisher.Mono;
 import reactor.util.function.Tuple2;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
-import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
 @Slf4j
-public abstract class VaultEntityController<T> extends AbstractViewController<Node> {
+@RequiredArgsConstructor
+public abstract class VaultEntityController<T> extends NodeController<Node> {
 
   public static final int TOP_ELEMENT_COUNT = 7;
+
   protected final UiService uiService;
   protected final NotificationService notificationService;
   protected final I18n i18n;
-  protected final PreferencesService preferencesService;
   protected final ReportingService reportingService;
+  protected final VaultPrefs vaultPrefs;
+  protected final FxApplicationThreadExecutor fxApplicationThreadExecutor;
+
+  protected final ObjectProperty<State> state = new SimpleObjectProperty<>(State.UNINITIALIZED);
+
+  private final Map<ShowRoomCategory<T>, ObservableList<T>> showRoomEntities = new HashMap<>();
+  private final List<VBox> showRoomRoots = new ArrayList<>();
+  private final ObservableList<T> resultEntities = FXCollections.observableArrayList();
+  private final ObservableList<Node> resultCardRoots = FXCollections.observableArrayList();
+
   public Pane root;
   public StackPane vaultRoot;
   public HBox searchBox;
@@ -74,24 +87,15 @@ public abstract class VaultEntityController<T> extends AbstractViewController<No
   public SearchType searchType;
   public int pageSize;
   public ComboBox<Integer> perPageComboBox;
-  protected ObjectProperty<State> state;
-  protected CompletableFuture<Tuple2<List<T>, Integer>> currentSupplier;
 
-  public VaultEntityController(UiService uiService, NotificationService notificationService, I18n i18n, PreferencesService preferencesService, ReportingService reportingService) {
-    this.uiService = uiService;
-    this.notificationService = notificationService;
-    this.i18n = i18n;
-    this.preferencesService = preferencesService;
-    this.reportingService = reportingService;
-
-    state = new SimpleObjectProperty<>(State.UNINITIALIZED);
-  }
+  protected Mono<Tuple2<List<T>, Integer>> currentSupplier;
+  private final Mono<Object> initializeMono = Mono.fromRunnable(this::initializeShowRoomCards).cache();
 
   protected abstract void initSearchController();
 
-  protected abstract Node getEntityCard(T t);
+  protected abstract VaultEntityCardController<T> createEntityCard();
 
-  protected abstract List<ShowRoomCategory> getShowRoomCategories();
+  protected abstract List<ShowRoomCategory<T>> getShowRoomCategories();
 
   protected abstract void setSupplier(SearchConfig searchConfig);
 
@@ -108,15 +112,15 @@ public abstract class VaultEntityController<T> extends AbstractViewController<No
   protected abstract void handleSpecialNavigateEvent(NavigateEvent navigateEvent);
 
   @Override
-  public void initialize() {
-    super.initialize();
+  protected void onInitialize() {
+    super.onInitialize();
     JavaFxUtil.fixScrollSpeed(scrollPane);
     JavaFxUtil.bindManagedToVisible(loadingPane, searchResultGroup, backButton, refreshButton, pagination,
-        firstPageButton, lastPageButton, showRoomGroup, searchBox, searchSeparator);
+                                    firstPageButton, lastPageButton, showRoomGroup, searchBox, searchSeparator);
 
     firstPageButton.disableProperty().bind(pagination.currentPageIndexProperty().isEqualTo(0));
-    lastPageButton.disableProperty().bind(pagination.currentPageIndexProperty()
-        .isEqualTo(pagination.pageCountProperty().subtract(1)));
+    lastPageButton.disableProperty()
+                  .bind(pagination.currentPageIndexProperty().isEqualTo(pagination.pageCountProperty().subtract(1)));
 
     backButton.setOnAction(event -> onBackButtonClicked());
     refreshButton.setOnAction(event -> onRefreshButtonClicked());
@@ -124,15 +128,17 @@ public abstract class VaultEntityController<T> extends AbstractViewController<No
     manageVaultButton.setOnAction(event -> onManageVaultButtonClicked());
 
     searchController.setSearchListener(this::onSearch);
-    perPageComboBox.getItems().addAll(5, 10, 20, 50, 100, 200);
+    perPageComboBox.getItems().addAll(5, 10, 20, 50, 100);
+    perPageComboBox.valueProperty()
+                   .addListener(
+                       ((observable, oldValue, newValue) -> onPerPageCountChanged(oldValue == null ? 0 : oldValue,
+                                                                                  newValue)));
     perPageComboBox.setValue(20);
-    perPageComboBox.setOnAction((event -> changePerPageCount()));
     pageSize = perPageComboBox.getValue();
 
     initSearchController();
 
-    BooleanBinding inSearchableState = Bindings.createBooleanBinding(() -> state.get() != State.SEARCHING, state);
-    searchController.setSearchButtonDisabledCondition(inSearchableState);
+    searchController.setSearchButtonDisabledCondition(state.map(state1 -> state1 == State.SEARCHING));
 
     pagination.currentPageIndexProperty().addListener((observable, oldValue, newValue) -> {
       if (!oldValue.equals(newValue)) {
@@ -140,8 +146,7 @@ public abstract class VaultEntityController<T> extends AbstractViewController<No
         onPageChange(searchConfig, false);
         pagination.setMaxPageIndicatorCount(10);
       }
-        }
-    );
+    });
     paginationGroup.managedProperty().bind(paginationGroup.visibleProperty());
     firstPageButton.setOnAction(event -> pagination.setCurrentPageIndex(0));
     lastPageButton.setOnAction(event -> pagination.setCurrentPageIndex(pagination.getPageCount() - 1));
@@ -152,62 +157,68 @@ public abstract class VaultEntityController<T> extends AbstractViewController<No
     detailView.requestFocus();
 
     vaultRoot.getChildren().add(detailView);
-    AnchorPane.setTopAnchor(detailView, 0d);
-    AnchorPane.setRightAnchor(detailView, 0d);
-    AnchorPane.setBottomAnchor(detailView, 0d);
-    AnchorPane.setLeftAnchor(detailView, 0d);
+    JavaFxUtil.setAnchors(detailView, 0d);
+
+    showRoomGroup.visibleProperty().bind(state.isEqualTo(State.SHOWROOM).when(showing));
+    searchResultGroup.visibleProperty().bind(state.isEqualTo(State.RESULT).when(showing));
+    backButton.visibleProperty().bind(state.isEqualTo(State.RESULT).when(showing));
+    paginationGroup.visibleProperty().bind(state.isEqualTo(State.RESULT).when(showing));
+    loadingPane.visibleProperty().bind(state.isEqualTo(State.SEARCHING).when(showing));
+
+    Bindings.bindContent(searchResultPane.getChildren(), resultCardRoots);
   }
 
-  protected void loadShowRoom() {
-    JavaFxUtil.assertApplicationThread();
-    enterSearchingState();
-    Object monitorForAddingFutures = new Object();
-    List<ShowRoomCategory> showRoomCategories = getShowRoomCategories();
-    AtomicReference<CompletableFuture<Void>> loadingEntitiesFutureReference = new AtomicReference<>(CompletableFuture.completedFuture(null));
-
-    List<VBox> childrenToAdd = showRoomCategories.parallelStream()
-        .map(showRoomCategory -> {
-          VaultEntityShowRoomController vaultEntityShowRoomController = loadShowRoom(showRoomCategory);
-          VBox showRoomRoot = vaultEntityShowRoomController.getRoot();
-          showRoomRoot.managedProperty().bind(showRoomRoot.visibleProperty());
-          synchronized (monitorForAddingFutures) {
-            loadingEntitiesFutureReference.set(loadingEntitiesFutureReference.get().thenCompose(aVoid -> showRoomCategory.getEntitySupplier().get())
-                .thenAccept(result -> {
-                  if (result.getT1().isEmpty()) {
-                    showRoomRoot.setVisible(false);
-                    return;
-                  }
-                  populate(result.getT1(), vaultEntityShowRoomController.getPane());
-                }));
-          }
-          return showRoomRoot;
-        })
-        .collect(Collectors.toList());
-
-    loadingEntitiesFutureReference.get()
-        .thenRun(() -> JavaFxUtil.runLater(() -> {
-          showRoomGroup.getChildren().setAll(childrenToAdd);
-          enterShowRoomState();
-        }))
-        .exceptionally(throwable -> {
-          log.error("Could not populate show room", throwable);
-          return null;
-        });
+  @Override
+  public void onShow() {
+    if (state.get() == State.UNINITIALIZED) {
+      loadShowRooms();
+    }
   }
 
-  @NotNull
-  private VaultEntityShowRoomController loadShowRoom(ShowRoomCategory showRoomCategory) {
-    VaultEntityShowRoomController vaultEntityShowRoomController = uiService.loadFxml("theme/vault/vault_entity_show_room.fxml");
-    vaultEntityShowRoomController.getLabel().setText(i18n.get(showRoomCategory.getI18nKey()));
-    vaultEntityShowRoomController.getMoreButton().setOnAction(event -> {
-      searchType = showRoomCategory.getSearchType();
-      onFirstPageOpened(null);
+  private void initializeShowRoomCards() {
+    List<ShowRoomCategory<T>> showRoomCategories = getShowRoomCategories();
+    showRoomCategories.forEach(showRoomCategory -> {
+      ObservableList<Node> categoryRoots = FXCollections.observableArrayList();
+      ObservableList<T> categoryEntities = FXCollections.observableArrayList();
+
+      IntStream.range(0, TOP_ELEMENT_COUNT).mapToObj(i -> {
+        VaultEntityCardController<T> entityCard = createEntityCard();
+        entityCard.entityProperty().bind(Bindings.valueAt(categoryEntities, i));
+        Node entityCardRoot = entityCard.getRoot();
+        entityCardRoot.visibleProperty().bind(entityCard.entityProperty().isNotNull());
+        JavaFxUtil.bindManagedToVisible(entityCardRoot);
+        return entityCardRoot;
+      }).forEach(categoryRoots::add);
+      showRoomEntities.put(showRoomCategory, categoryEntities);
+
+      VaultEntityShowRoomController showRoomController = loadShowRoom(showRoomCategory);
+      JavaFxUtil.bindManagedToVisible(showRoomController.getRoot());
+      showRoomController.getRoot().visibleProperty().bind(Bindings.isNotEmpty(categoryEntities));
+      showRoomController.setChildren(categoryRoots);
+      showRoomRoots.add(showRoomController.getRoot());
     });
-    return vaultEntityShowRoomController;
+    fxApplicationThreadExecutor.execute(() -> showRoomGroup.getChildren().setAll(showRoomRoots));
   }
 
-  protected void changePerPageCount() {
-    pageSize = perPageComboBox.getValue();
+  private void onPerPageCountChanged(Integer oldValue, Integer newValue) {
+    if (newValue < oldValue) {
+      fxApplicationThreadExecutor.execute(() -> resultCardRoots.remove(newValue, oldValue));
+    } else if (newValue > oldValue) {
+      CompletableFuture.runAsync(() -> {
+        List<Node> newNodes = IntStream.range(oldValue, newValue).mapToObj(i -> {
+          VaultEntityCardController<T> entityCard = createEntityCard();
+          entityCard.entityProperty().bind(Bindings.valueAt(resultEntities, i));
+          Node entityCardRoot = entityCard.getRoot();
+          entityCardRoot.visibleProperty().bind(entityCard.entityProperty().isNotNull());
+          JavaFxUtil.bindManagedToVisible(entityCardRoot);
+          return entityCardRoot;
+        }).toList();
+
+        fxApplicationThreadExecutor.execute(() -> resultCardRoots.addAll(newNodes));
+      });
+    }
+
+    pageSize = newValue;
     if (state.get() == State.RESULT) {
       SearchConfig searchConfig = searchController.getLastSearchConfig();
       onPageChange(searchConfig, true);
@@ -215,33 +226,42 @@ public abstract class VaultEntityController<T> extends AbstractViewController<No
   }
 
   protected void enterSearchingState() {
-    state.set(State.SEARCHING);
-
-    showRoomGroup.setVisible(false);
-    searchResultGroup.setVisible(false);
-    loadingPane.setVisible(true);
-    backButton.setVisible(false);
-    paginationGroup.setVisible(false);
+    fxApplicationThreadExecutor.execute(() -> state.set(State.SEARCHING));
   }
 
   protected void enterResultState() {
-    state.set(State.RESULT);
-
-    showRoomGroup.setVisible(false);
-    searchResultGroup.setVisible(true);
-    loadingPane.setVisible(false);
-    backButton.setVisible(true);
-    paginationGroup.setVisible(true);
+    fxApplicationThreadExecutor.execute(() -> state.set(State.RESULT));
   }
 
   protected void enterShowRoomState() {
-    state.set(State.SHOWROOM);
+    fxApplicationThreadExecutor.execute(() -> state.set(State.SHOWROOM));
+  }
 
-    showRoomGroup.setVisible(true);
-    searchResultGroup.setVisible(false);
-    loadingPane.setVisible(false);
-    backButton.setVisible(false);
-    paginationGroup.setVisible(false);
+  protected void loadShowRooms() {
+    enterSearchingState();
+
+    initializeMono.then(Mono.defer(() -> Mono.when(showRoomEntities.entrySet().stream().map(entry -> {
+                    ShowRoomCategory<T> showRoomCategory = entry.getKey();
+                    ObservableList<T> entities = entry.getValue();
+                    return showRoomCategory.entitySupplier()
+                                           .get()
+                                           .map(Tuple2::getT1)
+                                           .publishOn(fxApplicationThreadExecutor.asScheduler())
+                                           .doOnNext(entities::setAll);
+                  }).toList())))
+                  .subscribe(null, throwable -> log.warn("Failed to load show rooms", throwable),
+                             this::enterShowRoomState);
+  }
+
+  private VaultEntityShowRoomController loadShowRoom(ShowRoomCategory<T> showRoomCategory) {
+    VaultEntityShowRoomController vaultEntityShowRoomController = uiService.loadFxml(
+        "theme/vault/vault_entity_show_room.fxml");
+    vaultEntityShowRoomController.getLabel().setText(i18n.get(showRoomCategory.i18nKey()));
+    vaultEntityShowRoomController.getMoreButton().setOnAction(event -> {
+      searchType = showRoomCategory.searchType();
+      onFirstPageOpened(null);
+    });
+    return vaultEntityShowRoomController;
   }
 
   protected void onPageChange(SearchConfig searchConfig, boolean firstLoad) {
@@ -251,47 +271,31 @@ public abstract class VaultEntityController<T> extends AbstractViewController<No
   }
 
   protected void displaySearchResult(List<T> results) {
-    populate(results, searchResultPane);
-    JavaFxUtil.runLater(this::enterResultState);
+    fxApplicationThreadExecutor.execute(() -> {
+      resultEntities.setAll(results);
+      enterResultState();
+    });
   }
 
-  protected void displayFromSupplier(Supplier<CompletableFuture<Tuple2<List<T>, Integer>>> supplier, boolean firstLoad) {
-    supplier.get()
-        .thenAcceptAsync(tuple -> {
-          displaySearchResult(tuple.getT1());
-          if (firstLoad) {
-            //when theres no search results the page count should be 1, 0 (which is returned) results in infinite pages
-            JavaFxUtil.runLater(() -> pagination.setPageCount(Math.max(1, tuple.getT2())));
-          }
-        })
-        .exceptionally(throwable -> {
-          throwable = ConcurrentUtil.unwrapIfCompletionException(throwable);
-          if (throwable instanceof ApiException) {
-            String query = searchController.queryTextField.getText();
-            log.warn("Bad search parameter in query {}", query, throwable);
-            notificationService.addImmediateWarnNotification("vault.badSearch", throwable.getLocalizedMessage(), query);
-          } else {
-            log.error("Vault search error", throwable);
-            notificationService.addImmediateErrorNotification(throwable, "vault.searchError");
-          }
-          enterShowRoomState();
-          return null;
-        });
-  }
-
-  protected void populate(List<T> results, Pane pane) {
-    ObservableList<Node> children = pane.getChildren();
-    List<Node> childrenToAdd = results.parallelStream()
-        .map(this::getEntityCard)
-        .collect(Collectors.toList());
-
-    JavaFxUtil.runLater(() -> {
-      children.setAll(childrenToAdd);
-      Object userData = pane.getUserData();
-      if (userData == null) {
-        return;
+  protected void displayFromSupplier(Supplier<Mono<Tuple2<List<T>, Integer>>> supplier,
+                                     boolean firstLoad) {
+    supplier.get().subscribe(tuple -> {
+      displaySearchResult(tuple.getT1());
+      if (firstLoad) {
+        //when there's no search results the page count should be 1, 0 (which is returned) results in infinite pages
+        fxApplicationThreadExecutor.execute(() -> pagination.setPageCount(Math.max(1, tuple.getT2())));
       }
-      pane.getChildren().add((Node) userData);
+    }, throwable -> {
+      throwable = ConcurrentUtil.unwrapIfCompletionException(throwable);
+      if (throwable instanceof ApiException) {
+        String query = searchController.queryTextField.getText();
+        log.warn("Bad search parameter in query {}", query, throwable);
+        notificationService.addImmediateWarnNotification("vault.badSearch", throwable.getLocalizedMessage(), query);
+      } else {
+        log.error("Vault search error", throwable);
+        notificationService.addImmediateErrorNotification(throwable, "vault.searchError");
+      }
+      enterShowRoomState();
     });
   }
 
@@ -311,21 +315,20 @@ public abstract class VaultEntityController<T> extends AbstractViewController<No
     if (state.get() == State.RESULT) {
       onPageChange(searchController.getLastSearchConfig(), false);
     } else {
-      loadShowRoom();
+      loadShowRooms();
     }
   }
 
   protected void onBackButtonClicked() {
-    loadShowRoom();
+    loadShowRooms();
   }
 
   @Override
-  protected void onDisplay(NavigateEvent navigateEvent) {
+  protected void onNavigate(NavigateEvent navigateEvent) {
     Class<? extends NavigateEvent> defaultNavigateEvent = getDefaultNavigateEvent();
-    if (!(navigateEvent.getClass().equals(defaultNavigateEvent)) && !navigateEvent.getClass().equals(NavigateEvent.class)) {
+    if (!(navigateEvent.getClass().equals(defaultNavigateEvent)) && !navigateEvent.getClass()
+                                                                                  .equals(NavigateEvent.class)) {
       handleSpecialNavigateEvent(navigateEvent);
-    } else if (state.get() == State.UNINITIALIZED) {
-      loadShowRoom();
     }
   }
 
@@ -339,13 +342,10 @@ public abstract class VaultEntityController<T> extends AbstractViewController<No
   }
 
   public enum SearchType {
-    SEARCH, OWN, NEWEST, HIGHEST_RATED, PLAYER, RECOMMENDED, MAP_POOL, PLAYED, HIGHEST_RATED_UI
+    SEARCH, OWN, NEWEST, HIGHEST_RATED, PLAYER, RECOMMENDED, PLAYED, HIGHEST_RATED_UI
   }
 
-  @Value
-  public class ShowRoomCategory {
-    Supplier<CompletableFuture<Tuple2<List<T>, Integer>>> entitySupplier;
-    SearchType searchType;
-    String i18nKey;
-  }
+  public record ShowRoomCategory<T>(
+      Supplier<Mono<Tuple2<List<T>, Integer>>> entitySupplier, SearchType searchType, String i18nKey
+  ) {}
 }

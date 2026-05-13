@@ -1,21 +1,25 @@
 package com.faforever.client.game;
 
-import com.faforever.client.domain.GameBean;
+import com.faforever.client.avatar.AvatarService;
+import com.faforever.client.domain.server.GameInfo;
+import com.faforever.client.domain.server.PlayerInfo;
 import com.faforever.client.player.PlayerService;
 import javafx.geometry.Pos;
 import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.TableCell;
 import javafx.scene.image.ImageView;
 
-public class HostTableCell extends TableCell<GameBean, String> {
+public class HostTableCell extends TableCell<GameInfo, String> {
 
   private final PlayerService playerService;
+  private final AvatarService avatarService;
 
   private final ImageView avatarImageView;
   private String currentHost;
 
-  public HostTableCell(PlayerService playerService) {
+  public HostTableCell(PlayerService playerService, AvatarService avatarService) {
     this.playerService = playerService;
+    this.avatarService = avatarService;
     this.avatarImageView = createAvatarImageView();
 
     setContentDisplay(ContentDisplay.LEFT);
@@ -41,10 +45,12 @@ public class HostTableCell extends TableCell<GameBean, String> {
       if (!item.equals(currentHost)) {
         currentHost = item;
         setText(item);
-        playerService.getCurrentAvatarByPlayerName(item).ifPresentOrElse(avatar -> {
-          avatarImageView.setImage(avatar);
-          setGraphic(avatarImageView);
-        }, () -> setGraphic(null));
+        playerService.getPlayerByNameIfOnline(item).map(PlayerInfo::getAvatar)
+                     .map(avatarService::loadAvatar)
+                     .ifPresentOrElse(avatar -> {
+                       avatarImageView.setImage(avatar);
+                       setGraphic(avatarImageView);
+                     }, () -> setGraphic(null));
       }
     }
   }

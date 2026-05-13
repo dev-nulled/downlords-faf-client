@@ -1,30 +1,33 @@
 package com.faforever.client.tutorial;
 
-import com.faforever.client.domain.TutorialBean;
-import com.faforever.client.domain.TutorialCategoryBean;
-import com.faforever.client.fx.AbstractViewController;
-import com.faforever.client.fx.JavaFxUtil;
+import com.faforever.client.domain.api.Tutorial;
+import com.faforever.client.domain.api.TutorialCategory;
+import com.faforever.client.fx.FxApplicationThreadExecutor;
+import com.faforever.client.fx.NodeController;
 import com.faforever.client.main.event.NavigateEvent;
 import com.faforever.client.theme.UiService;
 import javafx.scene.Node;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
-import javax.inject.Inject;
 import java.util.ArrayList;
 import java.util.List;
 
 @Slf4j
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
-public class TutorialController extends AbstractViewController<Node> {
+@RequiredArgsConstructor
+public class TutorialController extends NodeController<Node> {
   private final TutorialService tutorialService;
   private final UiService uiService;
+  private final FxApplicationThreadExecutor fxApplicationThreadExecutor;
+
   public StackPane rootPane;
   public VBox tutorialOverviewPane;
   public TutorialDetailController tutorialDetailController;
@@ -33,25 +36,18 @@ public class TutorialController extends AbstractViewController<Node> {
   public VBox nothingToShow;
   private final List<TutorialListItemController> tutorialListItemControllers = new ArrayList<>();
 
-  @Inject
-  public TutorialController(TutorialService tutorialService, UiService uiService) {
-    this.tutorialService = tutorialService;
-    this.uiService = uiService;
-  }
-
   @Override
-  public void onDisplay(NavigateEvent navigateEvent) {
-    super.onDisplay(navigateEvent);
+  public void onNavigate(NavigateEvent navigateEvent) {
+    super.onNavigate(navigateEvent);
     setLoading(true);
     setNothingToShow(false);
     tutorialListItemControllers.clear();
     tutorialOverviewPane.getChildren().clear();
     tutorialService.getTutorialCategories()
-        .thenAccept(this::displayTutorials)
-        .exceptionally(throwable -> {
-          log.error("Tutorials could not be loaded", throwable);
-          return null;
-        });
+                   .collectList()
+                   .publishOn(fxApplicationThreadExecutor.asScheduler())
+                   .subscribe(this::displayTutorials,
+                              throwable -> log.error("Tutorials could not be loaded", throwable));
   }
 
   private void setLoading(boolean loading) {
@@ -59,8 +55,7 @@ public class TutorialController extends AbstractViewController<Node> {
     loadingSpinner.setVisible(loading);
   }
 
-  private void displayTutorials(List<TutorialCategoryBean> categories) {
-    JavaFxUtil.runLater(() -> {
+  private void displayTutorials(List<TutorialCategory> categories) {
       if (categories.isEmpty()) {
         setLoading(false);
         setNothingToShow(true);
@@ -68,22 +63,21 @@ public class TutorialController extends AbstractViewController<Node> {
       }
       categories.forEach(tutorialCategory -> {
         addCategory(tutorialCategory);
-        addTutorials(tutorialCategory.getTutorials());
+        addTutorials(tutorialCategory.tutorials());
       });
 
       if (tutorialDetailController.getTutorial() == null && !tutorialListItemControllers.isEmpty()) {
-        onTutorialClicked(tutorialListItemControllers.get(0));
+        onTutorialClicked(tutorialListItemControllers.getFirst());
       }
       setLoading(false);
       setNothingToShow(false);
-    });
   }
 
   private void setNothingToShow(boolean activate) {
     nothingToShow.setVisible(activate);
   }
 
-  private void addTutorials(List<TutorialBean> tutorials) {
+  private void addTutorials(List<Tutorial> tutorials) {
     tutorials.forEach(tutorial -> {
       TutorialListItemController tutorialListItemController = uiService.loadFxml("theme/tutorial_list_item.fxml");
       tutorialListItemController.setTutorial(tutorial);
@@ -100,7 +94,7 @@ public class TutorialController extends AbstractViewController<Node> {
     tutorialDetailController.setTutorial(tutorialListItemController.getTutorial());
   }
 
-  private void addCategory(TutorialCategoryBean category) {
+  private void addCategory(TutorialCategory category) {
     TutorialCategoryListItemController tutorialCategoryListItemController = uiService.loadFxml("theme/tutorial_category_list_item.fxml");
     tutorialCategoryListItemController.setCategory(category);
     tutorialOverviewPane.getChildren().add(tutorialCategoryListItemController.getRoot());

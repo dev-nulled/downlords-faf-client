@@ -1,176 +1,213 @@
 package com.faforever.client.game;
 
-import com.faforever.client.domain.GameBean;
-import com.faforever.client.fx.Controller;
+import com.faforever.client.domain.server.GameInfo;
+import com.faforever.client.fx.FxApplicationThreadExecutor;
 import com.faforever.client.fx.JavaFxUtil;
-import com.faforever.client.preferences.PreferencesService;
+import com.faforever.client.fx.NodeController;
+import com.faforever.client.player.PlayerService;
 import com.faforever.client.theme.UiService;
-import com.google.common.annotations.VisibleForTesting;
+import com.faforever.commons.lobby.GameStatus;
+import javafx.beans.binding.Bindings;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.ReadOnlyObjectProperty;
+import javafx.beans.property.ReadOnlyObjectWrapper;
 import javafx.beans.property.SimpleObjectProperty;
-import javafx.beans.value.ChangeListener;
-import javafx.beans.value.WeakChangeListener;
+import javafx.collections.FXCollections;
 import javafx.collections.ListChangeListener;
+import javafx.collections.ListChangeListener.Change;
 import javafx.collections.ObservableList;
-import javafx.collections.WeakListChangeListener;
+import javafx.collections.ObservableMap;
+import javafx.collections.transformation.SortedList;
 import javafx.scene.Node;
-import javafx.scene.control.ComboBox;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Tooltip;
 import javafx.scene.layout.FlowPane;
 import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.Locale;
-import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 
 @Slf4j
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
 @Component
-public class GamesTilesContainerController implements Controller<Node> {
+@RequiredArgsConstructor
+public class GamesTilesContainerController extends NodeController<Node> {
 
   private final UiService uiService;
-  private final ListChangeListener<GameBean> gameListChangeListener;
-  private final PreferencesService preferencesService;
+  private final PlayerService playerService;
+  private final FxApplicationThreadExecutor fxApplicationThreadExecutor;
+
+  private final Comparator<Node> averageRatingComparator = Comparator.comparingDouble(this::getAverageRatingForGame);
+  private final Comparator<Node> titleComparator = Comparator.comparing(o -> ((GameInfo) o.getUserData()).getTitle()
+                                                                                                         .toLowerCase(
+                                                                                                             Locale.US));
+  private final Comparator<Node> playerCountComparator = Comparator.comparingInt(
+      o -> ((GameInfo) o.getUserData()).getNumActivePlayers());
+
   public FlowPane tiledFlowPane;
   public ScrollPane tiledScrollPane;
-  private final ChangeListener<? super TilesSortingOrder> sortingListener;
-  private final ObjectProperty<GameBean> selectedGame;
-  private Comparator<Node> appliedComparator;
-  @VisibleForTesting
-  Map<Integer, Node> gameIdToGameCard;
-  private GameTooltipController gameTooltipController;
+  public GameTooltipController gameTooltipController;
+
   private Tooltip tooltip;
 
-  public GamesTilesContainerController(UiService uiService, PreferencesService preferencesService) {
-    this.uiService = uiService;
-    this.preferencesService = preferencesService;
-    selectedGame = new SimpleObjectProperty<>();
+  private final ObservableMap<GameInfo, Node> gameToGameCard = FXCollections.synchronizedObservableMap(
+      FXCollections.observableHashMap());
+  private final SortedList<Node> gameCards = new SortedList<>(
+      JavaFxUtil.attachListToMap(FXCollections.observableArrayList(), gameToGameCard));
+  private final ObjectProperty<TilesSortingOrder> sortingOrder = new SimpleObjectProperty<>();
+  private final ReadOnlyObjectWrapper<GameInfo> selectedGame = new ReadOnlyObjectWrapper<>();
 
-    sortingListener = (observable, oldValue, newValue) -> {
-      if (newValue == null) {
-        return;
-      }
-      preferencesService.getPreferences().setGameTileSortingOrder(newValue);
-      preferencesService.storeInBackground();
-      appliedComparator = newValue.getComparator();
-      sortNodes();
-    };
+  private final ListChangeListener<GameInfo> gameListChangeListener = this::onGameListChange;
+  private ObservableList<GameInfo> games;
 
-    gameListChangeListener = change -> JavaFxUtil.runLater(() -> {
-      while (change.next()) {
-        change.getRemoved().forEach(game -> {
-          Node card = gameIdToGameCard.remove(game.getId());
-          if (card != null) {
-            Tooltip.uninstall(card, tooltip);
-            boolean remove = tiledFlowPane.getChildren().remove(card);
-            if (!remove) {
-              log.warn("Tried to remove game tile that did not exist in UI.");
-            }
-          } else {
-            log.warn("Tried to remove game tile that did not exist.");
-          }
-        });
-        change.getAddedSubList().forEach(GamesTilesContainerController.this::addGameCard);
-        sortNodes();
-      }
-    });
+  private double getAverageRatingForGame(Node tile) {
+    return this.playerService.getAverageRatingForGame((GameInfo) tile.getUserData());
   }
 
-  private void sortNodes() {
-    ObservableList<Node> sortedChildren = tiledFlowPane.getChildren().sorted(appliedComparator);
-    tiledFlowPane.getChildren().setAll(sortedChildren);
-  }
-
-  public void initialize() {
-    gameTooltipController = uiService.loadFxml("theme/play/game_tooltip.fxml");
+  @Override
+  protected void onInitialize() {
     tooltip = JavaFxUtil.createCustomTooltip(gameTooltipController.getRoot());
-    tooltip.showingProperty().addListener((observable, oldValue, newValue) -> {
-      if (newValue) {
-        gameTooltipController.displayGame();
-      } else {
-        gameTooltipController.setGame(null);
-      }
-    });
-
     JavaFxUtil.fixScrollSpeed(tiledScrollPane);
+
+    gameCards.comparatorProperty().bind(sortingOrder.map(order -> switch (order) {
+      case PLAYER_DES -> playerCountComparator.reversed();
+      case PLAYER_ASC -> playerCountComparator;
+      case AVG_RATING_DES -> averageRatingComparator.reversed();
+      case AVG_RATING_ASC -> averageRatingComparator;
+      case NAME_DES -> titleComparator.reversed();
+      case NAME_ASC -> titleComparator;
+    }).when(showing));
+
+    Bindings.bindContent(tiledFlowPane.getChildren(), gameCards);
   }
 
-  ReadOnlyObjectProperty<GameBean> selectedGameProperty() {
-    return this.selectedGame;
-  }
-
-  @VisibleForTesting
-  void createTiledFlowPane(ObservableList<GameBean> games, ComboBox<TilesSortingOrder> choseSortingTypeChoiceBox) {
-    JavaFxUtil.assertApplicationThread();
-    initializeChoiceBox(choseSortingTypeChoiceBox);
-    gameIdToGameCard = new HashMap<>();
-
-    JavaFxUtil.addListener(games, new WeakListChangeListener<>(gameListChangeListener));
-    games.forEach(this::addGameCard);
-
-    selectFirstGame();
-    sortNodes();
-  }
-
-  private void initializeChoiceBox(ComboBox<TilesSortingOrder> sortingTypeChoiceBox) {
-    sortingTypeChoiceBox.setVisible(true);
-    sortingTypeChoiceBox.getSelectionModel().selectedItemProperty().addListener(new WeakChangeListener<>(sortingListener));
-    sortingTypeChoiceBox.getSelectionModel().select(preferencesService.getPreferences().getGameTileSortingOrder());
-  }
-
-  private void selectFirstGame() {
-    ObservableList<Node> cards = tiledFlowPane.getChildren();
-    if (!cards.isEmpty()) {
-      selectedGame.set((GameBean) cards.get(0).getUserData());
+  @Override
+  public void onHide() {
+    if (games != null) {
+      games.removeListener(gameListChangeListener);
     }
   }
 
-  private void addGameCard(GameBean game) {
+  private void onGameListChange(Change<? extends GameInfo> change) {
+    while (change.next()) {
+      if (change.wasRemoved()) {
+        change.getRemoved().forEach(this::removeGameCard);
+      }
+
+      if (change.wasAdded()) {
+        change.getAddedSubList().forEach(this::addGameCard);
+      }
+    }
+  }
+
+  public ReadOnlyObjectProperty<GameInfo> selectedGameProperty() {
+    return selectedGame.getReadOnlyProperty();
+  }
+
+  public void createTiledFlowPane(ObservableList<GameInfo> games) {
+    if (this.games != null) {
+      this.games.removeListener(gameListChangeListener);
+    }
+
+    this.games = games;
+    this.games.addListener(gameListChangeListener);
+    games.forEach(this::addGameCard);
+    selectFirstGame();
+  }
+
+  private void selectFirstGame() {
+    selectedGame.set(!gameCards.isEmpty() ? (GameInfo) gameCards.getFirst().getUserData() : null);
+  }
+
+  private void addGameCard(GameInfo game) {
+    if (gameToGameCard.containsKey(game)) {
+      return;
+    }
+
+    CompletableFuture.supplyAsync(() -> createGameCard(game))
+                     .thenAcceptAsync(root -> {
+                       gameToGameCard.put(game, root);
+                       if (selectedGame.get() == null) {
+                         selectedGame.set(game);
+                       }
+                     }, fxApplicationThreadExecutor)
+                     .exceptionally(throwable -> {
+                       log.error("Unable to create and add game card", throwable);
+                       return null;
+                     });
+
+  }
+
+  private Node createGameCard(GameInfo game) {
     GameTileController gameTileController = uiService.loadFxml("theme/play/game_card.fxml");
     gameTileController.setGame(game);
     gameTileController.setOnSelectedListener(selectedGame::set);
 
     Node root = gameTileController.getRoot();
     root.setUserData(game);
-    tiledFlowPane.getChildren().add(root);
-    gameIdToGameCard.put(game.getId(), root);
-    
-    root.setOnMouseEntered(event -> {
-      gameTooltipController.setGame(game);
-      if (tooltip.isShowing()) {
-        gameTooltipController.displayGame();
+
+    root.setOnMouseEntered(event -> gameTooltipController.setGame(game));
+    root.setOnMouseExited(event -> {
+      if (Objects.equals(game, gameTooltipController.getGame())) {
+        gameTooltipController.setGame(null);
       }
     });
     Tooltip.install(root, tooltip);
+    return root;
   }
 
+  private void removeGameCard(GameInfo game) {
+    fxApplicationThreadExecutor.execute(() -> {
+      Node card = gameToGameCard.remove(game);
+      if (card != null) {
+        Tooltip.uninstall(card, tooltip);
+        clearSelectedGame(game);
+      } else {
+        log.warn("Tried to remove game tile that did not exist.");
+      }
+    });
+  }
+
+  private void clearSelectedGame(GameInfo game) {
+    if (game.equals(selectedGame.getValue()) && game.getStatus() != GameStatus.OPEN) {
+      selectFirstGame();
+    }
+  }
+
+  @Override
   public Node getRoot() {
     return tiledScrollPane;
   }
 
+  public TilesSortingOrder getSortingOrder() {
+    return sortingOrder.get();
+  }
+
+  public ObjectProperty<TilesSortingOrder> sortingOrderProperty() {
+    return sortingOrder;
+  }
+
+  public void setSortingOrder(TilesSortingOrder sortingOrder) {
+    this.sortingOrder.set(sortingOrder);
+  }
+
+  @Getter
+  @RequiredArgsConstructor
   public enum TilesSortingOrder {
-    PLAYER_DES(Comparator.comparingInt(o -> ((GameBean) o.getUserData()).getNumPlayers()), true, "tiles.comparator.playersDescending"),
-    PLAYER_ASC(Comparator.comparingInt(o -> ((GameBean) o.getUserData()).getNumPlayers()), false, "tiles.comparator.playersAscending"),
-    AVG_RATING_DES(Comparator.comparingDouble(o -> ((GameBean) o.getUserData()).getAverageRating()), true, "tiles.comparator.averageRatingDescending"),
-    AVG_RATING_ASC(Comparator.comparingDouble(o -> ((GameBean) o.getUserData()).getAverageRating()), false, "tiles.comparator.averageRatingAscending"),
-    NAME_DES(Comparator.comparing(o -> ((GameBean) o.getUserData()).getTitle().toLowerCase(Locale.US)), true, "tiles.comparator.nameDescending"),
-    NAME_ASC(Comparator.comparing(o -> ((GameBean) o.getUserData()).getTitle().toLowerCase(Locale.US)), false, "tiles.comparator.nameAscending");
+    PLAYER_DES("tiles.comparator.playersDescending"),
+    PLAYER_ASC("tiles.comparator.playersAscending"),
+    AVG_RATING_DES("tiles.comparator.averageRatingDescending"),
+    AVG_RATING_ASC("tiles.comparator.averageRatingAscending"),
+    NAME_DES("tiles.comparator.nameDescending"),
+    NAME_ASC("tiles.comparator.nameAscending");
 
-    @Getter
-    private final Comparator<Node> comparator;
-    @Getter
     private final String displayNameKey;
-
-    TilesSortingOrder(Comparator<Node> comparator, boolean reversed, String displayNameKey) {
-      this.displayNameKey = displayNameKey;
-      this.comparator = reversed ? comparator.reversed() : comparator;
-    }
   }
 }

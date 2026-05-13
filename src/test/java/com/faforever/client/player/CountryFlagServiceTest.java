@@ -14,6 +14,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasItems;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 
@@ -27,17 +28,17 @@ public class CountryFlagServiceTest extends ServiceTest {
 
   @BeforeEach
   public void setUp() {
-    when(i18n.getCountryNameLocalized(anyString())).thenReturn(""); //Default result to avoid nullPointers
+    lenient().when(i18n.getCountryNameLocalized(anyString())).thenReturn(""); //Default result to avoid nullPointers
   }
 
   @Test
   public void shouldFindOnCountryMatch() {
     //Arrange
-    Locale.setDefault(new Locale("da", "DK"));
+    Locale.setDefault(Locale.of("da", "DK"));
     String[] inputs = {"d", "D", "dk", "DK"};
     for (String input : inputs) {
       //Act
-      List<String> result = instance.getCountries(input);
+      List<String> result = instance.getISOCountries(input);
 
       //Assert
       assertThat(result, hasItem("DK"));
@@ -51,7 +52,7 @@ public class CountryFlagServiceTest extends ServiceTest {
     final String displayName = "Denmark";
     when(i18n.getCountryNameLocalized("DK")).thenReturn(displayName);
     //Act
-    List<String> result = instance.getCountries(input);
+    List<String> result = instance.getISOCountries(input);
 
     //Assert
     assertThat(result, hasItem("DK"));
@@ -61,7 +62,7 @@ public class CountryFlagServiceTest extends ServiceTest {
   public void shouldFindAllOnEmptyString() {
     //Arrange
     //Act
-    List<String> result = instance.getCountries("");
+    List<String> result = instance.getISOCountries("");
 
     //Assert
     assertThat(result, hasItems("DK", "DE", "GB", "AU", "BE")); //just a list of countries to match for
@@ -71,7 +72,7 @@ public class CountryFlagServiceTest extends ServiceTest {
   public void shouldReturnAllCountriesOnNullInput() {
     //Arrange
     //Act
-    List<String> result = instance.getCountries(null);
+    List<String> result = instance.getISOCountries(null);
 
     //Assert
     assertThat(result, hasItems("DK", "DE", "GB", "AU", "BE")); //just a list of countries to match for

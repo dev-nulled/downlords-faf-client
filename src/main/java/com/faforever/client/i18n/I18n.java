@@ -1,10 +1,12 @@
 package com.faforever.client.i18n;
 
-import com.faforever.client.preferences.PreferencesService;
+import com.faforever.client.preferences.DataPrefs;
+import com.faforever.client.preferences.LocalizationPrefs;
 import com.google.common.base.Strings;
+import javafx.beans.property.ReadOnlySetProperty;
 import javafx.beans.property.ReadOnlySetWrapper;
 import javafx.collections.FXCollections;
-import javafx.collections.ObservableSet;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.context.support.ReloadableResourceBundleMessageSource;
@@ -13,7 +15,6 @@ import org.springframework.stereotype.Service;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Set;
@@ -23,25 +24,23 @@ import java.util.stream.Stream;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class I18n implements InitializingBean {
   private static final Pattern MESSAGES_FILE_PATTERN = Pattern.compile("(.*[/\\\\]messages)(?:_([a-z]{2}))(?:_([a-z]{2}))?\\.properties", Pattern.CASE_INSENSITIVE);
+
   private final ReloadableResourceBundleMessageSource messageSource;
-  private final PreferencesService preferencesService;
-  private final ObservableSet<Locale> availableLanguages;
+  private final LocalizationPrefs localizationPrefs;
+  private final DataPrefs dataPrefs;
+
+  private final ReadOnlySetWrapper<Locale> availableLanguages = new ReadOnlySetWrapper<>(FXCollections.observableSet());
 
   private Locale userSpecificLocale;
 
-  public I18n(ReloadableResourceBundleMessageSource messageSource, PreferencesService preferencesService) {
-    this.messageSource = messageSource;
-    this.preferencesService = preferencesService;
-    availableLanguages = FXCollections.observableSet(new HashSet<>());
-  }
-
   @Override
   public void afterPropertiesSet() throws IOException {
-    Locale locale = preferencesService.getPreferences().getLocalization().getLanguage();
+    Locale locale = localizationPrefs.getLanguage();
     if (locale != null) {
-      userSpecificLocale = new Locale(locale.getLanguage(), locale.getCountry());
+      userSpecificLocale = Locale.of(locale.getLanguage(), locale.getCountry());
       Locale.setDefault(userSpecificLocale);
     } else {
       userSpecificLocale = Locale.getDefault();
@@ -56,20 +55,20 @@ public class I18n implements InitializingBean {
         Locale.US,
         Locale.GERMAN,
         Locale.FRENCH,
-        new Locale("ru"),
+        Locale.of("ru"),
         Locale.CHINESE,
         Locale.TRADITIONAL_CHINESE,
-        new Locale("cs"),
-        new Locale("es"),
-        new Locale("uk"),
-        new Locale("tr"),
-        new Locale("nl"),
-        new Locale("cat"),
+        Locale.of("cs"),
+        Locale.of("es"),
+        Locale.of("uk"),
+        Locale.of("tr"),
+        Locale.of("nl"),
+        Locale.of("cat"),
         Locale.ITALIAN,
-        new Locale("pl")
+        Locale.of("pl")
     ));
 
-    Path languagesDirectory = preferencesService.getPreferences().getData().getLanguagesDirectory();
+    Path languagesDirectory = dataPrefs.getLanguagesDirectory();
     if (Files.notExists(languagesDirectory)) {
       return;
     }
@@ -82,7 +81,7 @@ public class I18n implements InitializingBean {
           .filter(Matcher::matches)
           .forEach(matcher -> {
             newBaseNames.add(Path.of(matcher.group(1)).toUri().toString());
-            availableLanguages.add(new Locale(matcher.group(2), Strings.nullToEmpty(matcher.group(3))));
+            availableLanguages.add(Locale.of(matcher.group(2), Strings.nullToEmpty(matcher.group(3))));
           });
     }
     // Make sure that current base names are added last; the files above have precedence
@@ -124,7 +123,7 @@ public class I18n implements InitializingBean {
     if (isoCode == null) {
       return "";
     }
-    return new Locale("", isoCode).getDisplayCountry(this.userSpecificLocale);
+    return Locale.of("", isoCode).getDisplayCountry(this.userSpecificLocale);
   }
 
   public String getQuantized(String singularKey, String pluralKey, long arg) {
@@ -135,19 +134,19 @@ public class I18n implements InitializingBean {
     return messageSource.getMessage(pluralKey, args, userSpecificLocale);
   }
 
-  public String number(int number) {
-    return String.format(userSpecificLocale, "%d", number);
+  public String number(Number number) {
+    return rounded(number, 0);
   }
 
   public String numberWithSign(int number) {
     return String.format(userSpecificLocale, "%+d", number);
   }
 
-  public String rounded(double number, int digits) {
-    return String.format(userSpecificLocale, "%." + digits + "f", number);
+  public String rounded(Number number, int digits) {
+    return String.format(userSpecificLocale, "%." + digits + "f", number.doubleValue());
   }
 
-  public ReadOnlySetWrapper<Locale> getAvailableLanguages() {
-    return new ReadOnlySetWrapper<>(availableLanguages);
+  public ReadOnlySetProperty<Locale> getAvailableLanguages() {
+    return availableLanguages.getReadOnlyProperty();
   }
 }

@@ -1,17 +1,16 @@
 package com.faforever.client.replay;
 
 import com.faforever.client.config.ClientProperties;
-import com.faforever.client.domain.ReplayBean;
 import com.faforever.client.i18n.I18n;
-import com.faforever.client.preferences.PreferencesService;
+import com.faforever.client.preferences.DataPrefs;
 import com.faforever.client.task.CompletableTask;
 import com.faforever.commons.io.ByteCopier;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
-import javax.inject.Inject;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.InputStream;
@@ -30,24 +29,24 @@ public class ReplayDownloadTask extends CompletableTask<Path> {
 
   private final I18n i18n;
   private final ClientProperties clientProperties;
-  private final PreferencesService preferencesService;
+  private final DataPrefs dataPrefs;
 
   private int replayId;
 
-  @Inject
-  public ReplayDownloadTask(I18n i18n, ClientProperties clientProperties, PreferencesService preferencesService) {
+  @Autowired
+  public ReplayDownloadTask(I18n i18n, ClientProperties clientProperties, DataPrefs dataPrefs) {
     super(Priority.HIGH);
 
     this.i18n = i18n;
     this.clientProperties = clientProperties;
-    this.preferencesService = preferencesService;
+    this.dataPrefs = dataPrefs;
   }
 
   @Override
   protected Path call() throws Exception {
     updateTitle(i18n.get("mapReplayTask.title", replayId));
 
-    String replayUrl = ReplayBean.getReplayUrl(replayId, clientProperties.getVault().getReplayDownloadUrlFormat());
+    String replayUrl = clientProperties.getVault().getReplayDownloadUrlFormat().formatted(replayId);
 
     log.info("Downloading replay `{}` from `{}`", replayId, replayUrl);
 
@@ -55,7 +54,7 @@ public class ReplayDownloadTask extends CompletableTask<Path> {
     urlConnection.setInstanceFollowRedirects(true);
     int bytesToRead = urlConnection.getContentLength();
 
-    Path tempSupComReplayFile = preferencesService.getPreferences().getData().getCacheDirectory().resolve(TEMP_FAF_REPLAY_FILE_NAME);
+    Path tempSupComReplayFile = dataPrefs.getCacheDirectory().resolve(TEMP_FAF_REPLAY_FILE_NAME);
 
     Files.createDirectories(tempSupComReplayFile.getParent());
 

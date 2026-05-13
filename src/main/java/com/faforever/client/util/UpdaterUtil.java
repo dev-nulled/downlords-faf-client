@@ -15,6 +15,7 @@ import java.util.zip.ZipFile;
 @Slf4j
 public class UpdaterUtil {
   private static final String MOVIES_FOLDER_NAME = "movies";
+  private static final String SOUNDS_FOLDER_NAME = "sounds";
 
   /**
    * For coop and tutorials the video files(contained in 'movies' folder of zips) need to be extracted from zip and
@@ -24,28 +25,32 @@ public class UpdaterUtil {
    * @param fafDataDirectory the path to the FAF data directory
    * @throws IOException
    */
-  public static void extractMoviesIfPresent(Path filePath, Path fafDataDirectory) throws IOException {
-    try {
-      ZipFile downloadedFile = new ZipFile(filePath.toFile());
-      ZipEntry movieEntry = downloadedFile.getEntry(MOVIES_FOLDER_NAME);
-      if (movieEntry != null && movieEntry.isDirectory()) {
-        Enumeration<? extends ZipEntry> entries = downloadedFile.entries();
-        ZipEntry nextEntry = entries.nextElement();
-        for (; entries.hasMoreElements(); nextEntry = entries.nextElement()) {
-          String entryName = nextEntry.getName();
-          if (!entryName.startsWith(MOVIES_FOLDER_NAME)) {
-            continue;
-          }
-          if (nextEntry.isDirectory()) {
-            Files.createDirectories(fafDataDirectory.resolve(entryName));
-          } else {
-            InputStream inputStream = downloadedFile.getInputStream(nextEntry);
-            Files.copy(inputStream, fafDataDirectory.resolve(entryName), StandardCopyOption.REPLACE_EXISTING);
-          }
-        }
-      }
+  public static void extractMoviesAndSoundsIfPresent(Path filePath, Path fafDataDirectory) throws IOException {
+    try (ZipFile downloadedFile = new ZipFile(filePath.toFile())) {
+      extractFilesInEntry(fafDataDirectory, downloadedFile, MOVIES_FOLDER_NAME);
+      extractFilesInEntry(fafDataDirectory, downloadedFile, SOUNDS_FOLDER_NAME);
     } catch (ZipException e) {
-      log.error("File was not zip file", e);
+      log.info("File was not zip file: {}", filePath);
+    }
+  }
+
+  private static void extractFilesInEntry(Path fafDataDirectory, ZipFile downloadedFile, String topEntryName) throws IOException {
+    ZipEntry movieEntry = downloadedFile.getEntry(topEntryName);
+    if (movieEntry != null && movieEntry.isDirectory()) {
+      Enumeration<? extends ZipEntry> entries = downloadedFile.entries();
+      do {
+        ZipEntry nextEntry = entries.nextElement();
+        String entryName = nextEntry.getName();
+        if (!entryName.startsWith(topEntryName)) {
+          continue;
+        }
+        if (nextEntry.isDirectory()) {
+          Files.createDirectories(fafDataDirectory.resolve(entryName));
+        } else {
+          InputStream inputStream = downloadedFile.getInputStream(nextEntry);
+          Files.copy(inputStream, fafDataDirectory.resolve(entryName), StandardCopyOption.REPLACE_EXISTING);
+        }
+      } while (entries.hasMoreElements());
     }
   }
 }

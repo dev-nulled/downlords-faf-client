@@ -1,7 +1,7 @@
 package com.faforever.client.tournament;
 
-import com.faforever.client.domain.TournamentBean;
-import com.faforever.client.fx.Controller;
+import com.faforever.client.domain.api.Tournament;
+import com.faforever.client.fx.NodeController;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.util.TimeService;
 import javafx.scene.Node;
@@ -15,7 +15,7 @@ import java.text.MessageFormat;
 
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
-public class TournamentListItemController implements Controller<Node> {
+public class TournamentListItemController extends NodeController<Node> {
 
   private final I18n i18n;
   private final TimeService timeService;
@@ -35,17 +35,14 @@ public class TournamentListItemController implements Controller<Node> {
     return tournamentItemRoot;
   }
 
-  void setTournamentItem(TournamentBean tournamentBean) {
-
-    // TODO only use this if there's no thumbnail. However, there's never a thumbnail ATM.
-//    imageView.setImage(uiService.getThemeImage(tournamentBean.getNewsCategory().getImagePath()));
-
-    nameLabel.setText(tournamentBean.getName());
-    if (tournamentBean.getStartingAt() == null) {
+  void setTournamentItem(Tournament tournament) {
+    nameLabel.setText(tournament.name());
+    if (tournament.startingAt() == null) {
       startingLabel.setText(i18n.get("unknown"));
     } else {
-      startingLabel.setText(MessageFormat.format("{0} {1}", timeService.asDate(tournamentBean.getStartingAt()), timeService.asShortTime(tournamentBean.getStartingAt())));
+      startingLabel.setText(MessageFormat.format("{0} {1}", timeService.asDate(tournament.startingAt()),
+                                                 timeService.asShortTime(tournament.startingAt())));
     }
-    statusLabel.setText(i18n.get(tournamentBean.getStatus().getMessageKey()));
+    statusLabel.setText(i18n.get(tournament.status().getMessageKey()));
   }
 }

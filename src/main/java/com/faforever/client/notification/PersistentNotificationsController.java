@@ -1,10 +1,11 @@
 package com.faforever.client.notification;
 
 import com.faforever.client.audio.AudioService;
-import com.faforever.client.fx.Controller;
-import com.faforever.client.fx.JavaFxUtil;
+import com.faforever.client.fx.FxApplicationThreadExecutor;
+import com.faforever.client.fx.NodeController;
 import com.faforever.client.theme.UiService;
 import javafx.collections.ObservableList;
+import javafx.collections.SetChangeListener;
 import javafx.scene.Node;
 import javafx.scene.control.Label;
 import javafx.scene.layout.Pane;
@@ -22,17 +23,20 @@ import java.util.Map;
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
 @RequiredArgsConstructor
-public class PersistentNotificationsController implements Controller<Node> {
+public class PersistentNotificationsController extends NodeController<Node> {
 
   private final Map<PersistentNotification, Node> notificationsToNode = new HashMap<>();
   private final NotificationService notificationService;
   private final AudioService audioService;
   private final UiService uiService;
+  private final FxApplicationThreadExecutor fxApplicationThreadExecutor;
+
   public Label noNotificationsLabel;
   public Pane persistentNotificationsRoot;
 
-  public void initialize() {
-    notificationService.addPersistentNotificationListener(change -> {
+  @Override
+  protected void onInitialize() {
+    notificationService.getPersistentNotifications().addListener((SetChangeListener<PersistentNotification>) change -> {
       if (change.wasAdded()) {
         PersistentNotification addedNotifications = change.getElementAdded();
         addNotification(addedNotifications);
@@ -49,7 +53,7 @@ public class PersistentNotificationsController implements Controller<Node> {
 
     notificationsToNode.put(notification, controller.getRoot());
 
-    JavaFxUtil.runLater(() -> {
+    fxApplicationThreadExecutor.execute(() -> {
       ObservableList<Node> children = persistentNotificationsRoot.getChildren();
       children.remove(noNotificationsLabel);
       children.add(controller.getRoot());
@@ -68,13 +72,14 @@ public class PersistentNotificationsController implements Controller<Node> {
   }
 
   private void playNotificationSound(PersistentNotification notification) {
-    switch (notification.getSeverity()) {
+    switch (notification.severity()) {
       case INFO -> audioService.playInfoNotificationSound();
       case WARN -> audioService.playWarnNotificationSound();
       case ERROR -> audioService.playErrorNotificationSound();
     }
   }
 
+  @Override
   public Node getRoot() {
     return persistentNotificationsRoot;
   }

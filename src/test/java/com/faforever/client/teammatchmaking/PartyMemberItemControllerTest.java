@@ -1,52 +1,49 @@
 package com.faforever.client.teammatchmaking;
 
+import com.faforever.client.avatar.Avatar;
 import com.faforever.client.avatar.AvatarService;
-import com.faforever.client.builders.AvatarBeanBuilder;
-import com.faforever.client.builders.GameBeanBuilder;
-import com.faforever.client.builders.LeagueEntryBeanBuilder;
-import com.faforever.client.builders.PartyBuilder;
-import com.faforever.client.builders.PartyBuilder.PartyMemberBuilder;
-import com.faforever.client.builders.PlayerBeanBuilder;
-import com.faforever.client.builders.SubdivisionBeanBuilder;
-import com.faforever.client.domain.PartyBean;
-import com.faforever.client.domain.PartyBean.PartyMember;
-import com.faforever.client.domain.PlayerBean;
+import com.faforever.client.builders.GameInfoBuilder;
+import com.faforever.client.builders.PartyInfoBuilder;
+import com.faforever.client.builders.PartyInfoBuilder.PartyMemberBuilder;
+import com.faforever.client.builders.PlayerInfoBuilder;
+import com.faforever.client.domain.api.LeagueEntry;
+import com.faforever.client.domain.api.Subdivision;
+import com.faforever.client.domain.server.PartyInfo;
+import com.faforever.client.domain.server.PartyInfo.PartyMember;
+import com.faforever.client.domain.server.PlayerInfo;
 import com.faforever.client.fx.contextmenu.ContextMenuBuilder;
-import com.faforever.client.fx.contextmenu.helper.ContextMenuBuilderHelper;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.leaderboard.LeaderboardService;
 import com.faforever.client.player.CountryFlagService;
 import com.faforever.client.player.PlayerService;
-import com.faforever.client.test.UITest;
-import com.faforever.client.theme.UiService;
+import com.faforever.client.test.PlatformTest;
+import com.faforever.client.theme.ThemeService;
 import com.faforever.commons.lobby.GameStatus;
-import javafx.scene.control.ContextMenu;
-import javafx.scene.input.ContextMenuEvent;
+import org.instancio.Instancio;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.testfx.util.WaitForAsyncUtils;
+import reactor.core.publisher.Mono;
 
 import java.util.HashMap;
-import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
 
 import static com.faforever.client.teammatchmaking.PartyMemberItemController.LEADER_PSEUDO_CLASS;
 import static com.faforever.client.teammatchmaking.PartyMemberItemController.PLAYING_PSEUDO_CLASS;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.instancio.Select.field;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-public class PartyMemberItemControllerTest extends UITest {
+public class PartyMemberItemControllerTest extends PlatformTest {
 
   @Mock
   private CountryFlagService countryFlagService;
@@ -59,7 +56,7 @@ public class PartyMemberItemControllerTest extends UITest {
   @Mock
   private TeamMatchmakingService teamMatchmakingService;
   @Mock
-  private UiService uiService;
+  private ThemeService themeService;
   @Mock
   private I18n i18n;
   @Mock
@@ -67,26 +64,25 @@ public class PartyMemberItemControllerTest extends UITest {
 
   @InjectMocks
   private PartyMemberItemController instance;
-  private PlayerBean owner;
-  private PlayerBean player;
-  private PartyBean party;
+  private PlayerInfo owner;
+  private PlayerInfo player;
+  private PartyInfo party;
 
   @BeforeEach
   public void setUp() throws Exception {
-    party = PartyBuilder.create().defaultValues().get();
+    party = PartyInfoBuilder.create().defaultValues().get();
     owner = party.getOwner();
-    player = PlayerBeanBuilder.create().defaultValues().username("player").id(100).defaultValues().get();
+    player = PlayerInfoBuilder.create().defaultValues().username("player").id(100).defaultValues().get();
     PartyMember partyMember = PartyMemberBuilder.create(player).defaultValues().get();
     party.getMembers().add(partyMember);
-    when(i18n.get(anyString())).thenReturn("");
-    when(i18n.getOrDefault(anyString(), anyString())).thenReturn("");
-    when(i18n.get("teammatchmaking.inPlacement")).thenReturn("In placement");
-    when(i18n.get(eq("leaderboard.divisionName"), anyString(), anyString())).thenReturn("division V");
-    when(i18n.get(eq("teammatchmaking.gameCount"), anyInt())).thenReturn("GAMES PLAYED: 0");
-    when(playerService.getCurrentPlayer()).thenReturn(owner);
-    when(teamMatchmakingService.getParty()).thenReturn(party);
-    when(leaderboardService.getHighestActiveLeagueEntryForPlayer(player)).thenReturn(
-        CompletableFuture.completedFuture(Optional.empty()));
+    lenient().when(i18n.get(anyString())).thenReturn("");
+    lenient().when(i18n.getOrDefault(anyString(), anyString())).thenReturn("");
+    lenient().when(i18n.get("teammatchmaking.inPlacement")).thenReturn("In placement");
+    lenient().when(i18n.get(eq("leaderboard.divisionName"), anyString(), anyString())).thenReturn("division V");
+    lenient().when(i18n.get(eq("teammatchmaking.gameCount"), anyInt())).thenReturn("GAMES PLAYED: 0");
+    lenient().when(playerService.getCurrentPlayer()).thenReturn(owner);
+    lenient().when(teamMatchmakingService.getParty()).thenReturn(party);
+    lenient().when(leaderboardService.getHighestActiveLeagueEntryForPlayer(player)).thenReturn(Mono.empty());
 
     loadFxml("theme/play/teammatchmaking/matchmaking_member_card.fxml", clazz -> instance);
     runOnFxThreadAndWait(() -> instance.setMember(partyMember));
@@ -100,14 +96,14 @@ public class PartyMemberItemControllerTest extends UITest {
 
   @Test
   public void testLeagueSet() {
-    when(leaderboardService.getHighestActiveLeagueEntryForPlayer(player)).thenReturn(
-        CompletableFuture.completedFuture(Optional.of(LeagueEntryBeanBuilder.create().defaultValues().get())));
+    LeagueEntry leagueEntry = Instancio.of(LeagueEntry.class).set(field(Subdivision::nameKey), "V").create();
+    when(leaderboardService.getHighestActiveLeagueEntryForPlayer(player)).thenReturn(Mono.just(leagueEntry));
 
     runOnFxThreadAndWait(() -> instance.setLeagueInfo());
 
     assertThat(instance.leagueLabel.getText(), is("DIVISION V"));
     assertTrue(instance.leagueImageView.isVisible());
-    verify(leaderboardService).loadDivisionImage(SubdivisionBeanBuilder.create().defaultValues().get().getMediumImageUrl());
+    verify(leaderboardService).loadDivisionImage(leagueEntry.subdivision().mediumImageUrl());
   }
 
   @Test
@@ -115,7 +111,7 @@ public class PartyMemberItemControllerTest extends UITest {
     assertFalse(instance.playerStatusImageView.isVisible());
     assertFalse(instance.playerCard.getPseudoClassStates().contains(PLAYING_PSEUDO_CLASS));
 
-    player.setGame(GameBeanBuilder.create().defaultValues().status(GameStatus.PLAYING).get());
+    player.setGame(GameInfoBuilder.create().defaultValues().status(GameStatus.PLAYING).get());
     WaitForAsyncUtils.waitForFxEvents();
 
     assertTrue(instance.playerStatusImageView.isVisible());
@@ -153,7 +149,7 @@ public class PartyMemberItemControllerTest extends UITest {
     assertThat(instance.clanLabel.getText(), is(String.format("[%s]", player.getClan())));
 
     player.setCountry("DE");
-    player.setAvatar(AvatarBeanBuilder.create().defaultValues().get());
+    player.setAvatar(Instancio.create(Avatar.class));
     player.setClan("");
     player.setUsername("player");
     player.setLeaderboardRatings(new HashMap<>());
@@ -183,14 +179,5 @@ public class PartyMemberItemControllerTest extends UITest {
     assertThat(instance.aeonLabel.isDisabled(), is(false));
     assertThat(instance.cybranLabel.isDisabled(), is(false));
     assertThat(instance.seraphimLabel.isDisabled(), is(false));
-  }
-
-  @Test
-  public void testOnContextMenuRequested() {
-    runOnFxThreadAndWait(() -> getRoot().getChildren().add(instance.getRoot()));
-    ContextMenu contextMenuMock = ContextMenuBuilderHelper.mockContextMenuBuilderAndGetContextMenuMock(contextMenuBuilder);
-
-    instance.onContextMenuRequested(mock(ContextMenuEvent.class));
-    verify(contextMenuMock).show(eq(instance.getRoot().getScene().getWindow()), anyDouble(), anyDouble());
   }
 }

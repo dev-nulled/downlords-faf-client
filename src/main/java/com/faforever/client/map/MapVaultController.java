@@ -1,25 +1,31 @@
 package com.faforever.client.map;
 
-import com.faforever.client.domain.MapVersionBean;
-import com.faforever.client.domain.MatchmakerQueueBean;
+import com.faforever.client.domain.api.MapVersion;
+import com.faforever.client.domain.server.MatchmakerQueueInfo;
+import com.faforever.client.fx.FxApplicationThreadExecutor;
 import com.faforever.client.fx.JavaFxUtil;
 import com.faforever.client.fx.PlatformService;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.main.event.NavigateEvent;
 import com.faforever.client.main.event.OpenMapVaultEvent;
-import com.faforever.client.main.event.ShowMapPoolEvent;
-import com.faforever.client.map.event.MapUploadedEvent;
 import com.faforever.client.map.management.MapsManagementController;
 import com.faforever.client.notification.NotificationService;
-import com.faforever.client.preferences.PreferencesService;
+import com.faforever.client.preferences.ForgedAlliancePrefs;
+import com.faforever.client.preferences.MapSearchPrefs;
+import com.faforever.client.preferences.VaultPrefs;
+import com.faforever.client.query.CategoryFilterController;
+import com.faforever.client.query.DateRangeFilterController;
+import com.faforever.client.query.RangeFilterController;
 import com.faforever.client.query.SearchablePropertyMappings;
+import com.faforever.client.query.TextFilterController;
+import com.faforever.client.query.ToggleFilterController;
 import com.faforever.client.reporting.ReportingService;
 import com.faforever.client.theme.UiService;
 import com.faforever.client.ui.dialog.Dialog;
+import com.faforever.client.vault.VaultEntityCardController;
 import com.faforever.client.vault.VaultEntityController;
 import com.faforever.client.vault.search.SearchController.SearchConfig;
-import com.google.common.eventbus.EventBus;
-import com.google.common.eventbus.Subscribe;
+import javafx.beans.binding.Bindings;
 import javafx.scene.Node;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
@@ -27,7 +33,6 @@ import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
 import java.nio.file.Path;
-import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Random;
@@ -35,49 +40,63 @@ import java.util.Random;
 @Slf4j
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
-// TODO I'd like to avoid the additional "getMost*" methods and always use the map query function instead, however,
-// this is currently not viable since Elide can't yet sort by relationship attributes. Once it supports that
-// (see https://github.com/yahoo/elide/issues/353), this can be refactored.
-public class MapVaultController extends VaultEntityController<MapVersionBean> {
+public class MapVaultController extends VaultEntityController<MapVersion> {
 
   private final MapService mapService;
   private final PlatformService platformService;
-  private final EventBus eventBus;
+  private final VaultPrefs vaultPrefs;
+  private final ForgedAlliancePrefs forgedAlliancePrefs;
 
   private MapDetailController mapDetailController;
   private Integer recommendedShowRoomPageCount;
-  private MatchmakerQueueBean matchmakerQueue;
+  private MatchmakerQueueInfo matchmakerQueue;
+  private CategoryFilterController widthCategoryFilterController;
+  private CategoryFilterController heightCategoryFilterController;
 
-  public MapVaultController(MapService mapService, I18n i18n, EventBus eventBus, PreferencesService preferencesService,
-                            UiService uiService, NotificationService notificationService, ReportingService reportingService,
-                            PlatformService platformService) {
-    super(uiService, notificationService, i18n, preferencesService, reportingService);
+  public MapVaultController(MapService mapService, I18n i18n,
+                            UiService uiService, NotificationService notificationService,
+                            ReportingService reportingService,
+                            PlatformService platformService, VaultPrefs vaultPrefs,
+                            ForgedAlliancePrefs forgedAlliancePrefs,
+                            FxApplicationThreadExecutor fxApplicationThreadExecutor) {
+    super(uiService, notificationService, i18n, reportingService, vaultPrefs, fxApplicationThreadExecutor);
     this.mapService = mapService;
-    this.eventBus = eventBus;
     this.platformService = platformService;
+    this.vaultPrefs = vaultPrefs;
+    this.forgedAlliancePrefs = forgedAlliancePrefs;
   }
 
   @Override
-  public void initialize() {
-    super.initialize();
+  protected void onInitialize() {
+    super.onInitialize();
     manageVaultButton.setVisible(true);
     manageVaultButton.setText(i18n.get("management.maps.openButton.label"));
-    mapService.getRecommendedMapPageCount(TOP_ELEMENT_COUNT).thenAccept(numPages -> recommendedShowRoomPageCount = numPages);
-
-    eventBus.register(this);
+    mapService.getRecommendedMapPageCount(TOP_ELEMENT_COUNT)
+              .subscribe(numPages -> recommendedShowRoomPageCount = numPages);
   }
 
+  @Override
   protected void initSearchController() {
     searchController.setRootType(com.faforever.commons.api.dto.Map.class);
     searchController.setSearchableProperties(SearchablePropertyMappings.MAP_PROPERTY_MAPPING);
-    searchController.setSortConfig(preferencesService.getPreferences().getVault().mapSortConfigProperty());
+    searchController.setSortConfig(vaultPrefs.mapSortConfigProperty());
     searchController.setOnlyShowLastYearCheckBoxVisible(false);
     searchController.setVaultRoot(vaultRoot);
-    searchController.setSavedQueries(preferencesService.getPreferences().getVault().getSavedMapQueries());
+    searchController.setSavedQueries(vaultPrefs.getSavedMapQueries());
 
-    searchController.addTextFilter("displayName", i18n.get("map.name"), false);
-    searchController.addTextFilter("author.login", i18n.get("map.author"), false);
-    searchController.addDateRangeFilter("latestVersion.updateTime", i18n.get("map.uploadedDateTime"), 0);
+    MapSearchPrefs mapSearchPrefs = vaultPrefs.getMapSearch();
+    TextFilterController textFilterController = searchController.addTextFilter("displayName", i18n.get("map.name"), false);
+    textFilterController.setText(mapSearchPrefs.getMapNameField());
+    mapSearchPrefs.mapNameFieldProperty().bind(textFilterController.textFieldProperty().when(showing));
+    textFilterController = searchController.addTextFilter("author.login", i18n.get("map.author"), false);
+    textFilterController.setText(mapSearchPrefs.getMapAuthorField());
+    mapSearchPrefs.mapAuthorFieldProperty().bind(textFilterController.textFieldProperty().when(showing));
+    
+    DateRangeFilterController dateRangeFilterController = searchController.addDateRangeFilter("latestVersion.updateTime", i18n.get("map.uploadedDateTime"), 0);
+    dateRangeFilterController.setBeforeDate(mapSearchPrefs.getUploadedBeforeDate());
+    dateRangeFilterController.setAfterDate(mapSearchPrefs.getUploadedAfterDate());
+    mapSearchPrefs.uploadedBeforeDateProperty().bind(dateRangeFilterController.beforeDateProperty().when(showing));
+    mapSearchPrefs.uploadedAfterDateProperty().bind(dateRangeFilterController.afterDateProperty().when(showing));
 
     LinkedHashMap<String, String> mapSizeMap = new LinkedHashMap<>();
     mapSizeMap.put("1km", "64");
@@ -88,59 +107,81 @@ public class MapVaultController extends VaultEntityController<MapVersionBean> {
     mapSizeMap.put("40km", "2048");
     mapSizeMap.put("80km", "4096");
 
-    searchController.addCategoryFilter("latestVersion.width", i18n.get("map.width"), mapSizeMap);
-    searchController.addCategoryFilter("latestVersion.height", i18n.get("map.height"), mapSizeMap);
-    searchController.addRangeFilter("latestVersion.maxPlayers", i18n.get("map.maxPlayers"), 0, 16, 1, Double::intValue);
-    searchController.addToggleFilter("latestVersion.ranked", i18n.get("map.onlyRanked"), "true");
+    widthCategoryFilterController = searchController.addCategoryFilter("latestVersion.width", i18n.get("map.width"), mapSizeMap);
+    mapSearchPrefs.getMapWidthFilter().forEach((item) -> widthCategoryFilterController.checkItem(item));
+    heightCategoryFilterController = searchController.addCategoryFilter("latestVersion.height", i18n.get("map.height"), mapSizeMap);
+    mapSearchPrefs.getMapHeightFilter().forEach((item) -> heightCategoryFilterController.checkItem(item));
+
+    RangeFilterController rangeFilterController = searchController.addRangeFilter("latestVersion.maxPlayers", i18n.get("map.maxPlayers"), 0, 16, 16, 0, 0, Double::intValue);
+    rangeFilterController.setLowValue(mapSearchPrefs.getMaxPlayersMin());
+    rangeFilterController.setHighValue(mapSearchPrefs.getMaxPlayersMax());
+    mapSearchPrefs.maxPlayersMinProperty().bind(rangeFilterController.lowValueProperty().asObject().when(showing));
+    mapSearchPrefs.maxPlayersMaxProperty().bind(rangeFilterController.highValueProperty().asObject().when(showing));
+    rangeFilterController = searchController.addRangeFilter("reviewsSummary.averageScore", i18n.get("reviews.averageScore"), 0, 5, 10, 4, 1);
+    rangeFilterController.setLowValue(mapSearchPrefs.getAverageReviewScoresMin());
+    rangeFilterController.setHighValue(mapSearchPrefs.getAverageReviewScoresMax());
+    mapSearchPrefs.averageReviewScoresMinProperty().bind(rangeFilterController.lowValueProperty().asObject().when(showing));
+    mapSearchPrefs.averageReviewScoresMaxProperty().bind(rangeFilterController.highValueProperty().asObject().when(showing));
+
+    ToggleFilterController toggleFilterController = searchController.addToggleFilter("latestVersion.ranked", i18n.get("map.onlyRanked"), "true");
+    toggleFilterController.setSelected(mapSearchPrefs.getOnlyRanked());
+    mapSearchPrefs.onlyRankedProperty().bind(toggleFilterController.selectedProperty().when(showing));
   }
 
   @Override
-  protected void onDisplayDetails(MapVersionBean mapBean) {
+  protected void onDisplayDetails(MapVersion mapBean) {
     JavaFxUtil.assertApplicationThread();
     mapDetailController.setMapVersion(mapBean);
     mapDetailController.getRoot().setVisible(true);
     mapDetailController.getRoot().requestFocus();
   }
 
+  @Override
   protected void setSupplier(SearchConfig searchConfig) {
-    switch (searchType) {
-      case SEARCH -> currentSupplier = mapService.findByQueryWithPageCount(searchConfig, pageSize, pagination.getCurrentPageIndex() + 1);
-      case RECOMMENDED -> currentSupplier = mapService.getRecommendedMapsWithPageCount(pageSize, pagination.getCurrentPageIndex() + 1);
-      case NEWEST -> currentSupplier = mapService.getNewestMapsWithPageCount(pageSize, pagination.getCurrentPageIndex() + 1);
-      case HIGHEST_RATED -> currentSupplier = mapService.getHighestRatedMapsWithPageCount(pageSize, pagination.getCurrentPageIndex() + 1);
-      case PLAYED -> currentSupplier = mapService.getMostPlayedMapsWithPageCount(pageSize, pagination.getCurrentPageIndex() + 1);
-      case MAP_POOL -> currentSupplier = mapService.getMatchmakerMapsWithPageCount(matchmakerQueue, pageSize, pagination.getCurrentPageIndex() + 1);
-      case OWN -> currentSupplier = mapService.getOwnedMapsWithPageCount(pageSize, pagination.getCurrentPageIndex() + 1);
-    }
-  }
-
-  protected Node getEntityCard(MapVersionBean map) {
-    MapCardController controller = uiService.loadFxml("theme/vault/map/map_card.fxml");
-    controller.setMapVersion(map);
-    controller.setOnOpenDetailListener(this::onDisplayDetails);
-    return controller.getRoot();
+    currentSupplier = switch (searchType) {
+      case SEARCH -> mapService.findByQueryWithPageCount(searchConfig, pageSize, pagination.getCurrentPageIndex() + 1);
+      case RECOMMENDED -> mapService.getRecommendedMapsWithPageCount(pageSize, pagination.getCurrentPageIndex() + 1);
+      case NEWEST -> mapService.getNewestMapsWithPageCount(pageSize, pagination.getCurrentPageIndex() + 1);
+      case HIGHEST_RATED -> mapService.getHighestRatedMapsWithPageCount(pageSize, pagination.getCurrentPageIndex() + 1);
+      case PLAYED -> mapService.getMostPlayedMapsWithPageCount(pageSize, pagination.getCurrentPageIndex() + 1);
+      case OWN -> mapService.getOwnedMapsWithPageCount(pageSize, pagination.getCurrentPageIndex() + 1);
+      case PLAYER, HIGHEST_RATED_UI -> throw new UnsupportedOperationException();
+    };
   }
 
   @Override
-  protected List<ShowRoomCategory> getShowRoomCategories() {
-    int recommendedPage;
-    if (recommendedShowRoomPageCount != null && recommendedShowRoomPageCount > 0) {
-      recommendedPage = new Random().nextInt(recommendedShowRoomPageCount) + 1;
-    } else {
-      recommendedPage = 1;
-    }
-
-    return Arrays.asList(
-        new ShowRoomCategory(() -> mapService.getRecommendedMapsWithPageCount(TOP_ELEMENT_COUNT, recommendedPage), SearchType.RECOMMENDED, "mapVault.recommended"),
-        new ShowRoomCategory(() -> mapService.getHighestRatedMapsWithPageCount(TOP_ELEMENT_COUNT, 1), SearchType.HIGHEST_RATED, "mapVault.mostLikedMaps"),
-        new ShowRoomCategory(() -> mapService.getNewestMapsWithPageCount(TOP_ELEMENT_COUNT, 1), SearchType.NEWEST, "mapVault.newestMaps"),
-        new ShowRoomCategory(() -> mapService.getMostPlayedMapsWithPageCount(TOP_ELEMENT_COUNT, 1), SearchType.PLAYED, "mapVault.mostPlayed"),
-        new ShowRoomCategory(() -> mapService.getOwnedMapsWithPageCount(TOP_ELEMENT_COUNT, 1), SearchType.OWN, "mapVault.owned"));
+  protected VaultEntityCardController<MapVersion> createEntityCard() {
+    MapCardController controller = uiService.loadFxml("theme/vault/map/map_card.fxml");
+    controller.setOnOpenDetailListener(this::onDisplayDetails);
+    return controller;
   }
 
+  @Override
+  protected List<ShowRoomCategory<MapVersion>> getShowRoomCategories() {
+return List.of(
+    new ShowRoomCategory<>(() -> {
+      int recommendedPage;
+      if (recommendedShowRoomPageCount != null && recommendedShowRoomPageCount > 0) {
+        recommendedPage = new Random().nextInt(recommendedShowRoomPageCount) + 1;
+      } else {
+        recommendedPage = 1;
+      }
+      return mapService.getRecommendedMapsWithPageCount(TOP_ELEMENT_COUNT, recommendedPage);
+    }, SearchType.RECOMMENDED, "mapVault.recommended"),
+    new ShowRoomCategory<>(() -> mapService.getHighestRatedMapsWithPageCount(TOP_ELEMENT_COUNT, 1),
+                           SearchType.HIGHEST_RATED, "mapVault.mostLikedMaps"),
+    new ShowRoomCategory<>(() -> mapService.getNewestMapsWithPageCount(TOP_ELEMENT_COUNT, 1), SearchType.NEWEST,
+                           "mapVault.newestMaps"),
+    new ShowRoomCategory<>(() -> mapService.getMostPlayedMapsWithPageCount(TOP_ELEMENT_COUNT, 1), SearchType.PLAYED,
+                           "mapVault.mostPlayed"),
+    new ShowRoomCategory<>(() -> mapService.getOwnedMapsWithPageCount(TOP_ELEMENT_COUNT, 1), SearchType.OWN,
+                           "mapVault.owned"));
+  }
+
+  @Override
   public void onUploadButtonClicked() {
-    platformService.askForPath(i18n.get("mapVault.upload.chooseDirectory"), preferencesService.getPreferences().getForgedAlliance().getMapsDirectory())
-        .ifPresent(this::openUploadWindow);
+    platformService.askForPath(i18n.get("mapVault.upload.chooseDirectory"), forgedAlliancePrefs.getMapsDirectory())
+                   .thenAccept(possiblePath -> possiblePath.ifPresent(this::openUploadWindow));
   }
 
   @Override
@@ -163,13 +204,7 @@ public class MapVaultController extends VaultEntityController<MapVersionBean> {
 
   @Override
   protected void handleSpecialNavigateEvent(NavigateEvent navigateEvent) {
-    if (navigateEvent instanceof ShowMapPoolEvent) {
-      matchmakerQueue = ((ShowMapPoolEvent) navigateEvent).getQueue();
-      searchType = SearchType.MAP_POOL;
-      onPageChange(null, true);
-    } else {
-      log.warn("No such NavigateEvent for this Controller: {}", navigateEvent.getClass());
-    }
+    log.warn("No such NavigateEvent for this Controller: {}", navigateEvent.getClass());
   }
 
   private void openUploadWindow(Path path) {
@@ -180,10 +215,16 @@ public class MapVaultController extends VaultEntityController<MapVersionBean> {
     Dialog dialog = uiService.showInDialog(vaultRoot, root, i18n.get("mapVault.upload.title"));
     uiService.makeScrollableDialog(dialog);
     mapUploadController.setOnCancelButtonClickedListener(dialog::close);
+    mapUploadController.setUploadListener(this::onRefreshButtonClicked);
   }
 
-  @Subscribe
-  public void onMapUploaded(MapUploadedEvent event) {
-    onRefreshButtonClicked();
+  @Override
+  public void onShow() {
+    super.onShow();
+    MapSearchPrefs mapSearchPrefs = vaultPrefs.getMapSearch();
+    Bindings.bindContent(mapSearchPrefs.mapWidthFilterProperty(), widthCategoryFilterController.getCheckedItems());
+    addShownSubscription(() -> Bindings.unbindContent(mapSearchPrefs.mapWidthFilterProperty(), widthCategoryFilterController.getCheckedItems()));
+    Bindings.bindContent(mapSearchPrefs.mapHeightFilterProperty(), heightCategoryFilterController.getCheckedItems());
+    addShownSubscription(() -> Bindings.unbindContent(mapSearchPrefs.mapHeightFilterProperty(), heightCategoryFilterController.getCheckedItems()));
   }
 }

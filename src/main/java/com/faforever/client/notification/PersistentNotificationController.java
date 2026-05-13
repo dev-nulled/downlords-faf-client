@@ -1,10 +1,12 @@
 package com.faforever.client.notification;
 
-import com.faforever.client.fx.Controller;
-import javafx.scene.control.Button;
+import com.faforever.client.fx.NodeController;
+import com.faforever.client.theme.ThemeService;
 import javafx.collections.ObservableList;
 import javafx.scene.Node;
+import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.image.ImageView;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Region;
 import lombok.RequiredArgsConstructor;
@@ -21,26 +23,36 @@ import java.util.List;
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
 @RequiredArgsConstructor
-public class PersistentNotificationController implements Controller<Node> {
+public class PersistentNotificationController extends NodeController<Node> {
 
   private static final String CSS_STYLE_INFO = "info";
   private static final String CSS_STYLE_WARN = "warn";
   private static final String CSS_STYLE_ERROR = "error";
+
   private final NotificationService notificationService;
+  private final ThemeService themeService;
+
   public Node notificationRoot;
   public Label messageLabel;
   public Region icon;
   public HBox actionButtonsContainer;
+  public ImageView closeImage;
+
   private PersistentNotification notification;
+
+  @Override
+  protected void onInitialize() {
+    closeImage.setImage(themeService.getThemeImage("theme/images/small_close.png"));
+  }
 
   /**
    * Sets the notification to display. Populates corresponding UI elements.
    */
   public void setNotification(PersistentNotification notification) {
     this.notification = notification;
-    messageLabel.setText(notification.getText());
-    setImageBasedOnSeverity(notification.getSeverity());
-    setActions(notification.getActions());
+    messageLabel.setText(notification.text());
+    setImageBasedOnSeverity(notification.severity());
+    setActions(notification.actions());
   }
 
   private void setImageBasedOnSeverity(Severity severity) {
@@ -74,7 +86,7 @@ public class PersistentNotificationController implements Controller<Node> {
       Button button = new Button(action.getTitle());
       button.setFocusTraversable(false);
       button.setOnAction(event -> {
-        action.call(event);
+        action.run();
         if (action.getType() == Action.Type.OK_DONE) {
           dismiss();
         }
@@ -90,6 +102,7 @@ public class PersistentNotificationController implements Controller<Node> {
     notificationService.removeNotification(notification);
   }
 
+  @Override
   public Node getRoot() {
     return notificationRoot;
   }

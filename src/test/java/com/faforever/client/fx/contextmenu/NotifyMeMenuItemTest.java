@@ -1,37 +1,40 @@
 package com.faforever.client.fx.contextmenu;
 
-import com.faforever.client.builders.GameBeanBuilder;
-import com.faforever.client.domain.GameBean;
+import com.faforever.client.builders.GameInfoBuilder;
+import com.faforever.client.domain.server.GameInfo;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.replay.LiveReplayService;
-import com.faforever.client.replay.TrackingLiveReplayAction;
 import com.faforever.client.replay.TrackingLiveReplay;
-import com.faforever.client.test.UITest;
+import com.faforever.client.replay.TrackingLiveReplayAction;
+import com.faforever.client.test.PlatformTest;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-public class NotifyMeMenuItemTest extends UITest {
+public class NotifyMeMenuItemTest extends PlatformTest {
 
   @Mock
   private I18n i18n;
   @Mock
   private LiveReplayService liveReplayService;
 
-  @InjectMocks
   private NotifyMeMenuItem instance;
+
+  @BeforeEach
+  public void setUp() throws Exception {
+    instance = new NotifyMeMenuItem(i18n, liveReplayService);
+  }
 
   @Test
   public void testOnClickedNotifyMe() {
-    GameBean game = GameBeanBuilder.create().defaultValues().get();
+    GameInfo game = GameInfoBuilder.create().defaultValues().get();
     instance.setObject(game);
     instance.onClicked();
     verify(liveReplayService).performActionWhenAvailable(game, TrackingLiveReplayAction.NOTIFY_ME);
@@ -39,7 +42,7 @@ public class NotifyMeMenuItemTest extends UITest {
 
   @Test
   public void testVisibleItemIfNoTrackingReplay() {
-    GameBean game = GameBeanBuilder.create().defaultValues().get();
+    GameInfo game = GameInfoBuilder.create().defaultValues().get();
     when(liveReplayService.getTrackingLiveReplay()).thenReturn(Optional.empty());
 
     instance.setObject(game);
@@ -48,7 +51,7 @@ public class NotifyMeMenuItemTest extends UITest {
 
   @Test
   public void testVisibleItemIfNoOwnTrackingReplay() {
-    GameBean game = GameBeanBuilder.create().defaultValues().id(1).get();
+    GameInfo game = GameInfoBuilder.create().defaultValues().id(1).get();
     when(liveReplayService.getTrackingLiveReplay()).thenReturn(Optional.of(new TrackingLiveReplay(2, TrackingLiveReplayAction.NOTIFY_ME)));
 
     instance.setObject(game);
@@ -63,14 +66,14 @@ public class NotifyMeMenuItemTest extends UITest {
 
   @Test
   public void testInvisibleItemIfNoStartTimeGame() {
-    GameBean game = GameBeanBuilder.create().defaultValues().startTime(null).get();
+    GameInfo game = GameInfoBuilder.create().defaultValues().startTime(null).get();
     instance.setObject(game);
     assertFalse(instance.isVisible());
   }
 
   @Test
   public void testInvisibleItemIfTrackingOwnReplay() {
-    GameBean game = GameBeanBuilder.create().defaultValues().id(1).get();
+    GameInfo game = GameInfoBuilder.create().defaultValues().id(1).get();
     when(liveReplayService.getTrackingLiveReplay()).thenReturn(Optional.of(new TrackingLiveReplay(1, TrackingLiveReplayAction.NOTIFY_ME)));
 
     instance.setObject(game);

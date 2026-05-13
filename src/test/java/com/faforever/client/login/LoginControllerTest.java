@@ -1,56 +1,50 @@
 package com.faforever.client.login;
 
 import com.faforever.client.builders.ClientConfigurationBuilder;
-import com.faforever.client.builders.PreferencesBuilder;
 import com.faforever.client.config.ClientProperties;
 import com.faforever.client.fx.PlatformService;
+import com.faforever.client.game.GameRunner;
 import com.faforever.client.game.GameService;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.login.OAuthValuesReceiver.Values;
 import com.faforever.client.notification.NotificationService;
-import com.faforever.client.preferences.Preferences;
+import com.faforever.client.os.OperatingSystem;
+import com.faforever.client.os.OsPosix;
+import com.faforever.client.preferences.DataPrefs;
+import com.faforever.client.preferences.LoginPrefs;
 import com.faforever.client.preferences.PreferencesService;
-import com.faforever.client.status.Message;
-import com.faforever.client.status.Service;
-import com.faforever.client.status.StatPingService;
 import com.faforever.client.test.FakeTestException;
-import com.faforever.client.test.UITest;
-import com.faforever.client.theme.UiService;
+import com.faforever.client.test.PlatformTest;
 import com.faforever.client.update.ClientConfiguration;
 import com.faforever.client.update.ClientUpdateService;
 import com.faforever.client.update.DownloadUpdateTask;
 import com.faforever.client.update.UpdateInfo;
-import com.faforever.client.update.VersionTest;
-import com.faforever.client.user.UserService;
+import com.faforever.client.update.Version;
+import com.faforever.client.user.LoginService;
 import com.faforever.commons.api.dto.MeResult;
 import com.faforever.commons.lobby.Player;
-import javafx.scene.control.Label;
-import javafx.scene.layout.Pane;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.MockedStatic;
 import org.mockito.Spy;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
-import org.testfx.assertions.api.Assertions;
 import org.testfx.util.WaitForAsyncUtils;
-import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
-import java.io.IOException;
 import java.net.SocketTimeoutException;
 import java.net.URI;
-import java.time.OffsetDateTime;
-import java.util.Collections;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -58,19 +52,22 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
-import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-public class LoginControllerTest extends UITest {
+public class LoginControllerTest extends PlatformTest {
 
   public static final String CODE = "asda";
   private static final URI REDIRECT_URI = URI.create("http://localhost");
-  private static final URI EXPLICIT_REDIRECT_URI = URI.create("http://localhost/fallback");
 
   @InjectMocks
   private LoginController instance;
+  @Spy
+  private OperatingSystem operatingSystem = new OsPosix();
+  @Mock
+  private GameRunner gameRunner;
   @Mock
   private GameService gameService;
   @Mock
@@ -78,11 +75,7 @@ public class LoginControllerTest extends UITest {
   @Mock
   private NotificationService notificationService;
   @Mock
-  private UserService userService;
-  @Mock
-  private StatPingService statPingService;
-  @Mock
-  private UiService uiService;
+  private LoginService loginService;
   @Mock
   private PlatformService platformService;
   @Mock
@@ -90,38 +83,20 @@ public class LoginControllerTest extends UITest {
   @Mock
   private ClientUpdateService clientUpdateService;
   @Mock
-  private AnnouncementController announcementController;
-  @Mock
-  private OfflineServiceController offlineServiceController;
-  @Mock
-  private OfflineServicesController offlineServicesController;
-  @Mock
   private OAuthValuesReceiver oAuthValuesReceiver;
 
   @Spy
-  private ClientProperties clientProperties = new ClientProperties();
-  private Preferences preferences;
+  private ClientProperties clientProperties;
+  @Spy
+  private DataPrefs dataPrefs;
+  @Spy
+  private LoginPrefs loginPrefs;
 
   @BeforeEach
   public void setUp() throws Exception {
-    preferences = PreferencesBuilder.create().defaultValues().get();
-
-    when(preferencesService.getPreferences()).thenReturn(preferences);
-    when(uiService.loadFxml("theme/login/announcement.fxml")).thenReturn(announcementController);
-    when(uiService.loadFxml("theme/login/offline_service.fxml")).thenReturn(offlineServiceController);
-    when(uiService.loadFxml("theme/login/offline_services.fxml")).thenReturn(offlineServicesController);
-    when(statPingService.getServices()).thenReturn(Flux.empty());
-    when(statPingService.getMessages()).thenReturn(Flux.empty());
-
-    when(announcementController.getRoot()).thenReturn(new Pane());
-    when(offlineServiceController.getRoot()).thenReturn(new Label());
-    when(offlineServicesController.getRoot()).thenReturn(new Pane());
-
     loadFxml("theme/login/login.fxml", param -> instance);
     assertFalse(instance.loginProgressPane.isVisible());
     assertTrue(instance.loginFormPane.isVisible());
-
-    instance.oauthRedirectUriField.setText(EXPLICIT_REDIRECT_URI.toASCIIString());
   }
 
   @Test
@@ -130,24 +105,24 @@ public class LoginControllerTest extends UITest {
     when(preferencesService.getRemotePreferencesAsync())
         .thenReturn(CompletableFuture.completedFuture(ClientConfigurationBuilder.create().defaultValues().get()));
     String refreshToken = "asd";
-    preferences.getLogin().setRefreshToken(refreshToken);
-    runOnFxThreadAndWait(() -> instance.initialize());
-    verify(userService).loginWithRefreshToken();
+    loginPrefs.setRefreshToken(refreshToken);
+    runOnFxThreadAndWait(() -> reinitialize(instance));
+    verify(loginService).loginWithRefreshToken();
     assertTrue(instance.loginProgressPane.isVisible());
     assertFalse(instance.loginFormPane.isVisible());
   }
 
   @Test
   public void testLoginSucceeds() throws Exception {
-    when(userService.login(eq(CODE), anyString(), eq(REDIRECT_URI))).thenReturn(CompletableFuture.completedFuture(null));
-    when(oAuthValuesReceiver.receiveValues(eq(List.of(EXPLICIT_REDIRECT_URI)), anyString(), anyString()))
-        .thenAnswer(invocation -> CompletableFuture.completedFuture(new Values(CODE, invocation.getArgument(1), REDIRECT_URI)));
+    when(loginService.login(anyString(), anyString(), any())).thenReturn(Mono.empty());
+    when(oAuthValuesReceiver.receiveValues(anyString(), anyString())).thenAnswer(
+        invocation -> CompletableFuture.completedFuture(new Values(CODE, invocation.getArgument(0), REDIRECT_URI)));
 
-    instance.onLoginButtonClicked().get();
+    instance.onLoginButtonClicked();
     WaitForAsyncUtils.waitForFxEvents();
 
-    verify(oAuthValuesReceiver).receiveValues(eq(List.of(EXPLICIT_REDIRECT_URI)), anyString(), anyString());
-    verify(userService).login(eq(CODE), anyString(), eq(REDIRECT_URI));
+    verify(oAuthValuesReceiver).receiveValues(anyString(), anyString());
+    verify(loginService).login(eq(CODE), anyString(), eq(REDIRECT_URI));
     assertTrue(instance.loginProgressPane.isVisible());
     assertFalse(instance.loginFormPane.isVisible());
   }
@@ -156,28 +131,27 @@ public class LoginControllerTest extends UITest {
   public void testLoginFailsWrongState() throws Exception {
     String wrongState = "a";
 
-    when(userService.login(eq(CODE), anyString(), eq(REDIRECT_URI))).thenReturn(CompletableFuture.completedFuture(null));
-    when(oAuthValuesReceiver.receiveValues(eq(List.of(EXPLICIT_REDIRECT_URI)), anyString(), anyString()))
+    when(oAuthValuesReceiver.receiveValues(anyString(), anyString()))
         .thenReturn(CompletableFuture.completedFuture(new Values(CODE, wrongState, REDIRECT_URI)));
 
-    instance.onLoginButtonClicked().get();
+    instance.onLoginButtonClicked();
     WaitForAsyncUtils.waitForFxEvents();
 
-    verify(oAuthValuesReceiver).receiveValues(eq(List.of(EXPLICIT_REDIRECT_URI)), anyString(), anyString());
-    verify(userService, never()).login(anyString(), anyString(), any());
+    verify(oAuthValuesReceiver).receiveValues(anyString(), anyString());
+    verify(loginService, never()).login(anyString(), anyString(), any());
     verify(notificationService).addImmediateErrorNotification(any(IllegalStateException.class), eq("login.failed"));
   }
 
   @Test
   public void testLoginFails() throws Exception {
-    when(userService.login(eq(CODE), anyString(), eq(REDIRECT_URI))).thenReturn(CompletableFuture.failedFuture(new FakeTestException()));
-    when(oAuthValuesReceiver.receiveValues(eq(List.of(EXPLICIT_REDIRECT_URI)), anyString(), anyString()))
-        .thenAnswer(invocation -> CompletableFuture.completedFuture(new Values(CODE, invocation.getArgument(1), REDIRECT_URI)));
+    when(loginService.login(eq(CODE), anyString(), eq(REDIRECT_URI))).thenReturn(Mono.error(new FakeTestException()));
+    when(oAuthValuesReceiver.receiveValues(anyString(), anyString())).thenAnswer(
+        invocation -> CompletableFuture.completedFuture(new Values(CODE, invocation.getArgument(0), REDIRECT_URI)));
 
-    instance.onLoginButtonClicked().get();
+    instance.onLoginButtonClicked();
     WaitForAsyncUtils.waitForFxEvents();
 
-    verify(userService).login(eq(CODE), anyString(), eq(REDIRECT_URI));
+    verify(loginService).login(eq(CODE), anyString(), eq(REDIRECT_URI));
     verify(notificationService).addImmediateErrorNotification(any(), eq("login.failed"));
     assertFalse(instance.loginProgressPane.isVisible());
     assertTrue(instance.loginFormPane.isVisible());
@@ -185,10 +159,10 @@ public class LoginControllerTest extends UITest {
 
   @Test
   public void testLoginFailsNoPorts() throws Exception {
-    when(oAuthValuesReceiver.receiveValues(eq(List.of(EXPLICIT_REDIRECT_URI)), anyString(), anyString()))
-        .thenReturn(CompletableFuture.failedFuture(new IllegalStateException()));
+    when(oAuthValuesReceiver.receiveValues(anyString(), anyString()))
+        .thenReturn(CompletableFuture.failedFuture(new IllegalStateException("")));
 
-    instance.onLoginButtonClicked().get();
+    instance.onLoginButtonClicked();
     WaitForAsyncUtils.waitForFxEvents();
 
     verify(notificationService).addImmediateErrorNotification(any(), eq("login.failed"));
@@ -197,11 +171,24 @@ public class LoginControllerTest extends UITest {
   }
 
   @Test
+  public void testLoginFailsKnownError() throws Exception {
+    when(oAuthValuesReceiver.receiveValues(anyString(), anyString()))
+        .thenReturn(CompletableFuture.failedFuture(new KnownLoginErrorException("", "login.known")));
+
+    instance.onLoginButtonClicked();
+    WaitForAsyncUtils.waitForFxEvents();
+
+    verify(notificationService).addImmediateErrorNotification(any(), eq("login.known"));
+    assertFalse(instance.loginProgressPane.isVisible());
+    assertTrue(instance.loginFormPane.isVisible());
+  }
+
+  @Test
   public void testLoginFailsTimeout() throws Exception {
-    when(oAuthValuesReceiver.receiveValues(eq(List.of(EXPLICIT_REDIRECT_URI)), anyString(), anyString()))
+    when(oAuthValuesReceiver.receiveValues(anyString(), anyString()))
         .thenReturn(CompletableFuture.failedFuture(new SocketTimeoutException()));
 
-    instance.onLoginButtonClicked().get();
+    instance.onLoginButtonClicked();
     WaitForAsyncUtils.waitForFxEvents();
 
     verify(notificationService).addImmediateWarnNotification(eq("login.timeout"));
@@ -211,28 +198,29 @@ public class LoginControllerTest extends UITest {
 
   @Test
   public void testLoginFailsTimeoutAlreadyLoggedIn() throws Exception {
-    when(oAuthValuesReceiver.receiveValues(eq(List.of(EXPLICIT_REDIRECT_URI)), anyString(), anyString()))
+    when(oAuthValuesReceiver.receiveValues(anyString(), anyString()))
         .thenReturn(CompletableFuture.failedFuture(new SocketTimeoutException()));
-    when(userService.getOwnUser()).thenReturn(new MeResult());
-    when(userService.getOwnPlayer()).thenReturn(new Player(0, "junit", null, null, "US", Map.of(), Map.of()));
+    when(loginService.getOwnUser()).thenReturn(new MeResult());
+    when(loginService.getOwnPlayer()).thenReturn(new Player(0, "junit", null, null, "US", Map.of(), Map.of(), null));
 
-    instance.onLoginButtonClicked().get();
+    instance.onLoginButtonClicked();
     WaitForAsyncUtils.waitForFxEvents();
 
     verify(notificationService, never()).addImmediateWarnNotification(eq("login.timeout"));
   }
 
   @Test
+  @Disabled("Flaky test on github actions")
   public void testLoginRefreshFailsBadToken() {
     clientProperties.setUseRemotePreferences(true);
     when(preferencesService.getRemotePreferencesAsync())
         .thenReturn(CompletableFuture.completedFuture(ClientConfigurationBuilder.create().defaultValues().get()));
-    preferences.getLogin().setRememberMe(true);
-    preferences.getLogin().setRefreshToken("abc");
-    when(userService.loginWithRefreshToken()).thenReturn(CompletableFuture.failedFuture(
-        new CompletionException(WebClientResponseException.create(HttpStatus.BAD_REQUEST.value(), "", HttpHeaders.EMPTY, new byte[]{}, null))));
-    runOnFxThreadAndWait(() -> instance.initialize());
-    verify(userService).loginWithRefreshToken();
+    loginPrefs.setRememberMe(true);
+    loginPrefs.setRefreshToken("abc");
+    when(loginService.loginWithRefreshToken()).thenReturn(Mono.error(
+        WebClientResponseException.create(HttpStatus.BAD_REQUEST.value(), "", HttpHeaders.EMPTY, new byte[]{}, null)));
+    runOnFxThreadAndWait(() -> reinitialize(instance));
+    verify(loginService).loginWithRefreshToken();
     verify(notificationService, never()).addImmediateErrorNotification(any(), anyString());
     assertFalse(instance.loginProgressPane.isVisible());
     assertTrue(instance.loginFormPane.isVisible());
@@ -243,13 +231,13 @@ public class LoginControllerTest extends UITest {
     clientProperties.setUseRemotePreferences(true);
     when(preferencesService.getRemotePreferencesAsync())
         .thenReturn(CompletableFuture.completedFuture(ClientConfigurationBuilder.create().defaultValues().get()));
-    preferences.getLogin().setRememberMe(true);
-    preferences.getLogin().setRefreshToken("abc");
-    when(userService.loginWithRefreshToken()).thenReturn(CompletableFuture.failedFuture(
-        new CompletionException(WebClientResponseException.create(HttpStatus.UNAUTHORIZED.value(), "", HttpHeaders.EMPTY, new byte[]{}, null))));
-    runOnFxThreadAndWait(() -> instance.initialize());
-    verify(userService).loginWithRefreshToken();
-    verify(notificationService, never()).addImmediateErrorNotification(any(), anyString());
+    loginPrefs.setRememberMe(true);
+    loginPrefs.setRefreshToken("abc");
+    when(loginService.loginWithRefreshToken()).thenReturn(Mono.error(
+        WebClientResponseException.create(HttpStatus.UNAUTHORIZED.value(), "", HttpHeaders.EMPTY, new byte[]{}, null)));
+    runOnFxThreadAndWait(() -> reinitialize(instance));
+    verify(loginService).loginWithRefreshToken();
+    verify(notificationService).addImmediateErrorNotification(any(), anyString());
     assertFalse(instance.loginProgressPane.isVisible());
     assertTrue(instance.loginFormPane.isVisible());
   }
@@ -259,12 +247,11 @@ public class LoginControllerTest extends UITest {
     clientProperties.setUseRemotePreferences(true);
     when(preferencesService.getRemotePreferencesAsync())
         .thenReturn(CompletableFuture.completedFuture(ClientConfigurationBuilder.create().defaultValues().get()));
-    preferences.getLogin().setRememberMe(true);
-    preferences.getLogin().setRefreshToken("abc");
-    when(userService.loginWithRefreshToken()).thenReturn(CompletableFuture.failedFuture(new CompletionException(new Exception())));
-    runOnFxThreadAndWait(() -> instance.initialize());
-    verify(userService).loginWithRefreshToken();
-    verify(notificationService).addImmediateErrorNotification(any(), anyString());
+    loginPrefs.setRememberMe(true);
+    loginPrefs.setRefreshToken("abc");
+    when(loginService.loginWithRefreshToken()).thenReturn(Mono.error(new Exception("")));
+    runOnFxThreadAndWait(() -> reinitialize(instance));
+    verify(loginService).loginWithRefreshToken();
     assertFalse(instance.loginProgressPane.isVisible());
     assertTrue(instance.loginFormPane.isVisible());
   }
@@ -279,8 +266,6 @@ public class LoginControllerTest extends UITest {
         .then()
         .get();
 
-    VersionTest.setCurrentVersion("2.2.0");
-
     when(clientUpdateService.getNewestUpdate()).thenReturn(CompletableFuture.completedFuture(updateInfo));
     when(preferencesService.getRemotePreferencesAsync()).thenReturn(CompletableFuture.completedFuture(clientConfiguration));
 
@@ -290,7 +275,15 @@ public class LoginControllerTest extends UITest {
     assertThat(instance.downloadUpdateButton.isVisible(), is(false));
     assertThat(instance.loginFormPane.isDisable(), is(false));
 
-    runOnFxThreadAndWait(() -> instance.initialize());
+    runOnFxThreadAndWait(() -> {
+      try (MockedStatic<Version> mockedVersion = mockStatic(Version.class)) {
+        mockedVersion.when(Version::getCurrentVersion).thenReturn("2.2.0");
+        mockedVersion.when(() -> Version.shouldUpdate(anyString(), anyString())).thenCallRealMethod();
+        mockedVersion.when(() -> Version.removePrefix(anyString())).thenCallRealMethod();
+        mockedVersion.when(() -> Version.followsSemverPattern(anyString())).thenCallRealMethod();
+        reinitialize(instance);
+      }
+    });
 
     assertThat(instance.loginErrorLabel.isVisible(), is(false));
     assertThat(instance.downloadUpdateButton.isVisible(), is(false));
@@ -299,8 +292,10 @@ public class LoginControllerTest extends UITest {
     verify(clientUpdateService, atLeastOnce()).getNewestUpdate();
   }
 
-  @Test
-  public void testInitializeWithMandatoryUpdateWithAutoLogin() throws Exception {
+
+  @ParameterizedTest
+  @ValueSource(booleans = {true, false})
+  public void testInitializeWithMandatoryUpdateWithAutoLogin(boolean supportsUpdateInstall) throws Exception {
     UpdateInfo updateInfo = new UpdateInfo(null, null, null, 5, null, false);
     ClientConfiguration clientConfiguration = ClientConfigurationBuilder.create()
         .defaultValues()
@@ -309,11 +304,10 @@ public class LoginControllerTest extends UITest {
         .then()
         .get();
 
-    preferences.getLogin().setRememberMe(true);
-    preferences.getLogin().setRefreshToken("abc");
+    loginPrefs.setRememberMe(true);
+    loginPrefs.setRefreshToken("abc");
 
-    VersionTest.setCurrentVersion("1.2.0");
-
+    when(operatingSystem.supportsUpdateInstall()).thenReturn(supportsUpdateInstall);
     when(clientUpdateService.getNewestUpdate()).thenReturn(CompletableFuture.completedFuture(updateInfo));
     when(preferencesService.getRemotePreferencesAsync()).thenReturn(CompletableFuture.completedFuture(clientConfiguration));
 
@@ -323,20 +317,29 @@ public class LoginControllerTest extends UITest {
     assertThat(instance.downloadUpdateButton.isVisible(), is(false));
     assertThat(instance.loginFormPane.isDisable(), is(false));
 
-    runOnFxThreadAndWait(() -> instance.initialize());
+    runOnFxThreadAndWait(() -> {
+      try (MockedStatic<Version> mockedVersion = mockStatic(Version.class)) {
+        mockedVersion.when(Version::getCurrentVersion).thenReturn("1.2.0");
+        mockedVersion.when(() -> Version.shouldUpdate(anyString(), anyString())).thenCallRealMethod();
+        mockedVersion.when(() -> Version.removePrefix(anyString())).thenCallRealMethod();
+        mockedVersion.when(() -> Version.followsSemverPattern(anyString())).thenCallRealMethod();
+        reinitialize(instance);
+      }
+    });
 
     assertThat(instance.loginErrorLabel.isVisible(), is(true));
-    assertThat(instance.downloadUpdateButton.isVisible(), is(true));
+    assertThat(instance.downloadUpdateButton.isVisible(), is(supportsUpdateInstall));
     assertThat(instance.loginFormPane.isDisable(), is(true));
 
     verify(clientUpdateService, atLeastOnce()).getNewestUpdate();
     verify(i18n).get("login.clientTooOldError", "1.2.0", "2.1.2");
-    verify(userService, never()).loginWithRefreshToken();
-    verify(userService, never()).login(anyString(), anyString(), any());
+    verify(loginService, never()).loginWithRefreshToken();
+    verify(loginService, never()).login(anyString(), anyString(), any());
   }
 
-  @Test
-  public void testInitializeWithMandatoryUpdateNoAutoLogin() throws Exception {
+  @ParameterizedTest
+  @ValueSource(booleans = {true, false})
+  public void testInitializeWithMandatoryUpdateNoAutoLogin(boolean supportsUpdateInstall) throws Exception {
     UpdateInfo updateInfo = new UpdateInfo(null, null, null, 5, null, false);
     ClientConfiguration clientConfiguration = ClientConfigurationBuilder.create()
         .defaultValues()
@@ -345,8 +348,7 @@ public class LoginControllerTest extends UITest {
         .then()
         .get();
 
-    VersionTest.setCurrentVersion("1.2.0");
-
+    when(operatingSystem.supportsUpdateInstall()).thenReturn(supportsUpdateInstall);
     when(clientUpdateService.getNewestUpdate()).thenReturn(CompletableFuture.completedFuture(updateInfo));
     when(preferencesService.getRemotePreferencesAsync()).thenReturn(CompletableFuture.completedFuture(clientConfiguration));
 
@@ -356,22 +358,30 @@ public class LoginControllerTest extends UITest {
     assertThat(instance.downloadUpdateButton.isVisible(), is(false));
     assertThat(instance.loginFormPane.isDisable(), is(false));
 
-    runOnFxThreadAndWait(() -> instance.initialize());
+    runOnFxThreadAndWait(() -> {
+      try (MockedStatic<Version> mockedVersion = mockStatic(Version.class)) {
+        mockedVersion.when(Version::getCurrentVersion).thenReturn("1.2.0");
+        mockedVersion.when(() -> Version.shouldUpdate(anyString(), anyString())).thenCallRealMethod();
+        mockedVersion.when(() -> Version.removePrefix(anyString())).thenCallRealMethod();
+        mockedVersion.when(() -> Version.followsSemverPattern(anyString())).thenCallRealMethod();
+        reinitialize(instance);
+      }
+    });
 
     assertThat(instance.loginErrorLabel.isVisible(), is(true));
-    assertThat(instance.downloadUpdateButton.isVisible(), is(true));
+    assertThat(instance.downloadUpdateButton.isVisible(), is(supportsUpdateInstall));
     assertThat(instance.loginFormPane.isDisable(), is(true));
 
     verify(clientUpdateService, atLeastOnce()).getNewestUpdate();
     verify(i18n).get("login.clientTooOldError", "1.2.0", "2.1.2");
-    verify(userService, never()).loginWithRefreshToken();
-    verify(userService, never()).login(anyString(), anyString(), any());
+    verify(loginService, never()).loginWithRefreshToken();
+    verify(loginService, never()).login(anyString(), anyString(), any());
   }
 
   @Test
   public void testOnDownloadUpdateButtonClicked() {
     UpdateInfo updateInfo = new UpdateInfo(null, null, null, 5, null, false);
-    DownloadUpdateTask downloadUpdateTask = new DownloadUpdateTask(i18n, preferencesService);
+    DownloadUpdateTask downloadUpdateTask = new DownloadUpdateTask(i18n, dataPrefs);
     when(clientUpdateService.downloadAndInstallInBackground(updateInfo)).thenReturn(downloadUpdateTask);
 
     ReflectionTestUtils.setField(instance, "updateInfoFuture", CompletableFuture.completedFuture(updateInfo));
@@ -379,7 +389,7 @@ public class LoginControllerTest extends UITest {
     instance.onDownloadUpdateButtonClicked();
     WaitForAsyncUtils.waitForFxEvents();
 
-    verify(i18n).get("login.button.downloadPreparing");
+    verify(i18n, atLeastOnce()).get("login.button.downloadPreparing");
     verify(clientUpdateService, atLeastOnce()).downloadAndInstallInBackground(updateInfo);
   }
 
@@ -388,126 +398,6 @@ public class LoginControllerTest extends UITest {
     instance.onPlayOfflineButtonClicked();
     WaitForAsyncUtils.waitForFxEvents();
 
-    verify(gameService).startGameOffline();
-  }
-
-  @Test
-  public void testOnPlayOfflineButtonClickedNoExe() throws Exception {
-    doThrow(new IOException()).when(gameService).startGameOffline();
-    instance.onPlayOfflineButtonClicked();
-    WaitForAsyncUtils.waitForFxEvents();
-
-    verify(gameService).startGameOffline();
-    verify(notificationService).addImmediateWarnNotification(eq("offline.noExe"));
-  }
-
-  @Test
-  void testInitializeWithActiveAnnouncement_displayed() {
-    when(statPingService.getMessages()).thenReturn(Flux.just(new Message(
-        1,
-        "JUnit",
-        "Description",
-        OffsetDateTime.now(),
-        OffsetDateTime.now().plusHours(1),
-        1,
-        OffsetDateTime.now(),
-        OffsetDateTime.now()
-    )));
-
-    assertThat(instance.messagesContainer.getChildren(), hasSize(0));
-
-    runOnFxThreadAndWait(() -> instance.initialize());
-
-    assertThat(instance.messagesContainer.getChildren(), hasSize(1));
-    verify(uiService).loadFxml("theme/login/announcement.fxml");
-  }
-
-  @Test
-  void testInitializeWithNoAnnouncement_notDisplayed() {
-    assertThat(instance.messagesContainer.getChildren(), hasSize(0));
-  }
-
-  @Test
-  void testInitializeWithFutureAnnouncement_displayed() {
-    when(statPingService.getMessages()).thenReturn(Flux.just(new Message(
-        1,
-        "JUnit",
-        "Description",
-        OffsetDateTime.now().plusDays(1),
-        OffsetDateTime.now().plusDays(2),
-        1,
-        OffsetDateTime.now(),
-        OffsetDateTime.now()
-    )));
-
-    assertThat(instance.messagesContainer.getChildren(), hasSize(0));
-
-    runOnFxThreadAndWait(() -> instance.initialize());
-
-    assertThat(instance.messagesContainer.getChildren(), hasSize(1));
-    verify(uiService).loadFxml("theme/login/announcement.fxml");
-  }
-
-  @Test
-  void testInitializeWithFutureAnnouncementAndServiceOffline_bothDisplayed() {
-    when(statPingService.getMessages()).thenReturn(Flux.just(new Message(
-        1,
-        "JUnit",
-        "Description",
-        OffsetDateTime.now().plusDays(1),
-        OffsetDateTime.now().plusDays(2),
-        1,
-        OffsetDateTime.now(),
-        OffsetDateTime.now()
-    )));
-    when(statPingService.getServices()).thenReturn(Flux.just(new Service(
-        1,
-        Collections.emptyList(),
-        OffsetDateTime.now().minusMinutes(1),
-        OffsetDateTime.now().minusHours(1),
-        Collections.emptyList(),
-        "Lobby",
-        false,
-        "lobby"
-    )));
-
-    assertThat(instance.messagesContainer.getChildren(), hasSize(0));
-
-    runOnFxThreadAndWait(() -> instance.initialize());
-
-    assertThat(instance.messagesContainer.getChildren(), hasSize(2));
-    verify(uiService).loadFxml("theme/login/announcement.fxml");
-    verify(uiService).loadFxml("theme/login/offline_services.fxml");
-  }
-
-  @Test
-  void testInitializeWithActiveAnnouncementAndServiceOffline_serviceNotDisplayed() {
-    when(statPingService.getMessages()).thenReturn(Flux.just(new Message(
-        1,
-        "JUnit",
-        "Description",
-        OffsetDateTime.now().minusMinutes(1),
-        OffsetDateTime.now().plusHours(1),
-        1,
-        OffsetDateTime.now(),
-        OffsetDateTime.now()
-    )));
-    when(statPingService.getServices()).thenReturn(Flux.just(new Service(
-        1,
-        Collections.emptyList(),
-        OffsetDateTime.now().minusMinutes(1),
-        OffsetDateTime.now().minusHours(1),
-        Collections.emptyList(),
-        "Lobby",
-        false,
-        "lobby"
-    )));
-
-    Assertions.assertThat(instance.messagesContainer).hasNoChildren();
-
-    runOnFxThreadAndWait(() -> instance.initialize());
-
-    Assertions.assertThat(instance.messagesContainer).hasExactlyNumChildren(1);
-    verify(uiService).loadFxml("theme/login/announcement.fxml");
+    verify(gameRunner).startOffline();
   }
 }

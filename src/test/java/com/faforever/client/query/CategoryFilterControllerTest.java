@@ -1,12 +1,17 @@
 package com.faforever.client.query;
 
 import com.faforever.client.i18n.I18n;
-import com.faforever.client.test.UITest;
+import com.faforever.client.test.PlatformTest;
 import com.github.rutledgepaulv.qbuilders.builders.QBuilder;
 import com.github.rutledgepaulv.qbuilders.conditions.Condition;
 import com.github.rutledgepaulv.qbuilders.properties.concrete.StringProperty;
 import com.github.rutledgepaulv.qbuilders.visitors.RSQLVisitor;
 import javafx.beans.InvalidationListener;
+import javafx.beans.binding.Bindings;
+import javafx.beans.property.ObjectProperty;
+import javafx.beans.property.SimpleObjectProperty;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
 import javafx.scene.control.MenuButton;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -27,7 +32,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-public class CategoryFilterControllerTest extends UITest {
+public class CategoryFilterControllerTest extends PlatformTest {
 
   private final String propertyName = "testProp";
   private final List<String> items = Arrays.asList("test1", "test2");
@@ -73,6 +78,15 @@ public class CategoryFilterControllerTest extends UITest {
     verify(queryListener).invalidated(any());
   }
 
+  @Test 
+  public void testListenerInvalidatesOnClear() throws Exception {
+    instance.checkListView.getItemBooleanProperty(0).setValue(true);
+    instance.addQueryListener(queryListener);
+    instance.clear();
+
+    verify(queryListener).invalidated(any());
+  }
+
   @Test
   public void testClear() throws Exception {
     instance.checkListView.getItems().forEach(item ->
@@ -113,7 +127,9 @@ public class CategoryFilterControllerTest extends UITest {
     Optional<List<Condition>> result = instance.getCondition();
 
     assertTrue(result.isPresent());
-    assertEquals(result.get().get(0).query(new RSQLVisitor()), property.in(instance.checkListView.getCheckModel().getCheckedItems().toArray()).query(new RSQLVisitor()));
+    assertEquals(result.get().getFirst().query(new RSQLVisitor()),
+                 property.in(instance.checkListView.getCheckModel().getCheckedItems().toArray())
+                         .query(new RSQLVisitor()));
     assertTrue(instance.menu.getStyleClass().contains("query-filter-selected"));
   }
 
@@ -127,8 +143,35 @@ public class CategoryFilterControllerTest extends UITest {
     Optional<List<Condition>> result = instance.getCondition();
 
     assertTrue(result.isPresent());
-    assertEquals(result.get().get(0).query(new RSQLVisitor()),
+    assertEquals(result.get().getFirst().query(new RSQLVisitor()),
         property.in(instance.checkListView.getCheckModel().getCheckedItems().stream().map(itemMap::get).toArray()).query(new RSQLVisitor()));
     assertTrue(instance.menu.getStyleClass().contains("query-filter-selected"));
+  }
+
+  @Test
+  public void testPersistentPropertiesSetCheckedItems() {
+    ObservableList<String> checkedItems = FXCollections.observableArrayList();
+    checkedItems.add("2");
+    ObjectProperty<ObservableList<String>> property = new SimpleObjectProperty<ObservableList<String>>(checkedItems);
+    instance.setItems(itemMap);
+    property.get().stream().forEach((item) -> instance.checkItem(item));
+    property.bind(Bindings.createObjectBinding(() -> instance.getCheckedItems()));
+
+    assertFalse(instance.checkListView.getCheckModel().isChecked("1"));
+    assertTrue(instance.checkListView.getCheckModel().isChecked("2"));
+  }
+
+  @Test
+  public void testPersistentPropertyBindsToCheckedItems() {
+    ObjectProperty<ObservableList<String>> property = new SimpleObjectProperty<ObservableList<String>>(FXCollections.emptyObservableList());
+    instance.setItems(itemMap);
+    property.get().stream().forEach((item) -> instance.checkItem(item));
+    property.bind(Bindings.createObjectBinding(() -> instance.getCheckedItems()));
+
+    instance.checkListView.getCheckModel().check("1");
+
+    ObservableList<String> expected = FXCollections.observableArrayList();
+    expected.add("1");
+    assertEquals(property.get(), expected);
   }
 }

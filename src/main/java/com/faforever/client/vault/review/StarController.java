@@ -1,9 +1,10 @@
 package com.faforever.client.vault.review;
 
-import com.faforever.client.fx.Controller;
+import com.faforever.client.fx.NodeController;
+import javafx.beans.binding.DoubleExpression;
 import javafx.beans.property.FloatProperty;
-import javafx.beans.property.ReadOnlyFloatProperty;
 import javafx.beans.property.SimpleFloatProperty;
+import javafx.geometry.Bounds;
 import javafx.scene.Node;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.StackPane;
@@ -12,41 +13,38 @@ import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
-import java.util.Optional;
 import java.util.function.Consumer;
 
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
-public class StarController implements Controller<Pane> {
+public class StarController extends NodeController<Pane> {
 
   public StackPane starRoot;
   public Node starBackground;
   public Node starFill;
 
-  private final FloatProperty fill;
-  private Consumer<StarController> clickedListener;
+  private final FloatProperty fill = new SimpleFloatProperty();
+  private final Rectangle fillClip = new Rectangle();
 
-  public StarController() {
-    fill = new SimpleFloatProperty(0);
-  }
+  private Consumer<StarController> clickedListener;
 
   @Override
   public Pane getRoot() {
     return starRoot;
   }
 
-  public void initialize() {
-    starRoot.widthProperty().addListener((observable, oldValue, newValue) -> {
-      Rectangle fillClip = new Rectangle();
-      fillClip.widthProperty().bind(fill.multiply(starRoot.getLayoutBounds().getWidth()));
-      fillClip.heightProperty().bind(starRoot.heightProperty());
-
-      starFill.setClip(fillClip);
-    });
+  @Override
+  protected void onInitialize() {
+    fillClip.widthProperty()
+        .bind(fill.multiply(DoubleExpression.doubleExpression(starRoot.layoutBoundsProperty().map(Bounds::getWidth))));
+    fillClip.heightProperty().bind(starRoot.heightProperty());
+    starFill.setClip(fillClip);
   }
 
   public void onMouseClicked() {
-    Optional.ofNullable(clickedListener).ifPresent(clickedListener -> clickedListener.accept(this));
+    if (clickedListener != null) {
+      clickedListener.accept(this);
+    }
   }
 
   public float getFill() {
@@ -57,7 +55,7 @@ public class StarController implements Controller<Pane> {
     fill.set(ratio);
   }
 
-  public ReadOnlyFloatProperty fillProperty() {
+  public FloatProperty fillProperty() {
     return fill;
   }
 

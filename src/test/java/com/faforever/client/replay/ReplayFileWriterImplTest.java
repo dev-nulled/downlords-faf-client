@@ -1,10 +1,8 @@
 package com.faforever.client.replay;
 
-import com.faforever.client.builders.PreferencesBuilder;
 import com.faforever.client.config.ClientProperties;
 import com.faforever.client.i18n.I18n;
-import com.faforever.client.preferences.Preferences;
-import com.faforever.client.preferences.PreferencesService;
+import com.faforever.client.preferences.DataPrefs;
 import com.faforever.client.test.ServiceTest;
 import com.faforever.commons.replay.ReplayMetadata;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,14 +15,13 @@ import org.mockito.Spy;
 import java.io.ByteArrayOutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.when;
 
 public class ReplayFileWriterImplTest extends ServiceTest {
 
-  private static String replayFileFormat = "%d-%s.fafreplay";
+  private static final String replayFileFormat = "%d-%s.fafreplay";
   private static final byte[] replayBytes = new byte[]{
       0x53, 0x75, 0x70, 0x72, 0x65, 0x6D, 0x65, 0x20, 0x43, 0x6F, 0x6D, 0x6D, 0x61, 0x6E, 0x64, 0x65,
       0x72, 0x20, 0x76, 0x31, 0x2E, 0x35, 0x30, 0x2E, 0x33, 0x35, 0x39, 0x39, 0x00, 0x0D, 0x0A, 0x00,
@@ -39,16 +36,17 @@ public class ReplayFileWriterImplTest extends ServiceTest {
 
   @TempDir
   public Path tempDirectory;
-  @Mock
-  private PreferencesService preferencesService;
+
   @Mock
   private I18n i81n;
   @Spy
-  private ClientProperties clientProperties = new ClientProperties();
+  private ClientProperties clientProperties;
   @Mock
   private ByteArrayOutputStream replayData;
   @Mock
   private ClientProperties.Replay replay;
+  @Spy
+  private DataPrefs dataPrefs;
 
   @InjectMocks
   private ReplayFileWriterImpl instance;
@@ -56,20 +54,13 @@ public class ReplayFileWriterImplTest extends ServiceTest {
 
   @BeforeEach
   public void setUp() throws Exception {
-    Preferences preferences = PreferencesBuilder.create().defaultValues()
-        .dataPrefs()
-        .dataDirectory(tempDirectory)
-        .then()
-        .get();
+    dataPrefs.setBaseDataDirectory(tempDirectory);
 
-    Files.createDirectories(preferences.getData().getCacheDirectory());
-    replaysDirectory = Files.createDirectories(preferences.getData().getReplaysDirectory());
-
-    when(preferencesService.getPreferences()).thenReturn(preferences);
+    Files.createDirectories(dataPrefs.getCacheDirectory());
+    replaysDirectory = Files.createDirectories(dataPrefs.getReplaysDirectory());
 
     when(clientProperties.getReplay()).thenReturn(replay);
     when(replay.getReplayFileFormat()).thenReturn(replayFileFormat);
-    when(i81n.getUserSpecificLocale()).thenReturn(Locale.US);
   }
 
   @Test

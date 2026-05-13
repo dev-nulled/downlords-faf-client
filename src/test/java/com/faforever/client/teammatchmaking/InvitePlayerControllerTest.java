@@ -1,8 +1,8 @@
 package com.faforever.client.teammatchmaking;
 
-import com.faforever.client.builders.PlayerBeanBuilder;
+import com.faforever.client.builders.PlayerInfoBuilder;
 import com.faforever.client.player.PlayerService;
-import com.faforever.client.test.UITest;
+import com.faforever.client.test.PlatformTest;
 import com.faforever.client.theme.UiService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -15,7 +15,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.hasSize;
 import static org.mockito.Mockito.when;
 
-public class InvitePlayerControllerTest extends UITest {
+public class InvitePlayerControllerTest extends PlatformTest {
 
   @Mock
   private PlayerService playerService;
@@ -31,8 +31,8 @@ public class InvitePlayerControllerTest extends UITest {
   public void setUp() throws Exception {
     when(playerService.getPlayerNames())
         .thenReturn(Set.of("axel12", "TrustTheFall", "nInPrisonForWhat", "Sheikah"));
-    when(playerService.getCurrentPlayer())
-        .thenReturn(PlayerBeanBuilder.create().defaultValues().username("axel12").get());
+    when(playerService.getCurrentPlayer()).thenReturn(
+        PlayerInfoBuilder.create().defaultValues().username("axel12").get());
     loadFxml("theme/play/teammatchmaking/matchmaking_invite_player.fxml", clazz -> instance);
   }
 

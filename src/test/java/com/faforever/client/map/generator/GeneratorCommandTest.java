@@ -8,6 +8,10 @@ import org.junit.jupiter.api.Test;
 import java.nio.file.Path;
 import java.util.List;
 
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.containsInRelativeOrder;
+import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -16,10 +20,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class GeneratorCommandTest extends ServiceTest {
 
-  private static final String javaPath = Path.of(System.getProperty("java.home")).resolve("bin").resolve(org.bridj.Platform.isWindows() ? "java.exe" : "java").toAbsolutePath().toString();
+  private static final Path JAVA_PATH = Path.of("java");
 
   private static GeneratorCommandBuilder defaultBuilder() {
     return GeneratorCommand.builder()
+        .javaExecutable(JAVA_PATH)
         .generatorExecutableFile(Path.of("mapGenerator_1.0.0.jar"))
         .version(new ComparableVersion("1.0.0"))
         .mapSize(512)
@@ -28,21 +33,24 @@ public class GeneratorCommandTest extends ServiceTest {
         .generationType(GenerationType.CASUAL);
   }
 
-  private static GeneratorCommandBuilder densityBuilder() {
+  private static GeneratorCommandBuilder customStyleBuilder() {
     return defaultBuilder()
-        .biome("biome")
-        .reclaimDensity(1f)
-        .mexDensity(1f)
-        .rampDensity(1f)
-        .plateauDensity(1f)
-        .mountainDensity(1f)
-        .landDensity(1f);
+        .terrainStyle("terrain")
+        .textureStyle("texture")
+        .resourceStyle("resource")
+        .propStyle("prop");
+  }
+
+  private static GeneratorCommandBuilder maximumArgsBuilder() {
+    return customStyleBuilder()
+        .seed("100")
+        .symmetry("XZ");
   }
 
   @Test
   public void testDefaultSet() {
     assertNotNull(defaultBuilder().build().getCommand());
-    assertEquals(defaultBuilder().build().getCommand(), List.of(javaPath, "-jar", Path.of("mapGenerator_1.0.0.jar").toAbsolutePath().toString(),
+    assertEquals(defaultBuilder().build().getCommand(), List.of(JAVA_PATH.toAbsolutePath().toString(), "-jar", Path.of("mapGenerator_1.0.0.jar").toAbsolutePath().toString(),
         "--map-size", "512", "--spawn-count", "6", "--num-teams", "2"));
   }
 
@@ -64,48 +72,61 @@ public class GeneratorCommandTest extends ServiceTest {
   @Test
   public void testMapNameNoException() {
     List<String> command = GeneratorCommand.builder().mapName("neroxis_map_generator_1.0.0_0")
+        .javaExecutable(Path.of("java"))
         .generatorExecutableFile(Path.of("mapGenerator_1.0.0.jar"))
         .version(new ComparableVersion("1.0.0"))
         .build()
         .getCommand();
-    assertTrue(command.containsAll(List.of(javaPath, "-jar", Path.of("mapGenerator_1.0.0.jar").toAbsolutePath().toString(),
+    assertTrue(command.containsAll(List.of(JAVA_PATH.toAbsolutePath().toString(), "-jar", Path.of("mapGenerator_1.0.0.jar").toAbsolutePath().toString(),
         "--map-name", "neroxis_map_generator_1.0.0_0")));
   }
 
   @Test
-  public void testLandDensitySet() {
-    List<String> command = defaultBuilder().landDensity(.1f).build().getCommand();
-    assertTrue(command.containsAll(List.of("--land-density", "0.1")));
+  public void testSeedSet() {
+    List<String> command = defaultBuilder().seed("100").build().getCommand();
+    assertThat(command, containsInRelativeOrder("--seed", "100"));
   }
 
   @Test
-  public void testPlateauDensitySet() {
-    List<String> command = defaultBuilder().plateauDensity(.1f).build().getCommand();
-    assertTrue(command.containsAll(List.of("--plateau-density", "0.1")));
+  public void testSymmetrySet() {
+    List<String> command = defaultBuilder().symmetry("XZ").build().getCommand();
+    assertThat(command, containsInRelativeOrder("--terrain-symmetry", "XZ"));
   }
 
   @Test
-  public void testMountainDensitySet() {
-    List<String> command = defaultBuilder().mountainDensity(.1f).build().getCommand();
-    assertTrue(command.containsAll(List.of("--mountain-density", "0.1")));
+  public void testTerrainStyleSet() {
+    List<String> command = defaultBuilder().terrainStyle("TERRAIN").build().getCommand();
+    assertThat(command, containsInRelativeOrder("--terrain-style", "TERRAIN"));
   }
 
   @Test
-  public void testRampDensitySet() {
-    List<String> command = defaultBuilder().rampDensity(.1f).build().getCommand();
-    assertTrue(command.containsAll(List.of("--ramp-density", "0.1")));
+  public void testTextureStyleSet() {
+    List<String> command = defaultBuilder().textureStyle("BIOME").build().getCommand();
+    assertThat(command, containsInRelativeOrder("--texture-style", "BIOME"));
   }
 
   @Test
-  public void testMexDensitySet() {
-    List<String> command = defaultBuilder().mexDensity(.1f).build().getCommand();
-    assertTrue(command.containsAll(List.of("--mex-density", "0.1")));
+  public void testResourceStyleSet() {
+    List<String> command = defaultBuilder().resourceStyle("RESOURCE").build().getCommand();
+    assertThat(command, containsInRelativeOrder("--resource-style", "RESOURCE"));
+  }
+
+  @Test
+  public void testPropStyleSet() {
+    List<String> command = defaultBuilder().propStyle("PROPS").build().getCommand();
+    assertThat(command, containsInRelativeOrder("--prop-style", "PROPS"));
+  }
+
+  @Test
+  public void testResourceDensitySet() {
+    List<String> command = defaultBuilder().resourceDensity(.5f).build().getCommand();
+    assertThat(command, containsInRelativeOrder("--resource-density", "0.5"));
   }
 
   @Test
   public void testReclaimDensitySet() {
-    List<String> command = defaultBuilder().reclaimDensity(.1f).build().getCommand();
-    assertTrue(command.containsAll(List.of("--reclaim-density", "0.1")));
+    List<String> command = defaultBuilder().reclaimDensity(.5f).build().getCommand();
+    assertThat(command, containsInRelativeOrder("--reclaim-density", "0.5"));
   }
 
   @Test
@@ -135,13 +156,43 @@ public class GeneratorCommandTest extends ServiceTest {
   @Test
   public void testStyleSet() {
     List<String> command = defaultBuilder().style("TEST").build().getCommand();
-    assertTrue(command.containsAll(List.of("--style", "TEST")));
+    assertThat(command, containsInRelativeOrder("--style", "TEST"));
   }
 
   @Test
-  public void testBiomeSet() {
-    List<String> command = defaultBuilder().biome("TEST").build().getCommand();
-    assertTrue(command.containsAll(List.of("--biome", "TEST")));
+  public void testRandomSymmetrySet() {
+    List<String> command = defaultBuilder().symmetry("RANDOM").build().getCommand();
+    assertThat(command, not(contains("--terrain-symmetry")));
+  }
+
+  @Test
+  public void testRandomStyleSet() {
+    List<String> command = defaultBuilder().style("RANDOM").build().getCommand();
+    assertThat(command, not(contains("--style")));
+  }
+
+  @Test
+  public void testRandomTerrainStyleSet() {
+    List<String> command = defaultBuilder().terrainStyle("RANDOM").build().getCommand();
+    assertThat(command, not(contains("--terrain-style")));
+  }
+
+  @Test
+  public void testRandomTextureStyleSet() {
+    List<String> command = defaultBuilder().textureStyle("RANDOM").build().getCommand();
+    assertThat(command, not(contains("--texture-style")));
+  }
+
+  @Test
+  public void testRandomResourceStyleSet() {
+    List<String> command = defaultBuilder().resourceStyle("RANDOM").build().getCommand();
+    assertThat(command, not(contains("--resource-style")));
+  }
+
+  @Test
+  public void testRandomPropStyleSet() {
+    List<String> command = defaultBuilder().propStyle("RANDOM").build().getCommand();
+    assertThat(command, not(contains("--prop-style")));
   }
 
   @Test
@@ -151,25 +202,23 @@ public class GeneratorCommandTest extends ServiceTest {
   }
 
   @Test
-  public void testStyleRemovesDensityArgs() {
-    List<String> command = densityBuilder().style("test").build().getCommand();
-    assertFalse(command.contains("--reclaim-density"));
-    assertFalse(command.contains("--mex-density"));
-    assertFalse(command.contains("--land-density"));
-    assertFalse(command.contains("--plateau-density"));
-    assertFalse(command.contains("--mountain-density"));
-    assertFalse(command.contains("--ramp-density"));
+  public void testStyleRemovesCustomStyleArgs() {
+    List<String> command = customStyleBuilder().style("test").build().getCommand();
+    assertFalse(command.contains("--terrain-style"));
+    assertFalse(command.contains("--texture-style"));
+    assertFalse(command.contains("--resource-style"));
+    assertFalse(command.contains("--prop-style"));
   }
 
   @Test
   public void testMapNameRemovesArgs() {
-    List<String> command = densityBuilder().mapName("test").build().getCommand();
-    assertFalse(command.contains("--reclaim-density"));
-    assertFalse(command.contains("--mex-density"));
-    assertFalse(command.contains("--land-density"));
-    assertFalse(command.contains("--plateau-density"));
-    assertFalse(command.contains("--mountain-density"));
-    assertFalse(command.contains("--ramp-density"));
+    List<String> command = maximumArgsBuilder().mapName("test").build().getCommand();
+    assertFalse(command.contains("--terrain-style"));
+    assertFalse(command.contains("--texture-style"));
+    assertFalse(command.contains("--resource-style"));
+    assertFalse(command.contains("--prop-style"));
+    assertFalse(command.contains("--seed"));
+    assertFalse(command.contains("--symmetry"));
     assertFalse(command.contains("--spawn-count"));
     assertFalse(command.contains("--map-size"));
     assertFalse(command.contains("--num-teams"));
@@ -177,43 +226,52 @@ public class GeneratorCommandTest extends ServiceTest {
 
   @Test
   public void testCommandLineRemovesArgs() {
-    List<String> command = densityBuilder().commandLineArgs("--test").build().getCommand();
-    assertFalse(command.contains("--reclaim-density"));
-    assertFalse(command.contains("--mex-density"));
-    assertFalse(command.contains("--land-density"));
-    assertFalse(command.contains("--plateau-density"));
-    assertFalse(command.contains("--mountain-density"));
-    assertFalse(command.contains("--ramp-density"));
+    List<String> command = maximumArgsBuilder().commandLineArgs("--test").build().getCommand();
+    assertFalse(command.contains("--terrain-style"));
+    assertFalse(command.contains("--texture-style"));
+    assertFalse(command.contains("--resource-style"));
+    assertFalse(command.contains("--prop-style"));
+    assertFalse(command.contains("--seed"));
+    assertFalse(command.contains("--symmetry"));
     assertFalse(command.contains("--spawn-count"));
     assertFalse(command.contains("--map-size"));
     assertFalse(command.contains("--num-teams"));
   }
 
   @Test
-  public void testNonCasualRemovesDensityArgs() {
-    List<String> command = densityBuilder().generationType(GenerationType.BLIND).build().getCommand();
-    assertFalse(command.contains("--reclaim-density"));
-    assertFalse(command.contains("--mex-density"));
-    assertFalse(command.contains("--land-density"));
-    assertFalse(command.contains("--plateau-density"));
-    assertFalse(command.contains("--mountain-density"));
-    assertFalse(command.contains("--ramp-density"));
+  public void testNonCasualRemovesCustomizationArgs() {
+    List<String> command = maximumArgsBuilder().generationType(GenerationType.BLIND).build().getCommand();
+    assertFalse(command.contains("--terrain-style"));
+    assertFalse(command.contains("--texture-style"));
+    assertFalse(command.contains("--resource-style"));
+    assertFalse(command.contains("--prop-style"));
+    assertFalse(command.contains("--seed"));
+    assertFalse(command.contains("--symmetry"));
+    assertTrue(command.contains("--spawn-count"));
+    assertTrue(command.contains("--map-size"));
+    assertTrue(command.contains("--num-teams"));
 
-    command = densityBuilder().generationType(GenerationType.TOURNAMENT).build().getCommand();
-    assertFalse(command.contains("--reclaim-density"));
-    assertFalse(command.contains("--mex-density"));
-    assertFalse(command.contains("--land-density"));
-    assertFalse(command.contains("--plateau-density"));
-    assertFalse(command.contains("--mountain-density"));
-    assertFalse(command.contains("--ramp-density"));
+    command = maximumArgsBuilder().generationType(GenerationType.TOURNAMENT).build().getCommand();
+    assertFalse(command.contains("--terrain-style"));
+    assertFalse(command.contains("--texture-style"));
+    assertFalse(command.contains("--resource-style"));
+    assertFalse(command.contains("--prop-style"));
+    assertFalse(command.contains("--seed"));
+    assertFalse(command.contains("--symmetry"));
+    assertTrue(command.contains("--spawn-count"));
+    assertTrue(command.contains("--map-size"));
+    assertTrue(command.contains("--num-teams"));
 
-    command = densityBuilder().generationType(GenerationType.UNEXPLORED).build().getCommand();
-    assertFalse(command.contains("--reclaim-density"));
-    assertFalse(command.contains("--mex-density"));
-    assertFalse(command.contains("--land-density"));
-    assertFalse(command.contains("--plateau-density"));
-    assertFalse(command.contains("--mountain-density"));
-    assertFalse(command.contains("--ramp-density"));
+    command = maximumArgsBuilder().generationType(GenerationType.UNEXPLORED).build().getCommand();
+    assertFalse(command.contains("--terrain-style"));
+    assertFalse(command.contains("--texture-style"));
+    assertFalse(command.contains("--resource-style"));
+    assertFalse(command.contains("--prop-style"));
+    assertFalse(command.contains("--seed"));
+    assertFalse(command.contains("--symmetry"));
+    assertTrue(command.contains("--spawn-count"));
+    assertTrue(command.contains("--map-size"));
+    assertTrue(command.contains("--num-teams"));
   }
 
   @Test
@@ -224,7 +282,7 @@ public class GeneratorCommandTest extends ServiceTest {
         .mapName("neroxis_map_generator_0.1.5_0")
         .build()
         .getCommand();
-    assertEquals(command, List.of(javaPath, "-jar", Path.of("mapGenerator_0.1.5.jar").toAbsolutePath().toString(),
+    assertEquals(command, List.of(JAVA_PATH.toAbsolutePath().toString(), "-jar", Path.of("mapGenerator_0.1.5.jar").toAbsolutePath().toString(),
         ".", "0", "0.1.5", "neroxis_map_generator_0.1.5_0"));
   }
 

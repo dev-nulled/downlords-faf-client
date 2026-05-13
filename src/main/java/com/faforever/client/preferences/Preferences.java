@@ -1,98 +1,95 @@
 package com.faforever.client.preferences;
 
+import com.faforever.client.config.ClientProperties.UnitDatabase;
 import com.faforever.client.game.GamesTilesContainerController.TilesSortingOrder;
 import com.fasterxml.jackson.annotation.JsonMerge;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.IntegerProperty;
-import javafx.beans.property.ListProperty;
 import javafx.beans.property.MapProperty;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.SimpleIntegerProperty;
-import javafx.beans.property.SimpleListProperty;
 import javafx.beans.property.SimpleMapProperty;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
-import javafx.collections.ObservableList;
 import javafx.collections.ObservableMap;
 import javafx.scene.control.TableColumn.SortType;
-import lombok.AccessLevel;
 import lombok.Getter;
-import lombok.experimental.FieldDefaults;
 
 import java.util.Map;
 
-import static javafx.collections.FXCollections.observableArrayList;
 import static javafx.collections.FXCollections.observableHashMap;
 
-@FieldDefaults(makeFinal = true, level = AccessLevel.PRIVATE)
+
 public class Preferences {
 
   public static final String DEFAULT_THEME_NAME = "default";
 
+  @JsonMerge
+  @Getter
+  private final GeneralPrefs general = new GeneralPrefs();
+  @JsonMerge
+  @Getter
+  private final DataPrefs data = new DataPrefs();
   @Getter
   @JsonMerge
-  DataPrefs data = new DataPrefs();
-  @Getter
+  private final WindowPrefs mainWindow = new WindowPrefs();
   @JsonMerge
-  WindowPrefs mainWindow = new WindowPrefs();
   @Getter
+  private final GeneratorPrefs generator = new GeneratorPrefs();
   @JsonMerge
-  GeneratorPrefs generator = new GeneratorPrefs();
   @Getter
+  private final ForgedAlliancePrefs forgedAlliance = new ForgedAlliancePrefs();
   @JsonMerge
-  ForgedAlliancePrefs forgedAlliance = new ForgedAlliancePrefs();
   @Getter
+  private final LoginPrefs login = new LoginPrefs();
   @JsonMerge
-  LoginPrefs login = new LoginPrefs();
   @Getter
+  private final ChatPrefs chat = new ChatPrefs();
   @JsonMerge
-  ChatPrefs chat = new ChatPrefs();
   @Getter
+  private final NotificationPrefs notification = new NotificationPrefs();
   @JsonMerge
-  NotificationsPrefs notification = new NotificationsPrefs();
   @Getter
+  private final LocalizationPrefs localization = new LocalizationPrefs();
   @JsonMerge
-  LocalizationPrefs localization = new LocalizationPrefs();
   @Getter
+  private final LastGamePrefs lastGame = new LastGamePrefs();
   @JsonMerge
-  LastGamePrefs lastGame = new LastGamePrefs();
   @Getter
+  private final MatchmakerPrefs matchmaker = new MatchmakerPrefs();
   @JsonMerge
-  MatchmakerPrefs matchmaker = new MatchmakerPrefs();
   @Getter
+  private final DeveloperPrefs developer = new DeveloperPrefs();
   @JsonMerge
-  NewsPrefs news = new NewsPrefs();
   @Getter
+  private final VaultPrefs vault = new VaultPrefs();
   @JsonMerge
-  DeveloperPrefs developer = new DeveloperPrefs();
   @Getter
+  private final UserPrefs user = new UserPrefs();
   @JsonMerge
-  VaultPrefs vault = new VaultPrefs();
   @Getter
+  private final FiltersPrefs filters = new FiltersPrefs();
   @JsonMerge
-  MirrorPrefs mirror = new MirrorPrefs();
   @Getter
-  @JsonMerge
-  UserPrefs user = new UserPrefs();
+  private final ReplayHistoryPrefs replayHistory = new ReplayHistoryPrefs();
 
-  StringProperty themeName = new SimpleStringProperty(DEFAULT_THEME_NAME);
-  BooleanProperty preReleaseCheckEnabled = new SimpleBooleanProperty(false);
-  BooleanProperty mapAndModAutoUpdate = new SimpleBooleanProperty(true);
-  BooleanProperty showPasswordProtectedGames = new SimpleBooleanProperty(true);
-  BooleanProperty showModdedGames = new SimpleBooleanProperty(true);
-  ListProperty<String> ignoredNotifications = new SimpleListProperty<>(observableArrayList());
-  StringProperty gamesViewMode = new SimpleStringProperty();
-  MapProperty<String, SortType> gameTableSorting = new SimpleMapProperty<>(observableHashMap());
-  ObjectProperty<TilesSortingOrder> gameTileSortingOrder = new SimpleObjectProperty<>(TilesSortingOrder.PLAYER_DES);
-  ObjectProperty<UnitDataBaseType> unitDataBaseType = new SimpleObjectProperty<>(UnitDataBaseType.SPOOKY);
-  BooleanProperty disallowJoinsViaDiscord = new SimpleBooleanProperty();
-  BooleanProperty showGameDetailsSidePane = new SimpleBooleanProperty(false);
-  BooleanProperty advancedIceLogEnabled = new SimpleBooleanProperty(false);
-  IntegerProperty cacheLifeTimeInDays = new SimpleIntegerProperty(30);
-  BooleanProperty gameDataCacheActivated = new SimpleBooleanProperty(false);
-  BooleanProperty debugLogEnabled = new SimpleBooleanProperty(false);
+  private final StringProperty themeName = new SimpleStringProperty(DEFAULT_THEME_NAME);
+  private final BooleanProperty preReleaseCheckEnabled = new SimpleBooleanProperty(false);
+  private final BooleanProperty mapAndModAutoUpdate = new SimpleBooleanProperty(true);
+  private final BooleanProperty hidePrivateGames = new SimpleBooleanProperty(false);
+  private final BooleanProperty hideModdedGames = new SimpleBooleanProperty(false);
+  private final StringProperty gamesViewMode = new SimpleStringProperty();
+  private final MapProperty<String, SortType> gameTableSorting = new SimpleMapProperty<>(observableHashMap());
+  private final ObjectProperty<TilesSortingOrder> gameTileSortingOrder = new SimpleObjectProperty<>(
+      TilesSortingOrder.PLAYER_DES);
+  private final ObjectProperty<UnitDataBaseType> unitDataBaseType = new SimpleObjectProperty<>(UnitDataBaseType.SPOOKY);
+  private final BooleanProperty disallowJoinsViaDiscord = new SimpleBooleanProperty();
+  private final BooleanProperty showGameDetailsSidePane = new SimpleBooleanProperty(false);
+  private final BooleanProperty advancedIceLogEnabled = new SimpleBooleanProperty(false);
+  private final IntegerProperty cacheLifeTimeInDays = new SimpleIntegerProperty(30);
+  private final BooleanProperty gameDataCacheActivated = new SimpleBooleanProperty(false);
 
 
   public TilesSortingOrder getGameTileSortingOrder() {
@@ -107,12 +104,12 @@ public class Preferences {
     return gameTileSortingOrder;
   }
 
-  public BooleanProperty showPasswordProtectedGamesProperty() {
-    return showPasswordProtectedGames;
+  public BooleanProperty hidePrivateGamesProperty() {
+    return hidePrivateGames;
   }
 
-  public BooleanProperty showModdedGamesProperty() {
-    return showModdedGames;
+  public BooleanProperty hideModdedGamesProperty() {
+    return hideModdedGames;
   }
 
   public String getGamesViewMode() {
@@ -137,18 +134,6 @@ public class Preferences {
 
   public StringProperty themeNameProperty() {
     return themeName;
-  }
-
-  public ObservableList<String> getIgnoredNotifications() {
-    return ignoredNotifications.get();
-  }
-
-  public void setIgnoredNotifications(ObservableList<String> ignoredNotifications) {
-    this.ignoredNotifications.set(ignoredNotifications);
-  }
-
-  public ListProperty<String> ignoredNotificationsProperty() {
-    return ignoredNotifications;
   }
 
   public ObservableMap<String, SortType> getGameTableSorting() {
@@ -208,7 +193,7 @@ public class Preferences {
     return showGameDetailsSidePane;
   }
 
-  public boolean getPreReleaseCheckEnabled() {
+  public boolean isPreReleaseCheckEnabled() {
     return preReleaseCheckEnabled.get();
   }
 
@@ -220,32 +205,20 @@ public class Preferences {
     return preReleaseCheckEnabled;
   }
 
-  public boolean isShowPasswordProtectedGames() {
-    return showPasswordProtectedGames.get();
+  public boolean isHidePrivateGames() {
+    return hidePrivateGames.get();
   }
 
-  public void setShowPasswordProtectedGames(boolean showPasswordProtectedGames) {
-    this.showPasswordProtectedGames.set(showPasswordProtectedGames);
+  public void setHidePrivateGames(boolean hidePrivateGames) {
+    this.hidePrivateGames.set(hidePrivateGames);
   }
 
-  public boolean isShowModdedGames() {
-    return showModdedGames.get();
+  public boolean isHideModdedGames() {
+    return hideModdedGames.get();
   }
 
-  public void setShowModdedGames(boolean showModdedGames) {
-    this.showModdedGames.set(showModdedGames);
-  }
-
-  public enum UnitDataBaseType {
-    SPOOKY("unitDatabase.spooky"),
-    RACKOVER("unitDatabase.rackover");
-
-    @Getter
-    private final String i18nKey;
-
-    UnitDataBaseType(String i18nKey) {
-      this.i18nKey = i18nKey;
-    }
+  public void setHideModdedGames(boolean hideModdedGames) {
+    this.hideModdedGames.set(hideModdedGames);
   }
 
   public int getCacheLifeTimeInDays() {
@@ -272,19 +245,7 @@ public class Preferences {
     return gameDataCacheActivated;
   }
 
-  public boolean isDebugLogEnabled() {
-    return debugLogEnabled.get();
-  }
-
-  public void setDebugLogEnabled(boolean debugLogEnabled) {
-    this.debugLogEnabled.set(debugLogEnabled);
-  }
-
-  public BooleanProperty debugLogEnabledProperty() {
-    return debugLogEnabled;
-  }
-
-  public boolean getMapAndModAutoUpdate() {
+  public boolean isMapAndModAutoUpdate() {
     return mapAndModAutoUpdate.get();
   }
 
@@ -294,5 +255,21 @@ public class Preferences {
 
   public BooleanProperty mapAndModAutoUpdateProperty() {
     return mapAndModAutoUpdate;
+  }
+
+  public enum UnitDataBaseType {
+    SPOOKY("unitDatabase.spooky", false),
+    RACKOVER("unitDatabase.rackover", false),
+    ETFREEMAN("unitDatabase.etfreeman", true);
+
+    @Getter
+    private final String i18nKey;
+    @Getter
+    private final boolean external;
+
+    UnitDataBaseType(String i18nKey, boolean external) {
+      this.i18nKey = i18nKey;
+      this.external = external;
+    }
   }
 }

@@ -1,22 +1,22 @@
 package com.faforever.client.map.generator;
 
-import com.faforever.client.builders.PreferencesBuilder;
 import com.faforever.client.config.ClientProperties;
 import com.faforever.client.config.ClientProperties.MapGenerator;
-import com.faforever.client.preferences.Preferences;
-import com.faforever.client.preferences.PreferencesService;
+import com.faforever.client.preferences.DataPrefs;
+import com.faforever.client.preferences.ForgedAlliancePrefs;
 import com.faforever.client.task.CompletableTask;
 import com.faforever.client.task.TaskService;
 import com.faforever.client.test.ServiceTest;
 import org.apache.maven.artifact.versioning.ComparableVersion;
-import org.hamcrest.core.IsInstanceOf;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.Mock;
-import org.springframework.context.ApplicationContext;
+import org.springframework.beans.factory.ObjectFactory;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -24,18 +24,13 @@ import java.security.InvalidParameterException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.when;
 
 public class MapGeneratorServiceTest extends ServiceTest {
 
@@ -60,12 +55,9 @@ public class MapGeneratorServiceTest extends ServiceTest {
   public Path tempDirectory;
 
   private MapGeneratorService instance;
-  @Mock
-  private PreferencesService preferencesService;
+
   @Mock
   private TaskService taskService;
-  @Mock
-  private ApplicationContext applicationContext;
   @Mock
   private DownloadMapGeneratorTask downloadMapGeneratorTask;
   @Mock
@@ -76,46 +68,48 @@ public class MapGeneratorServiceTest extends ServiceTest {
   private ClientProperties clientProperties;
   @Mock
   private MapGenerator mapGenerator;
+  @Mock
+  private ObjectFactory<GenerateMapTask> generateMapTaskFactory;
+  @Mock
+  private ObjectFactory<DownloadMapGeneratorTask> downloadMapGeneratorTaskFactory;
+  @Mock
+  private ObjectFactory<GeneratorOptionsTask> generatorOptionsTaskFactory;
 
   @BeforeEach
   public void setUp() throws Exception {
-    Preferences preferences = PreferencesBuilder.create()
-        .dataPrefs()
-        .dataDirectory(tempDirectory)
-        .then()
-        .forgedAlliancePrefs()
-        .vaultBaseDirectory(tempDirectory)
-        .then()
-        .get();
+    ForgedAlliancePrefs forgedAlliancePrefs = new ForgedAlliancePrefs();
+    forgedAlliancePrefs.setVaultBaseDirectory(tempDirectory);
+
+    DataPrefs dataPrefs = new DataPrefs();
+    dataPrefs.setBaseDataDirectory(tempDirectory);
 
     Files.createDirectories(tempDirectory.resolve(MapGeneratorService.GENERATOR_EXECUTABLE_SUB_DIRECTORY));
     String generatorExecutableName = String.format(MapGeneratorService.GENERATOR_EXECUTABLE_FILENAME, versionGeneratorPresent);
     Files.createFile(tempDirectory.resolve(MapGeneratorService.GENERATOR_EXECUTABLE_SUB_DIRECTORY).resolve(generatorExecutableName));
 
-    when(preferencesService.getPreferences()).thenReturn(preferences);
+    lenient().when(downloadMapGeneratorTaskFactory.getObject()).thenReturn(downloadMapGeneratorTask);
+    lenient().when(generateMapTaskFactory.getObject()).thenReturn(generateMapTask);
+    lenient().when(generatorOptionsTaskFactory.getObject()).thenReturn(generatorOptionsTask);
+    lenient().when(clientProperties.getMapGenerator()).thenReturn(mapGenerator);
+    lenient().when(mapGenerator.getMaxSupportedMajorVersion()).thenReturn(maxVersion);
+    lenient().when(mapGenerator.getMinSupportedMajorVersion()).thenReturn(minVersion);
 
-    when(applicationContext.getBean(DownloadMapGeneratorTask.class)).thenReturn(downloadMapGeneratorTask);
-    when(applicationContext.getBean(GenerateMapTask.class)).thenReturn(generateMapTask);
-    when(applicationContext.getBean(GeneratorOptionsTask.class)).thenReturn(generatorOptionsTask);
-    when(clientProperties.getMapGenerator()).thenReturn(mapGenerator);
-    when(mapGenerator.getMaxSupportedMajorVersion()).thenReturn(maxVersion);
-    when(mapGenerator.getMinSupportedMajorVersion()).thenReturn(minVersion);
+    instance = new MapGeneratorService(taskService, clientProperties, forgedAlliancePrefs, dataPrefs, WebClient.builder()
+        .build(), generateMapTaskFactory, downloadMapGeneratorTaskFactory, generatorOptionsTaskFactory);
 
-    instance = new MapGeneratorService(applicationContext, preferencesService, taskService, clientProperties, WebClient.builder());
-
-    when(downloadMapGeneratorTask.getFuture()).thenReturn(CompletableFuture.completedFuture(null));
-    when(generateMapTask.getFuture()).thenReturn(CompletableFuture.completedFuture(null));
-    when(generatorOptionsTask.getFuture()).thenReturn(CompletableFuture.completedFuture(new ArrayList<>(List.of("TEST"))));
-    doAnswer(invocation -> {
+    lenient().when(downloadMapGeneratorTask.getMono()).thenReturn(Mono.empty());
+    lenient().when(generateMapTask.getMono()).thenReturn(Mono.empty());
+    lenient().when(generatorOptionsTask.getMono()).thenReturn(Mono.just(new ArrayList<>(List.of("TEST"))));
+    lenient().doAnswer(invocation -> {
       CompletableTask<Void> task = invocation.getArgument(0);
-      task.getFuture().get();
+      task.getMono().block();
       return task;
     }).when(taskService).submitTask(any());
   }
 
   @Test
   public void testGenerateMapNoGeneratorPresent() {
-    instance.generateMap(testMapNameNoGenerator).join();
+    StepVerifier.create(instance.generateMap(testMapNameNoGenerator)).verifyComplete();
 
     verify(taskService).submitTask(downloadMapGeneratorTask);
     verify(downloadMapGeneratorTask).setVersion(versionNoGeneratorPresent);
@@ -126,12 +120,11 @@ public class MapGeneratorServiceTest extends ServiceTest {
 
   @Test
   public void testGenerateMapGeneratorPresent() throws Exception {
-    instance.generateMap(testMapNameGenerator).get();
+    StepVerifier.create(instance.generateMap(testMapNameGenerator)).verifyComplete();
 
     verify(taskService).submitTask(generateMapTask);
 
     verify(generateMapTask).setVersion(versionGeneratorPresent);
-    verify(generateMapTask).setSeed(seed);
     verify(generateMapTask).setMapName(testMapNameGenerator);
 
     String generatorExecutableName = String.format(MapGeneratorService.GENERATOR_EXECUTABLE_FILENAME, versionGeneratorPresent);
@@ -142,41 +135,36 @@ public class MapGeneratorServiceTest extends ServiceTest {
 
   @Test
   public void testWrongMapNameThrowsException() {
-    CompletableFuture<String> future = instance.generateMap("neroxis_no_map");
-    assertThat(assertThrows(CompletionException.class, future::join).getCause(), IsInstanceOf.instanceOf(InvalidParameterException.class));
+    StepVerifier.create(instance.generateMap("neroxis_no_map")).verifyError(InvalidParameterException.class);
   }
 
   @Test
   public void testTooNewVersionThrowsException() {
-    CompletableFuture<String> future = instance.generateMap(testMapNameTooNewVersion);
-    assertThat(assertThrows(CompletionException.class, future::join).getCause(), IsInstanceOf.instanceOf(UnsupportedVersionException.class));
+    StepVerifier.create(instance.generateMap(testMapNameTooNewVersion)).verifyError(UnsupportedVersionException.class);
   }
 
   @Test
   public void testTooOldVersionThrowsException() {
-    CompletableFuture<String> future = instance.generateMap(testMapNameTooOldVersion);
-    assertThat(assertThrows(CompletionException.class, future::join).getCause(), IsInstanceOf.instanceOf(OutdatedVersionException.class));
+    StepVerifier.create(instance.generateMap(testMapNameTooOldVersion)).verifyError(OutdatedVersionException.class);
   }
 
   @Test
   public void testGenerateMapWithGeneratorOptions() {
     ReflectionTestUtils.setField(instance, "defaultGeneratorVersion", versionGeneratorPresent);
     GeneratorOptions generatorOptions = GeneratorOptions.builder().build();
-    instance.generateMap(generatorOptions).join();
+    StepVerifier.create(instance.generateMap(generatorOptions)).verifyComplete();
 
     String generatorExecutableName = String.format(MapGeneratorService.GENERATOR_EXECUTABLE_FILENAME, versionGeneratorPresent);
     verify(generateMapTask).setGeneratorExecutableFile(tempDirectory.resolve(MapGeneratorService.GENERATOR_EXECUTABLE_SUB_DIRECTORY).resolve(generatorExecutableName));
     verify(generateMapTask).setVersion(versionGeneratorPresent);
     verify(generateMapTask).setGeneratorOptions(generatorOptions);
     verify(generateMapTask, never()).setMapName(anyString());
-    verify(generateMapTask, never()).setSeed(anyString());
   }
 
   @Test
   public void testGetStyles() {
     ReflectionTestUtils.setField(instance, "defaultGeneratorVersion", versionGeneratorPresent);
-    CompletableFuture<List<String>> future = instance.getGeneratorStyles();
-    future.join();
+    StepVerifier.create(instance.getGeneratorStyles()).expectNext(List.of("TEST")).verifyComplete();
 
     String generatorExecutableName = String.format(MapGeneratorService.GENERATOR_EXECUTABLE_FILENAME, versionGeneratorPresent);
     verify(generatorOptionsTask).setGeneratorExecutableFile(tempDirectory.resolve(MapGeneratorService.GENERATOR_EXECUTABLE_SUB_DIRECTORY).resolve(generatorExecutableName));

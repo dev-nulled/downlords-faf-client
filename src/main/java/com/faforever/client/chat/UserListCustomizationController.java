@@ -1,11 +1,7 @@
 package com.faforever.client.chat;
 
-import com.faforever.client.fx.Controller;
-import com.faforever.client.fx.JavaFxUtil;
+import com.faforever.client.fx.NodeController;
 import com.faforever.client.preferences.ChatPrefs;
-import com.faforever.client.preferences.PreferencesService;
-import javafx.beans.InvalidationListener;
-import javafx.beans.WeakInvalidationListener;
 import javafx.scene.control.CheckBox;
 import javafx.scene.layout.VBox;
 import lombok.RequiredArgsConstructor;
@@ -16,27 +12,18 @@ import org.springframework.stereotype.Component;
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
 @RequiredArgsConstructor
-public class UserListCustomizationController implements Controller<VBox> {
+public class UserListCustomizationController extends NodeController<VBox> {
 
-  private final PreferencesService preferencesService;
+  private final ChatPrefs chatPrefs;
 
   public VBox root;
   public CheckBox showMapNameCheckBox;
   public CheckBox showMapPreviewCheckBox;
 
-  @SuppressWarnings("FieldCanBeLocal")
-  private InvalidationListener selectedPropertyListener;
-
   @Override
-  public void initialize() {
-    ChatPrefs chatPrefs = preferencesService.getPreferences().getChat();
-    JavaFxUtil.bindBidirectional(showMapNameCheckBox.selectedProperty(), chatPrefs.showMapNameProperty());
-    JavaFxUtil.bindBidirectional(showMapPreviewCheckBox.selectedProperty(), chatPrefs.showMapPreviewProperty());
-
-    selectedPropertyListener = observable -> preferencesService.storeInBackground();
-    WeakInvalidationListener selectedPropertyWeakListener = new WeakInvalidationListener(selectedPropertyListener);
-    JavaFxUtil.addListener(showMapNameCheckBox.selectedProperty(), selectedPropertyWeakListener);
-    JavaFxUtil.addListener(showMapPreviewCheckBox.selectedProperty(), selectedPropertyWeakListener);
+  protected void onInitialize() {
+    showMapNameCheckBox.selectedProperty().bindBidirectional(chatPrefs.showMapNameProperty());
+    showMapPreviewCheckBox.selectedProperty().bindBidirectional(chatPrefs.showMapPreviewProperty());
   }
 
   @Override

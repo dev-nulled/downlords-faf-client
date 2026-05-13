@@ -2,6 +2,7 @@ package com.faforever.client.builders;
 
 import com.faforever.client.game.KnownFeaturedMod;
 import com.faforever.commons.lobby.GameInfo;
+import com.faforever.commons.lobby.GameInfo.TeamIds;
 import com.faforever.commons.lobby.GameStatus;
 import com.faforever.commons.lobby.GameType;
 import com.faforever.commons.lobby.GameVisibility;
@@ -19,12 +20,15 @@ public class GameInfoMessageBuilder {
   private GameVisibility visibility;
   private GameStatus state;
   private Integer numPlayers;
+  @Deprecated
   private Map<String, List<String>> teams;
+  private List<TeamIds> teamIds;
   private String featuredMod;
   private Integer maxPlayers;
   private String title;
   private Map<String, String> simMods;
   private String mapname;
+  private String hostedAt;
   private Double launchedAt;
   private String ratingType;
   private Integer ratingMin;
@@ -43,7 +47,7 @@ public class GameInfoMessageBuilder {
 
   public GameInfo get() {
     return new GameInfo(uid, title, host, gameType, maxPlayers, numPlayers, visibility, passwordProtected, state,
-        featuredMod, ratingType, simMods, mapname, mapname, launchedAt, teams, ratingMin, ratingMax,
+        featuredMod, ratingType, simMods, mapname, mapname, hostedAt, launchedAt, teams, teamIds, ratingMin, ratingMax,
         enforceRatingRange, games);
   }
 
@@ -73,6 +77,11 @@ public class GameInfoMessageBuilder {
 
   public GameInfoMessageBuilder teams(Map<String, List<String>> teams) {
     this.teams = teams;
+    return this;
+  }
+
+  public GameInfoMessageBuilder teamIds(List<TeamIds> teamIds) {
+    this.teamIds = teamIds;
     return this;
   }
 

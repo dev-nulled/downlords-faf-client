@@ -1,25 +1,23 @@
 package com.faforever.client.map;
 
 import com.faforever.client.config.ClientProperties;
-import com.faforever.client.domain.MapVersionBean;
+import com.faforever.client.domain.api.MapVersion;
 import com.faforever.client.exception.AssetLoadException;
-import com.faforever.client.fx.Controller;
 import com.faforever.client.fx.JavaFxUtil;
+import com.faforever.client.fx.NodeController;
 import com.faforever.client.fx.PlatformService;
 import com.faforever.client.i18n.I18n;
-import com.faforever.client.map.event.MapUploadedEvent;
 import com.faforever.client.notification.Action;
 import com.faforever.client.notification.CopyErrorAction;
 import com.faforever.client.notification.DismissAction;
 import com.faforever.client.notification.GetHelpAction;
-import com.faforever.client.notification.ImmediateNotification;
 import com.faforever.client.notification.NotificationService;
+import com.faforever.client.notification.ServerNotification;
 import com.faforever.client.reporting.ReportingService;
 import com.faforever.client.task.CompletableTask;
 import com.faforever.client.util.ConcurrentUtil;
 import com.faforever.commons.api.dto.ApiException;
 import com.faforever.commons.map.PreviewGenerator;
-import com.google.common.eventbus.EventBus;
 import javafx.embed.swing.SwingFXUtils;
 import javafx.scene.Node;
 import javafx.scene.control.CheckBox;
@@ -51,7 +49,7 @@ import static java.util.Arrays.asList;
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
 @Slf4j
 @RequiredArgsConstructor
-public class MapUploadController implements Controller<Node> {
+public class MapUploadController extends NodeController<Node> {
 
   private final MapService mapService;
   private final ExecutorService executorService;
@@ -59,8 +57,8 @@ public class MapUploadController implements Controller<Node> {
   private final ReportingService reportingService;
   private final PlatformService platformService;
   private final I18n i18n;
-  private final EventBus eventBus;
   private final ClientProperties clientProperties;
+
   public Label rankedLabel;
   public Label uploadTaskMessageLabel;
   public Label uploadTaskTitleLabel;
@@ -80,11 +78,12 @@ public class MapUploadController implements Controller<Node> {
   public CheckBox rulesCheckBox;
   public Label rulesLabel;
   private Path mapPath;
-  private MapVersionBean mapInfo;
   private CompletableTask<Void> uploadMapTask;
   private Runnable cancelButtonClickedListener;
+  private Runnable uploadListener;
 
-  public void initialize() {
+  @Override
+  protected void onInitialize() {
     JavaFxUtil.bindManagedToVisible(mapInfoPane, uploadCompletePane, parseProgressPane, uploadProgressPane);
 
     mapInfoPane.setVisible(false);
@@ -129,16 +128,15 @@ public class MapUploadController implements Controller<Node> {
     }
   }
 
-  private void setMapInfo(MapVersionBean mapInfo) {
-    this.mapInfo = mapInfo;
+  private void setMapInfo(MapVersion mapInfo) {
     enterMapInfoState();
 
-    mapNameLabel.setText(mapInfo.getMap().getDisplayName());
-    descriptionLabel.setText(mapInfo.getDescription());
-    versionLabel.setText(Optional.ofNullable(mapInfo.getVersion()).map(ComparableVersion::toString).orElse(""));
-    MapSize mapSize = mapInfo.getSize();
-    sizeLabel.setText(i18n.get("mapVault.upload.sizeFormat", mapSize.getWidthInKm(), mapSize.getHeightInKm()));
-    playersLabel.setText(i18n.get("mapVault.upload.playersFormat", mapInfo.getMaxPlayers()));
+    mapNameLabel.setText(mapInfo.map().displayName());
+    descriptionLabel.setText(mapInfo.description());
+    versionLabel.setText(Optional.ofNullable(mapInfo.version()).map(ComparableVersion::toString).orElse(""));
+    MapSize mapSize = mapInfo.size();
+    sizeLabel.setText(i18n.get("mapVault.upload.sizeFormat", mapSize.widthInKm(), mapSize.heightInKm()));
+    playersLabel.setText(i18n.get("mapVault.upload.playersFormat", mapInfo.maxPlayers()));
 
     thumbnailImageView.setImage(generatePreview(mapPath));
   }
@@ -158,7 +156,7 @@ public class MapUploadController implements Controller<Node> {
   private void onUploadFailed(Throwable throwable) {
     enterMapInfoState();
     if (throwable instanceof ApiException) {
-      notificationService.addServerNotification(new ImmediateNotification(
+      notificationService.addNotification(new ServerNotification(
           i18n.get("errorTitle"), i18n.get("mapVault.upload.failed", throwable.getLocalizedMessage()), ERROR,
           asList(
               new GetHelpAction(i18n, reportingService),
@@ -166,10 +164,9 @@ public class MapUploadController implements Controller<Node> {
           )
       ));
     } else {
-      notificationService.addServerNotification(new ImmediateNotification(
+      notificationService.addNotification(new ServerNotification(
           i18n.get("errorTitle"), i18n.get("mapVault.upload.failed", throwable.getLocalizedMessage()), ERROR, throwable,
-          asList(
-              new Action(i18n.get("mapVault.upload.retry"), event -> onUploadClicked()),
+          asList(new Action(i18n.get("mapVault.upload.retry"), this::onUploadClicked),
               new CopyErrorAction(i18n, reportingService, throwable),
               new GetHelpAction(i18n, reportingService),
               new DismissAction(i18n)
@@ -192,8 +189,12 @@ public class MapUploadController implements Controller<Node> {
     uploadProgressBar.progressProperty().bind(uploadMapTask.progressProperty());
 
     uploadMapTask.getFuture()
-        .thenAccept(v -> eventBus.post(new MapUploadedEvent(mapInfo)))
-        .thenAccept(aVoid -> enterUploadCompleteState())
+                 .thenRun(() -> {
+                   if (uploadListener != null) {
+                     uploadListener.run();
+                   }
+                 })
+        .thenRun(this::enterUploadCompleteState)
         .exceptionally(throwable -> {
           if (!(throwable instanceof CancellationException)) {
             onUploadFailed(throwable.getCause());
@@ -220,12 +221,17 @@ public class MapUploadController implements Controller<Node> {
     cancelButtonClickedListener.run();
   }
 
+  @Override
   public Region getRoot() {
     return mapUploadRoot;
   }
 
   public void setOnCancelButtonClickedListener(Runnable cancelButtonClickedListener) {
     this.cancelButtonClickedListener = cancelButtonClickedListener;
+  }
+
+  public void setUploadListener(Runnable uploadListener) {
+    this.uploadListener = uploadListener;
   }
 
   public void onShowRulesClicked() {

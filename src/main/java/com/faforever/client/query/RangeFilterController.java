@@ -10,14 +10,16 @@ import javafx.beans.binding.Bindings;
 import javafx.scene.Node;
 import javafx.scene.control.MenuButton;
 import javafx.scene.control.TextField;
-import javafx.util.StringConverter;
-import lombok.Data;
-import org.apache.commons.lang3.math.NumberUtils;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import org.controlsfx.control.RangeSlider;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
+import java.math.RoundingMode;
+import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -25,8 +27,10 @@ import java.util.function.Function;
 
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
-@Data
-public class RangeFilterController implements FilterNodeController {
+@RequiredArgsConstructor
+@Getter
+@Setter
+public class RangeFilterController extends FilterNodeController {
 
   private final I18n i18n;
 
@@ -34,62 +38,22 @@ public class RangeFilterController implements FilterNodeController {
   public MenuButton menu;
   public TextField lowValue;
   public TextField highValue;
-
+  
   private String propertyName;
   private Function<Double, ? extends Number> valueTransform;
+  private int numberOfFractionDigits;
+  private DecimalFormat numberFormat;
 
-  public void initialize() {
+  @Override
+  protected void onInitialize() {
     JavaFxUtil.bindManagedToVisible(menu);
     rangeSlider.setShowTickMarks(true);
     rangeSlider.setShowTickLabels(true);
     rangeSlider.setMinorTickCount(0);
-    valueTransform = (value) -> value;
-    lowValue.textProperty().bindBidirectional(rangeSlider.lowValueProperty(), new StringConverter<>() {
-      @Override
-      public String toString(Number number) {
-        if (!number.equals(rangeSlider.getMin())) {
-          return String.valueOf(number.intValue());
-        } else {
-          return "";
-        }
-      }
-
-      @Override
-      public Number fromString(String string) {
-        if (NumberUtils.isParsable(string)) {
-          return Double.parseDouble(string);
-        } else {
-          if (!string.equals("-") && !string.equals(".")) {
-            lowValue.setText("");
-          }
-          return rangeSlider.getMin();
-        }
-      }
-    });
-    highValue.textProperty().bindBidirectional(rangeSlider.highValueProperty(), new StringConverter<>() {
-      @Override
-      public String toString(Number number) {
-        if (!number.equals(rangeSlider.getMax())) {
-          return String.valueOf(number.intValue());
-        } else {
-          return "";
-        }
-      }
-
-      @Override
-      public Number fromString(String string) {
-        if (NumberUtils.isParsable(string)) {
-          return Double.parseDouble(string);
-        } else {
-          if (!string.equals("-") && !string.equals(".")) {
-            highValue.setText("");
-          }
-          return rangeSlider.getMax();
-        }
-      }
-    });
+    valueTransform = Function.identity();
   }
 
+  @Override
   public Optional<List<Condition>> getCondition() {
     List<Condition> conditions = new ArrayList<>();
     if (!lowValue.getText().isBlank() && rangeSlider.getLowValue() > rangeSlider.getMin()) {
@@ -113,6 +77,7 @@ public class RangeFilterController implements FilterNodeController {
     }
   }
 
+  @Override
   public void addQueryListener(InvalidationListener queryListener) {
     rangeSlider.lowValueProperty().addListener(queryListener);
     rangeSlider.highValueProperty().addListener(queryListener);
@@ -120,26 +85,32 @@ public class RangeFilterController implements FilterNodeController {
     highValue.textProperty().addListener(queryListener);
   }
 
+  @Override
   public void clear() {
     rangeSlider.setLowValue(rangeSlider.getMin());
     rangeSlider.setHighValue(rangeSlider.getMax());
   }
 
+  @Override
   public void setTitle(String title) {
     menu.textProperty().unbind();
     menu.textProperty().bind(Bindings.createStringBinding(() -> i18n.get("query.rangeFilter", title, lowValue.getText(), highValue.getText()), lowValue.textProperty(), highValue.textProperty()));
   }
 
-  public void setMin(double min) {
+  public void setRange(double min, double max, int majorTickCount, int interMajorTickCount) {
     rangeSlider.setMin(min);
     rangeSlider.setLowValue(min);
     lowValue.setText("");
-  }
 
-  public void setMax(double max) {
     rangeSlider.setMax(max);
     rangeSlider.setHighValue(max);
     highValue.setText("");
+
+    int numberOfTicks = majorTickCount + majorTickCount * interMajorTickCount;
+    double range = max - min;
+    rangeSlider.setBlockIncrement(range / numberOfTicks);
+    rangeSlider.setMajorTickUnit(range / majorTickCount);
+    rangeSlider.setMinorTickCount(interMajorTickCount);
   }
 
   public void setIncrement(double increment) {
@@ -156,6 +127,38 @@ public class RangeFilterController implements FilterNodeController {
 
   public void setValueTransform(Function<Double, ? extends Number> valueTransform) {
     this.valueTransform = valueTransform;
+  }
+
+  public void setNumberOfFractionDigits(int numberOfFractionDigits) {
+    this.numberOfFractionDigits = numberOfFractionDigits;
+  }
+
+  public void bind() {
+    numberFormat = (DecimalFormat) DecimalFormat.getInstance();
+    numberFormat.setRoundingMode(RoundingMode.HALF_UP);
+    numberFormat.setMinimumFractionDigits(0);
+    numberFormat.setMaximumFractionDigits(numberOfFractionDigits);
+    JavaFxUtil.bindTextFieldAndRangeSlider(lowValue, highValue, rangeSlider, numberFormat);
+  }
+
+  public javafx.beans.property.DoubleProperty lowValueProperty() {
+    return rangeSlider.lowValueProperty();
+  }
+
+  public javafx.beans.property.DoubleProperty highValueProperty() {
+    return rangeSlider.highValueProperty();
+  }
+
+  public void setLowValue(Double lowValue) {
+    if (lowValue != null) {
+      rangeSlider.setLowValue(lowValue);
+    }
+  }
+
+  public void setHighValue(Double highValue) {
+    if (highValue != null) {
+      rangeSlider.setHighValue(highValue);
+    }
   }
 
   @Override

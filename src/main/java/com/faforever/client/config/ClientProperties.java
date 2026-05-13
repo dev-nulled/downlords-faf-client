@@ -7,7 +7,6 @@ import com.faforever.client.update.ClientConfiguration.UrlEndpoint;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
-import java.net.URI;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -28,6 +27,7 @@ public class ClientProperties {
   private Imgur imgur = new Imgur();
   private TrueSkill trueSkill = new TrueSkill();
   private Api api = new Api();
+  private User user = new User();
   private Oauth oauth = new Oauth();
   private UnitDatabase unitDatabase = new UnitDatabase();
   private FAFDebugger fafDebugger = new FAFDebugger();
@@ -41,6 +41,7 @@ public class ClientProperties {
   private Duration clientConfigConnectTimeout = Duration.ofSeconds(30);
   private String userAgent;
   private Map<String, String> links = new HashMap<>();
+  private Map<String, String> helpLinks = new HashMap<>();
   private List<String> vanillaGameHashes = new ArrayList<>();
 
   @Data
@@ -68,6 +69,7 @@ public class ClientProperties {
   public static class Irc {
     private String host;
     private int port;
+    private boolean secure = true;
     /**
      * Channel to join by default.
      *
@@ -80,10 +82,9 @@ public class ClientProperties {
 
   @Data
   public static class Server {
-    private String host;
-    private int port;
+    private String url;
     private int retryDelaySeconds = 5;
-    private int retryAttempts = 12;
+    private int retryAttempts = 60;
   }
 
   @Data
@@ -99,7 +100,6 @@ public class ClientProperties {
 
   @Data
   public static class Replay {
-    private String remoteHost;
     private int remotePort;
     private String replayFileFormat = "%d-%s.fafreplay";
     private String replayFileGlob = "*.fafreplay";
@@ -142,31 +142,28 @@ public class ClientProperties {
   @Data
   public static class Api {
     private String baseUrl;
-    private String clientId;
-    private String clientSecret;
     private int retryBackoffSeconds = 5;
     private int retryAttempts = 5;
     private double retryJitter = .5;
     private int maxPageSize = 10000;
   }
 
+  @Data
+  public static class User {
+    private String baseUrl;
+  }
+
   public void updateFromEndpoint(ServerEndpoints serverEndpoints) {
-    SocketEndpoint lobby = serverEndpoints.getLobby();
-    if (lobby != null) {
-      server.setHost(lobby.getHost());
-      server.setPort(lobby.getPort());
+    UrlEndpoint user = serverEndpoints.getUser();
+    if (user != null) {
+      this.user.setBaseUrl(user.getUrl());
     }
 
-    SocketEndpoint liveReplay = serverEndpoints.getLiveReplay();
-    if (liveReplay != null) {
-      replay.setRemoteHost(liveReplay.getHost());
-      replay.setRemotePort(liveReplay.getPort());
-    }
-
-    SocketEndpoint irc = serverEndpoints.getIrc();
-    if (irc != null) {
-      this.irc.setHost(irc.getHost());
-      this.irc.setPort(irc.getPort());
+    SocketEndpoint chat = serverEndpoints.getChat();
+    if (chat != null) {
+      this.irc.setHost(chat.getHost());
+      this.irc.setPort(chat.getPort());
+      this.irc.setSecure(!serverEndpoints.getName().contains("Local server"));
     }
 
     UrlEndpoint api = serverEndpoints.getApi();
@@ -184,6 +181,7 @@ public class ClientProperties {
   public static class UnitDatabase {
     private String spookiesUrl;
     private String rackOversUrl;
+    private String etfreemanUrl;
   }
 
   @Data
@@ -221,8 +219,6 @@ public class ClientProperties {
   @Data
   public static class Oauth {
     private String baseUrl;
-    /** The redirect URI to use instead of the ones provided by remote preferences. */
-    private URI redirectUri = URI.create("");
     private String clientId;
     private String scopes;
   }

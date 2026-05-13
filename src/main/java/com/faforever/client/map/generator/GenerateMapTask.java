@@ -2,20 +2,20 @@ package com.faforever.client.map.generator;
 
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.notification.NotificationService;
+import com.faforever.client.os.OperatingSystem;
 import com.faforever.client.os.OsUtils;
-import com.faforever.client.preferences.PreferencesService;
+import com.faforever.client.preferences.ForgedAlliancePrefs;
 import com.faforever.client.task.CompletableTask;
-import com.google.common.eventbus.EventBus;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.maven.artifact.versioning.ComparableVersion;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
-import javax.inject.Inject;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
@@ -29,25 +29,24 @@ import java.util.regex.Matcher;
 public class GenerateMapTask extends CompletableTask<String> {
   private static final Logger generatorLogger = LoggerFactory.getLogger("faf-map-generator");
 
-  private final PreferencesService preferencesService;
   private final NotificationService notificationService;
   private final I18n i18n;
-  private final EventBus eventBus;
+  private final OperatingSystem operatingSystem;
+  private final ForgedAlliancePrefs forgedAlliancePrefs;
 
   private Path generatorExecutableFile;
   private ComparableVersion version;
   private GeneratorOptions generatorOptions;
-  private String seed;
   private String mapName;
 
-  @Inject
-  public GenerateMapTask(PreferencesService preferencesService, NotificationService notificationService, I18n i18n, EventBus eventBus) {
+  @Autowired
+  public GenerateMapTask(NotificationService notificationService, I18n i18n, OperatingSystem operatingSystem,
+                         ForgedAlliancePrefs forgedAlliancePrefs) {
     super(Priority.HIGH);
-
-    this.preferencesService = preferencesService;
+    this.forgedAlliancePrefs = forgedAlliancePrefs;
     this.notificationService = notificationService;
     this.i18n = i18n;
-    this.eventBus = eventBus;
+    this.operatingSystem = operatingSystem;
   }
 
   @Override
@@ -57,28 +56,31 @@ public class GenerateMapTask extends CompletableTask<String> {
     updateTitle(i18n.get("game.mapGeneration.generateMap.title", version));
 
     GeneratorCommand.GeneratorCommandBuilder generatorCommandBuilder = GeneratorCommand.builder()
-        .version(version)
-        .seed(seed)
-        .generatorExecutableFile(generatorExecutableFile)
-        .mapName(mapName);
+                                                                                       .version(version)
+                                                                                       .generatorExecutableFile(
+                                                                                           generatorExecutableFile)
+                                                                                       .javaExecutable(
+                                                                                           operatingSystem.getJavaExecutablePath())
+                                                                                       .mapName(mapName);
 
     if (generatorOptions != null) {
-      generatorCommandBuilder.spawnCount(generatorOptions.getSpawnCount())
-          .numTeams(generatorOptions.getNumTeams())
-          .mapSize(generatorOptions.getMapSize())
-          .generationType(generatorOptions.getGenerationType())
-          .landDensity(generatorOptions.getLandDensity())
-          .plateauDensity(generatorOptions.getPlateauDensity())
-          .mountainDensity(generatorOptions.getMountainDensity())
-          .rampDensity(generatorOptions.getRampDensity())
-          .mexDensity(generatorOptions.getMexDensity())
-          .reclaimDensity(generatorOptions.getReclaimDensity())
-          .style(generatorOptions.getStyle())
-          .biome(generatorOptions.getBiome())
-          .commandLineArgs(generatorOptions.getCommandLineArgs());
+      generatorCommandBuilder.spawnCount(generatorOptions.spawnCount())
+                             .numTeams(generatorOptions.numTeams())
+                             .mapSize(generatorOptions.mapSize())
+                             .seed(generatorOptions.seed())
+                             .generationType(generatorOptions.generationType())
+                             .symmetry(generatorOptions.symmetry())
+                             .style(generatorOptions.style())
+                             .terrainStyle(generatorOptions.terrainStyle())
+                             .textureStyle(generatorOptions.textureStyle())
+                             .resourceStyle(generatorOptions.resourceStyle())
+                             .propStyle(generatorOptions.propStyle())
+                             .resourceDensity(generatorOptions.resourceDensity())
+                             .reclaimDensity(generatorOptions.reclaimDensity())
+                             .commandLineArgs(generatorOptions.commandLineArgs());
     }
 
-    Path workingDirectory = preferencesService.getPreferences().getForgedAlliance().getMapsDirectory();
+    Path workingDirectory = forgedAlliancePrefs.getMapsDirectory();
 
     try {
       List<String> command = generatorCommandBuilder.build().getCommand();
@@ -87,8 +89,8 @@ public class GenerateMapTask extends CompletableTask<String> {
       processBuilder.directory(workingDirectory.toFile());
       processBuilder.command(command);
 
-      log.info("Starting map generator in directory: `{}` with command: `{}`",
-          processBuilder.directory(), String.join(" ", processBuilder.command()));
+      log.info("Starting map generator in directory: `{}` with command: `{}`", processBuilder.directory(),
+               String.join(" ", processBuilder.command()));
 
       Process process = processBuilder.start();
       OsUtils.gobbleLines(process.getInputStream(), msg -> {
@@ -102,12 +104,13 @@ public class GenerateMapTask extends CompletableTask<String> {
       });
       OsUtils.gobbleLines(process.getErrorStream(), generatorLogger::error);
       process.waitFor(MapGeneratorService.GENERATION_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-      if (process.isAlive() && generatorOptions.getCommandLineArgs() != null && !generatorOptions.getCommandLineArgs().contains("--visualize")) {
+      if (process.isAlive() && generatorOptions.commandLineArgs() != null && !generatorOptions.commandLineArgs()
+                                                                                              .contains(
+                                                                                                  "--visualize")) {
         log.warn("Map generation timed out, killing process");
         process.destroyForcibly();
-        notificationService.addImmediateErrorNotification(new RuntimeException("Map generation timed out"), "game.mapGeneration.failed.message");
-      } else if (!process.isAlive()) {
-        eventBus.post(new MapGeneratedEvent(mapName));
+        notificationService.addImmediateErrorNotification(new RuntimeException("Map generation timed out"),
+                                                          "game.mapGeneration.failed.message");
       }
     } catch (Exception e) {
       log.error("Could not start map generator", e);

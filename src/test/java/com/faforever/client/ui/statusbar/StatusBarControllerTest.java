@@ -4,8 +4,8 @@ import com.faforever.client.chat.ChatService;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.net.ConnectionState;
 import com.faforever.client.task.TaskService;
-import com.faforever.client.test.UITest;
-import com.faforever.client.user.UserService;
+import com.faforever.client.test.PlatformTest;
+import com.faforever.client.user.LoginService;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.collections.FXCollections;
@@ -22,13 +22,13 @@ import static org.hamcrest.core.IsNot.not;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-public class StatusBarControllerTest extends UITest {
+public class StatusBarControllerTest extends PlatformTest {
   @InjectMocks
   private StatusBarController instance;
   private ObjectProperty<ConnectionState> connectionStateProperty;
 
   @Mock
-  private UserService userService;
+  private LoginService loginService;
   @Mock
   private I18n i18n;
   @Mock
@@ -40,7 +40,7 @@ public class StatusBarControllerTest extends UITest {
   public void setUp() throws Exception {
     connectionStateProperty = new SimpleObjectProperty<>();
     when(taskService.getActiveWorkers()).thenReturn(FXCollections.emptyObservableList());
-    when(userService.connectionStateProperty()).thenReturn(connectionStateProperty);
+    when(loginService.connectionStateProperty()).thenReturn(connectionStateProperty);
     when(chatService.connectionStateProperty()).thenReturn(new SimpleObjectProperty<>());
 
     loadFxml("theme/statusbar/status_bar.fxml", param -> instance);
@@ -88,7 +88,7 @@ public class StatusBarControllerTest extends UITest {
   @Test
   public void testOnFafReconnectClicked() throws Exception {
     instance.onFafReconnectClicked();
-    verify(userService).reconnectToLobby();
+    verify(loginService).reconnectToLobby();
   }
 
   @Test

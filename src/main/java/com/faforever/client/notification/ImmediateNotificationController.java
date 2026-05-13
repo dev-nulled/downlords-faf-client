@@ -1,7 +1,7 @@
 package com.faforever.client.notification;
 
-import com.faforever.client.fx.Controller;
 import com.faforever.client.fx.JavaFxUtil;
+import com.faforever.client.fx.NodeController;
 import com.faforever.client.notification.Action.Type;
 import com.faforever.client.ui.dialog.DialogLayout;
 import com.faforever.client.update.Version;
@@ -27,7 +27,7 @@ import java.util.stream.Collectors;
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
 @RequiredArgsConstructor
-public class ImmediateNotificationController implements Controller<Node> {
+public class ImmediateNotificationController extends NodeController<Node> {
 
   private final DialogLayout dialogLayout = new DialogLayout();
   public Label notificationText;
@@ -38,7 +38,8 @@ public class ImmediateNotificationController implements Controller<Node> {
   public VBox immediateNotificationRoot;
   private Runnable closeListener;
 
-  public void initialize() {
+  @Override
+  protected void onInitialize() {
     JavaFxUtil.bindManagedToVisible(exceptionArea, notificationText, helpText, versionText);
 
     dialogLayout.setMaxWidth(650);
@@ -46,9 +47,9 @@ public class ImmediateNotificationController implements Controller<Node> {
     dialogLayout.setBody(immediateNotificationRoot);
   }
 
-  public ImmediateNotificationController setNotification(ImmediateNotification notification) {
+  public void setNotification(ImmediateNotification notification) {
     StringWriter writer = new StringWriter();
-    Throwable throwable = notification.getThrowable();
+    Throwable throwable = notification.throwable();
     if (throwable != null) {
       throwable.printStackTrace(new PrintWriter(writer));
       exceptionTextArea.setVisible(true);
@@ -61,22 +62,21 @@ public class ImmediateNotificationController implements Controller<Node> {
       versionText.setVisible(false);
     }
 
-    dialogLayout.setHeading(new Label(notification.getTitle()));
-    notificationText.setText(notification.getText());
+    dialogLayout.setHeading(new Label(notification.title()));
+    notificationText.setText(notification.text());
 
-    Optional.ofNullable(notification.getActions())
+    Optional.ofNullable(notification.actions())
         .map(actions -> actions.stream().map(this::createButton).collect(Collectors.toList()))
         .ifPresent(dialogLayout::setActions);
-    if (notification.getCustomUI() != null) {
-      immediateNotificationRoot.getChildren().add(notification.getCustomUI());
+    if (notification.customUI() != null) {
+      immediateNotificationRoot.getChildren().add(notification.customUI());
     }
-    return this;
   }
 
   private Button createButton(Action action) {
     Button button = new Button(action.getTitle());
     button.setOnAction(event -> {
-      action.call(event);
+      action.run();
       if (action.getType() == Action.Type.OK_DONE) {
         dismiss();
       }
@@ -94,13 +94,13 @@ public class ImmediateNotificationController implements Controller<Node> {
     closeListener.run();
   }
 
+  @Override
   public Region getRoot() {
     return immediateNotificationRoot;
   }
 
-  public ImmediateNotificationController setCloseListener(Runnable closeListener) {
+  public void setCloseListener(Runnable closeListener) {
     this.closeListener = closeListener;
-    return this;
   }
 
   public DialogLayout getDialogLayout() {

@@ -1,16 +1,14 @@
 package com.faforever.client.notification;
 
-import com.faforever.client.builders.PreferencesBuilder;
-import com.faforever.client.notification.Action.ActionCallback;
-import com.faforever.client.preferences.PreferencesService;
-import com.faforever.client.test.UITest;
+import com.faforever.client.preferences.NotificationPrefs;
+import com.faforever.client.test.PlatformTest;
 import javafx.scene.image.Image;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
-import org.mockito.Mock;
+import org.mockito.Spy;
 
 import static com.faforever.client.fx.MouseEvents.generateClick;
 import static org.hamcrest.CoreMatchers.is;
@@ -22,18 +20,16 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-public class TransientNotificationControllerTest extends UITest {
+public class TransientNotificationControllerTest extends PlatformTest {
 
-  @Mock
-  private PreferencesService preferencesService;
+  @Spy
+  private NotificationPrefs notificationPrefs;
 
   @InjectMocks
   private TransientNotificationController instance;
 
   @BeforeEach
   public void setUp() throws Exception {
-    when(preferencesService.getPreferences()).thenReturn(PreferencesBuilder.create().defaultValues().get());
-
     loadFxml("theme/transient_notification.fxml", clazz -> instance);
   }
 
@@ -60,14 +56,15 @@ public class TransientNotificationControllerTest extends UITest {
     assertEquals("timeline has not been set", assertThrows(Exception.class, () -> instance.onClicked(generateClick(MouseButton.SECONDARY, 1))).getMessage());
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testOnLeftClick() throws Exception {
     TransientNotification notificationMock = mock(TransientNotification.class);
-    ActionCallback actionMock = mock(ActionCallback.class);
-    when(notificationMock.getActionCallback()).thenReturn(actionMock);
+    Runnable actionMock = mock(Runnable.class);
+    when(notificationMock.onAction()).thenReturn(actionMock);
     instance.setNotification(notificationMock);
     MouseEvent mouseEvent = generateClick(MouseButton.PRIMARY, 1);
     instance.onClicked(mouseEvent);
-    verify(actionMock).call(mouseEvent);
+    verify(actionMock).run();
   }
 }

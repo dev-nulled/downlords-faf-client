@@ -1,21 +1,33 @@
 package com.faforever.client.chat;
 
+import com.faforever.client.chat.emoticons.Emoticon;
 import com.faforever.client.net.ConnectionState;
-import javafx.beans.property.ReadOnlyIntegerProperty;
 import javafx.beans.property.ReadOnlyObjectProperty;
 import javafx.collections.MapChangeListener;
 
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.regex.Pattern;
 
 public interface ChatService {
 
   String PARTY_CHANNEL_SUFFIX = "'sParty";
 
+  void setActiveTypingState(ChatChannel channel);
+
+  void setDoneTypingState(ChatChannel channel);
+
   void connect();
 
   void disconnect();
 
-  CompletableFuture<String> sendMessageInBackground(String target, String message);
+  CompletableFuture<Void> redactMessageInBackground(ChatChannel chatChannel, String messageId);
+
+  CompletableFuture<Void> reactToMessageInBackground(ChatMessage targetMessage, Emoticon reaction);
+
+  CompletableFuture<Void> sendReplyInBackground(ChatMessage targetMessage, String message);
+
+  CompletableFuture<Void> sendMessageInBackground(ChatChannel chatChannel, String message);
 
   boolean userExistsInAnyChannel(String username);
 
@@ -23,25 +35,19 @@ public interface ChatService {
 
   ChatChannelUser getOrCreateChatUser(String username, String channel);
 
-  ChatChannelUser getOrCreateChatUser(String username, String channel, boolean isModerator);
-
-  void addUsersListener(String channelName, MapChangeListener<String, ChatChannelUser> listener);
-
-  void addChatUsersByNameListener(MapChangeListener<String, ChatChannelUser> listener);
-
   void addChannelsListener(MapChangeListener<String, ChatChannel> listener);
 
-  void removeUsersListener(String channelName, MapChangeListener<String, ChatChannelUser> listener);
+  void removeChannelsListener(MapChangeListener<String, ChatChannel> listener);
 
-  void leaveChannel(String channelName);
+  default void leaveChannel(String channelName) {
+    leaveChannel(getOrCreateChannel(channelName));
+  }
 
-  CompletableFuture<String> sendActionInBackground(String target, String action);
+  void leaveChannel(ChatChannel channel);
 
   void joinChannel(String channelName);
 
-  boolean isDefaultChannel(String channelName);
-
-  void close();
+  boolean isDefaultChannel(ChatChannel chatChannel);
 
   ReadOnlyObjectProperty<ConnectionState> connectionStateProperty();
 
@@ -49,18 +55,13 @@ public interface ChatService {
 
   void reconnect();
 
-  void whois(String username);
+  void setChannelTopic(ChatChannel chatChannel, String text);
 
-  void setChannelTopic(String channelName, String text);
+  void joinPrivateChat(String username);
 
-  /**
-   * Increase or decrease the number of unread messages.
-   *
-   * @param delta a positive or negative number
-   */
-  void incrementUnreadMessagesCount(int delta);
+  Set<ChatChannel> getChannels();
 
-  ReadOnlyIntegerProperty unreadMessagesCount();
+  String getCurrentUsername();
 
-  String getDefaultChannelName();
+  Pattern getMentionPattern();
 }

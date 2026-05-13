@@ -1,178 +1,146 @@
 package com.faforever.client.player;
 
 import com.faforever.client.achievements.AchievementService;
-import com.faforever.client.chat.ChatChannelUser;
-import com.faforever.client.domain.GameBean;
-import com.faforever.client.domain.LeaderboardRatingBean;
-import com.faforever.client.domain.PlayerBean;
-import com.faforever.client.fx.Controller;
+import com.faforever.client.domain.api.Leaderboard;
+import com.faforever.client.domain.server.GameInfo;
+import com.faforever.client.domain.server.PlayerInfo;
+import com.faforever.client.fx.FxApplicationThreadExecutor;
 import com.faforever.client.fx.JavaFxUtil;
+import com.faforever.client.fx.NodeController;
 import com.faforever.client.game.GameDetailController;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.leaderboard.LeaderboardService;
-import com.faforever.client.util.Assert;
 import com.faforever.client.util.IdenticonUtil;
 import com.faforever.client.util.RatingUtil;
 import com.faforever.commons.api.dto.AchievementState;
-import javafx.beans.InvalidationListener;
-import javafx.beans.WeakInvalidationListener;
+import com.faforever.commons.api.dto.PlayerAchievement;
+import com.faforever.commons.lobby.GameStatus;
+import javafx.beans.property.ObjectProperty;
+import javafx.beans.property.SimpleObjectProperty;
+import javafx.beans.value.ObservableValue;
 import javafx.scene.Node;
 import javafx.scene.control.Label;
+import javafx.scene.control.Separator;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.Pane;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.jetbrains.annotations.NotNull;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.function.TupleUtils;
+
+import java.util.stream.Collectors;
 
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
 @Slf4j
 @RequiredArgsConstructor
-public class PrivatePlayerInfoController implements Controller<Node> {
+public class PrivatePlayerInfoController extends NodeController<Node> {
 
   private final I18n i18n;
   private final AchievementService achievementService;
   private final LeaderboardService leaderboardService;
+  private final FxApplicationThreadExecutor fxApplicationThreadExecutor;
 
   public ImageView userImageView;
-  public Label usernameLabel;
+  public Label username;
   public ImageView countryImageView;
-  public Label countryLabel;
+  public Label country;
   public Label ratingsLabels;
   public Label ratingsValues;
-  public Label gamesPlayedLabel;
+  public Label gamesPlayed;
   public GameDetailController gameDetailController;
   public Pane gameDetailWrapper;
-  public Label unlockedAchievementsLabel;
+  public Label unlockedAchievements;
   public Node privateUserInfoRoot;
-  public Label gamesPlayedLabelLabel;
-  public Label unlockedAchievementsLabelLabel;
+  public Label gamesPlayedLabel;
+  public Label unlockedAchievementsLabel;
+  public Separator separator;
 
-  private ChatChannelUser chatUser;
-  private InvalidationListener gameInvalidationListener;
-  private InvalidationListener chatUserPropertiesInvalidationListener;
-  private InvalidationListener ratingInvalidationListener;
+  private final ObjectProperty<PlayerInfo> player = new SimpleObjectProperty<>();
 
   @Override
   public Node getRoot() {
     return privateUserInfoRoot;
   }
 
-  public void initialize() {
-    JavaFxUtil.bindManagedToVisible(
-        gameDetailWrapper,
-        countryLabel,
-        gamesPlayedLabel,
-        unlockedAchievementsLabel,
-        ratingsLabels,
-        ratingsValues,
-        gamesPlayedLabelLabel,
-        unlockedAchievementsLabelLabel
-    );
-  }
+  @Override
+  protected void onInitialize() {
+    JavaFxUtil.bindManagedToVisible(gameDetailWrapper, country, gamesPlayed, unlockedAchievements, ratingsLabels,
+                                    ratingsValues, gamesPlayedLabel, unlockedAchievementsLabel, separator);
+    JavaFxUtil.bind(separator.visibleProperty(), gameDetailWrapper.visibleProperty());
+    gameDetailController.setPlaytimeVisible(true);
+    gameDetailWrapper.setVisible(false);
 
-  private void initializePlayerListeners() {
-    ratingInvalidationListener = observable -> chatUser.getPlayer().ifPresent(this::loadReceiverRatingInformation);
-    gameInvalidationListener = observable -> chatUser.getPlayer().ifPresent(chatPlayer -> onPlayerGameChanged(chatPlayer.getGame()));
-  }
+    ObservableValue<Boolean> playerExistsProperty = player.isNotNull().when(showing);
+    userImageView.visibleProperty().bind(playerExistsProperty);
+    country.visibleProperty().bind(playerExistsProperty);
+    ratingsLabels.visibleProperty().bind(playerExistsProperty);
+    ratingsValues.visibleProperty().bind(playerExistsProperty);
+    gamesPlayed.visibleProperty().bind(playerExistsProperty);
+    gamesPlayedLabel.visibleProperty().bind(playerExistsProperty);
+    unlockedAchievements.visibleProperty().bind(playerExistsProperty);
+    unlockedAchievementsLabel.visibleProperty().bind(playerExistsProperty);
 
-  private void initializeChatUserListeners() {
-    chatUserPropertiesInvalidationListener = observable -> JavaFxUtil.runLater(() -> {
-      usernameLabel.setText(this.chatUser.getUsername());
-      countryImageView.setImage(this.chatUser.getCountryFlag().orElse(null));
-      countryLabel.setText(this.chatUser.getCountryName().orElse(""));
-    });
-  }
+    gamesPlayed.textProperty()
+               .bind(player.flatMap(PlayerInfo::numberOfGamesProperty).map(i18n::number).when(showing));
 
-  public void setChatUser(@NotNull ChatChannelUser chatUser) {
-    Assert.checkNotNullIllegalState(this.chatUser, "Chat user is already set");
-    initializeChatUserListeners();
-    this.chatUser = chatUser;
-    this.chatUser.setDisplayed(true);
-    JavaFxUtil.addAndTriggerListener(this.chatUser.playerProperty(), (observable) -> displayPlayerInfo());
-    JavaFxUtil.addAndTriggerListener(this.chatUser.usernameProperty(), new WeakInvalidationListener(chatUserPropertiesInvalidationListener));
-    JavaFxUtil.addListener(this.chatUser.countryFlagProperty(), new WeakInvalidationListener(chatUserPropertiesInvalidationListener));
-    JavaFxUtil.addListener(this.chatUser.countryNameProperty(), new WeakInvalidationListener(chatUserPropertiesInvalidationListener));
-  }
-
-  private void displayChatUserInfo() {
-    onPlayerGameChanged(null);
-    setPlayerInfoVisible(false);
-  }
-
-  private void setPlayerInfoVisible(boolean visible) {
-    userImageView.setVisible(visible);
-    countryLabel.setVisible(visible);
-    ratingsLabels.setVisible(visible);
-    ratingsValues.setVisible(visible);
-    gamesPlayedLabel.setVisible(visible);
-    gamesPlayedLabelLabel.setVisible(visible);
-    unlockedAchievementsLabel.setVisible(visible);
-    unlockedAchievementsLabelLabel.setVisible(visible);
-  }
-
-  private void displayPlayerInfo() {
-    initializePlayerListeners();
-    chatUser.getPlayer().ifPresentOrElse(player -> {
-      setPlayerInfoVisible(true);
-
-      userImageView.setImage(IdenticonUtil.createIdenticon(player.getId()));
-      userImageView.setVisible(true);
-
-      JavaFxUtil.addAndTriggerListener(player.getLeaderboardRatings(), new WeakInvalidationListener(ratingInvalidationListener));
-      JavaFxUtil.addAndTriggerListener(player.gameProperty(), new WeakInvalidationListener(gameInvalidationListener));
-
-      populateUnlockedAchievementsLabel(player);
-    }, this::displayChatUserInfo);
-  }
-
-  private void populateUnlockedAchievementsLabel(PlayerBean player) {
-    achievementService.getAchievementDefinitions()
-        .thenApply(achievementDefinitions -> {
-          int totalAchievements = achievementDefinitions.size();
-          return achievementService.getPlayerAchievements(player.getId())
-              .thenAccept(playerAchievements -> {
-                long unlockedAchievements = playerAchievements.stream()
-                    .filter(playerAchievement -> playerAchievement.getState() == AchievementState.UNLOCKED)
-                    .count();
-
-                JavaFxUtil.runLater(() -> unlockedAchievementsLabel.setText(
-                    i18n.get("chat.privateMessage.achievements.unlockedFormat", unlockedAchievements, totalAchievements))
-                );
-              })
-              .exceptionally(throwable -> {
-                log.error("Could not load achievements for player '" + player.getId(), throwable);
-                return null;
-              });
-        });
-  }
-
-  private void onPlayerGameChanged(GameBean newGame) {
-    gameDetailController.setGame(newGame);
-    gameDetailWrapper.setVisible(newGame != null);
-  }
-
-  private void loadReceiverRatingInformation(PlayerBean player) {
-    leaderboardService.getLeaderboards().thenAccept(leaderboards -> {
-      StringBuilder ratingNames = new StringBuilder();
-      StringBuilder ratingNumbers = new StringBuilder();
-      leaderboards.forEach(leaderboard -> {
-        LeaderboardRatingBean leaderboardRating = player.getLeaderboardRatings().get(leaderboard.getTechnicalName());
-        if (leaderboardRating != null) {
-          String leaderboardName = i18n.getOrDefault(leaderboard.getTechnicalName(), leaderboard.getNameKey());
-          ratingNames.append(i18n.get("leaderboard.rating", leaderboardName)).append("\n\n");
-          ratingNumbers.append(i18n.number(RatingUtil.getLeaderboardRating(player, leaderboard))).append("\n\n");
+    username.textProperty().bind(player.map(PlayerInfo::getUsername).when(showing));
+    country.textProperty()
+           .bind(player.flatMap(PlayerInfo::countryProperty).map(i18n::getCountryNameLocalized).when(showing));
+    userImageView.imageProperty()
+                 .bind(player.map(PlayerInfo::getId).map(IdenticonUtil::createIdenticon).when(showing));
+    ObservableValue<GameInfo> gameObservable = player.flatMap(PlayerInfo::gameProperty);
+    gameDetailController.gameProperty().bind(gameObservable.when(showing));
+    gameDetailWrapper.visibleProperty().bind(gameObservable.flatMap(GameInfo::statusProperty)
+                                         .map(status -> status == GameStatus.OPEN || status == GameStatus.PLAYING)
+                                         .orElse(false)
+                                         .when(showing));
+    player.when(showing).subscribe((playerInfo) -> {
+        if (playerInfo != null) {
+          loadReceiverRatingInformation(playerInfo);
+          populateUnlockedAchievementsLabel(playerInfo);
         }
-      });
-      JavaFxUtil.runLater(() -> {
-        ratingsLabels.setText(ratingNames.toString());
-        ratingsValues.setText(ratingNumbers.toString());
-        gamesPlayedLabel.setText(i18n.number(player.getNumberOfGames()));
-      });
     });
+  }
+
+  public ObjectProperty<PlayerInfo> playerProperty() {
+    return player;
+  }
+
+  private void populateUnlockedAchievementsLabel(PlayerInfo player) {
+    Mono<Long> totalAchievementsMono = achievementService.getAchievementDefinitions().count();
+    Mono<Long> numAchievementsUnlockedMono = achievementService.getPlayerAchievements(player.getId())
+                                                               .map(PlayerAchievement::getState)
+                                                               .filter(AchievementState.UNLOCKED::equals)
+                                                               .count();
+    Mono.zip(totalAchievementsMono, numAchievementsUnlockedMono)
+        .publishOn(fxApplicationThreadExecutor.asScheduler())
+        .subscribe(TupleUtils.consumer((totalAchievements, numUnlockedAchievements) -> unlockedAchievements.setText(
+                       i18n.get("chat.privateMessage.achievements.unlockedFormat", numUnlockedAchievements, totalAchievements))),
+                   throwable -> log.error("Could not load achievements for player '" + player.getId(), throwable));
+  }
+
+  private void loadReceiverRatingInformation(PlayerInfo player) {
+    Flux<Leaderboard> leaderboardFlux = leaderboardService.getLeaderboards()
+                                                          .filter(leaderboard -> player.getLeaderboardRatings()
+                                                                                           .containsKey(
+                                                                                               leaderboard.technicalName()))
+                                                          .cache();
+
+    leaderboardFlux.map(leaderboard -> i18n.getOrDefault(leaderboard.technicalName(), leaderboard.nameKey()))
+                   .collect(Collectors.joining("\n\n"))
+                   .publishOn(fxApplicationThreadExecutor.asScheduler())
+                   .subscribe(ratingsLabels::setText);
+
+    leaderboardFlux.map(leaderboard -> RatingUtil.getLeaderboardRating(player, leaderboard))
+                   .map(i18n::number)
+                   .collect(Collectors.joining("\n\n"))
+                   .publishOn(fxApplicationThreadExecutor.asScheduler())
+                   .subscribe(ratingsValues::setText);
   }
 }
 

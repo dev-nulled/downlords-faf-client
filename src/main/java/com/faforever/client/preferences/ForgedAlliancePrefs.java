@@ -1,48 +1,29 @@
 package com.faforever.client.preferences;
 
-import com.sun.jna.platform.win32.Shell32Util;
-import com.sun.jna.platform.win32.ShlObj;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
-import lombok.AccessLevel;
-import lombok.experimental.FieldDefaults;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableSet;
 
 import java.nio.file.Path;
 
-@FieldDefaults(makeFinal=true, level= AccessLevel.PRIVATE)
+
 public class ForgedAlliancePrefs {
 
   public static final String INIT_FILE_NAME = "init.lua";
   private static final String MAPS_SUB_FOLDER = "maps";
   private static final String MODS_SUB_FOLDER = "mods";
-  private static final Path LOCAL_FA_DATA_PATH;
-  private static final Path DEFAULT_VAULT_DIRECTORY;
-  private static final Path STEAM_FA_PATH;
 
-  static {
-    if (org.bridj.Platform.isWindows()) {
-      DEFAULT_VAULT_DIRECTORY = Path.of(Shell32Util.getFolderPath(ShlObj.CSIDL_PERSONAL), "My Games", "Gas Powered Games", "Supreme Commander Forged Alliance");
-      //If steam is every swapped to a 64x client, needs to be updated to proper directory or handling must be put in place.
-      STEAM_FA_PATH = Path.of(Shell32Util.getFolderPath(ShlObj.CSIDL_PROGRAM_FILESX86), "Steam", "steamapps", "common", "Supreme Commander Forged Alliance");
-      LOCAL_FA_DATA_PATH = Path.of(Shell32Util.getFolderPath(ShlObj.CSIDL_LOCAL_APPDATA), "Gas Powered Games", "Supreme Commander Forged Alliance");
-    } else {
-      String userHome = System.getProperty("user.home");
-      DEFAULT_VAULT_DIRECTORY = Path.of(userHome, "My Games", "Gas Powered Games", "Supreme Commander Forged Alliance");
-      STEAM_FA_PATH = Path.of(".");
-      LOCAL_FA_DATA_PATH = Path.of(userHome, ".wine", "drive_c", "users", System.getProperty("user.name"), "Application Data", "Gas Powered Games", "Supreme Commander Forged Alliance");
-    }
-  }
-
-  ObjectProperty<Path> installationPath = new SimpleObjectProperty<>(STEAM_FA_PATH);
-  ObjectProperty<Path> preferencesFile = new SimpleObjectProperty<>(LOCAL_FA_DATA_PATH.resolve("Game.prefs"));
-  ObjectProperty<Path> vaultBaseDirectory = new SimpleObjectProperty<>(DEFAULT_VAULT_DIRECTORY);
-  BooleanProperty forceRelay = new SimpleBooleanProperty(false);
-  BooleanProperty autoDownloadMaps = new SimpleBooleanProperty(true);
-  BooleanProperty allowReplaysWhileInGame = new SimpleBooleanProperty(false);
+  private final ObjectProperty<Path> installationPath = new SimpleObjectProperty<>();
+  private final ObjectProperty<Path> preferencesFile = new SimpleObjectProperty<>();
+  private final ObjectProperty<Path> vaultBaseDirectory = new SimpleObjectProperty<>();
+  private final BooleanProperty warnNonAsciiVaultPath = new SimpleBooleanProperty(true);
+  private final BooleanProperty autoDownloadMaps = new SimpleBooleanProperty(true);
+  private final BooleanProperty allowIpv6 = new SimpleBooleanProperty(false);
 
   /**
    * String format to use when building the launch command. Takes exact one parameter; the executable path. <p>
@@ -52,10 +33,16 @@ public class ForgedAlliancePrefs {
    * <pre>wine "C:\Game\ForgedAlliance.exe"</pre>
    * </p>
    */
-  StringProperty executableDecorator = new SimpleStringProperty();
-  ObjectProperty<Path> executionDirectory = new SimpleObjectProperty<>();
-  BooleanProperty runFAWithDebugger = new SimpleBooleanProperty(false);
-  BooleanProperty showIceAdapterDebugWindow = new SimpleBooleanProperty(false);
+  private final StringProperty executableDecorator = new SimpleStringProperty();
+  private final ObjectProperty<Path> executionDirectory = new SimpleObjectProperty<>();
+  private final BooleanProperty runFAWithDebugger = new SimpleBooleanProperty(false);
+  private final BooleanProperty showIceAdapterDebugWindow = new SimpleBooleanProperty(false);
+  private final BooleanProperty relativeGamePaths = new SimpleBooleanProperty(false);
+  private final ObservableSet<String> preferredCoturnIds = FXCollections.observableSet();
+  /**
+   * Force CPU Affinity when launching the FA game process
+   */
+  private final BooleanProperty forceAffinity = new SimpleBooleanProperty(true);
 
   public Path getPreferencesFile() {
     return preferencesFile.get();
@@ -67,18 +54,6 @@ public class ForgedAlliancePrefs {
 
   public ObjectProperty<Path> preferencesFileProperty() {
     return preferencesFile;
-  }
-
-  public boolean isForceRelay() {
-    return forceRelay.get();
-  }
-
-  public void setForceRelay(boolean forceRelay) {
-    this.forceRelay.set(forceRelay);
-  }
-
-  public BooleanProperty forceRelayProperty() {
-    return forceRelay;
   }
 
   public boolean isAutoDownloadMaps() {
@@ -125,6 +100,18 @@ public class ForgedAlliancePrefs {
     this.installationPath.set(installationPath);
   }
 
+  public void setRelativeGamePaths(boolean relativeGamePaths) {
+    this.relativeGamePaths.set(relativeGamePaths);
+  }
+
+  public boolean isRelativeGamePaths() {
+    return relativeGamePaths.get();
+  }
+
+  public BooleanProperty relativeGamePathsProperty() {
+    return relativeGamePaths;
+  }
+
   public ObjectProperty<Path> installationPathProperty() {
     return installationPath;
   }
@@ -141,16 +128,16 @@ public class ForgedAlliancePrefs {
     return vaultBaseDirectory;
   }
 
-  public boolean isAllowReplaysWhileInGame() {
-    return allowReplaysWhileInGame.get();
+  public boolean isAllowIpv6() {
+    return allowIpv6.get();
   }
 
-  public void setAllowReplaysWhileInGame(boolean allowReplaysWhileInGame) {
-    this.allowReplaysWhileInGame.set(allowReplaysWhileInGame);
+  public BooleanProperty allowIpv6Property() {
+    return allowIpv6;
   }
 
-  public BooleanProperty allowReplaysWhileInGameProperty() {
-    return allowReplaysWhileInGame;
+  public void setAllowIpv6(boolean allowIpv6) {
+    this.allowIpv6.set(allowIpv6);
   }
 
   public Path getModsDirectory() {
@@ -183,5 +170,33 @@ public class ForgedAlliancePrefs {
 
   public BooleanProperty showIceAdapterDebugWindow() {
     return showIceAdapterDebugWindow;
+  }
+
+  public ObservableSet<String> getPreferredCoturnIds() {
+    return preferredCoturnIds;
+  }
+
+  public boolean getWarnNonAsciiVaultPath() {
+    return warnNonAsciiVaultPath.get();
+  }
+
+  public void setWarnNonAsciiVaultPath(boolean warnNonAsciiVaultPath) {
+    this.warnNonAsciiVaultPath.set(warnNonAsciiVaultPath);
+  }
+
+  public BooleanProperty warnNonAsciiVaultPathProperty() {
+    return warnNonAsciiVaultPath;
+  }
+
+  public boolean isForceAffinity() {
+    return forceAffinity.get();
+  }
+
+  public BooleanProperty forceAffinityProperty() {
+    return forceAffinity;
+  }
+
+  public void setForceAffinity(boolean forceAffinity) {
+    this.forceAffinity.set(forceAffinity);
   }
 }

@@ -1,13 +1,15 @@
 package com.faforever.client.query;
 
 import com.faforever.client.i18n.I18n;
-import com.faforever.client.test.UITest;
+import com.faforever.client.test.PlatformTest;
 import com.faforever.client.util.TimeService;
 import com.github.rutledgepaulv.qbuilders.builders.QBuilder;
 import com.github.rutledgepaulv.qbuilders.conditions.Condition;
 import com.github.rutledgepaulv.qbuilders.properties.concrete.InstantProperty;
 import com.github.rutledgepaulv.qbuilders.visitors.RSQLVisitor;
 import javafx.beans.InvalidationListener;
+import javafx.beans.property.ObjectProperty;
+import javafx.beans.property.SimpleObjectProperty;
 import javafx.scene.control.MenuButton;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -16,7 +18,6 @@ import org.mockito.Mock;
 
 import java.time.LocalDate;
 import java.time.ZoneOffset;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 
@@ -29,7 +30,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-public class DateRangeFilterControllerTest extends UITest {
+public class DateRangeFilterControllerTest extends PlatformTest {
 
   private final String propertyName = "testProp";
   private final LocalDate before = LocalDate.now();
@@ -91,7 +92,7 @@ public class DateRangeFilterControllerTest extends UITest {
     instance.clear();
 
     assertNull(instance.beforeDate.getValue());
-    assertEquals(LocalDate.now().minus(1, ChronoUnit.YEARS), instance.afterDate.getValue());
+    assertEquals(LocalDate.now().minusYears(1), instance.afterDate.getValue());
   }
 
   @Test
@@ -116,7 +117,7 @@ public class DateRangeFilterControllerTest extends UITest {
     Optional<List<Condition>> result = instance.getCondition();
 
     assertTrue(result.isPresent());
-    assertEquals(result.get().get(0).query(new RSQLVisitor()),
+    assertEquals(result.get().getFirst().query(new RSQLVisitor()),
         property.after(after.atStartOfDay().toInstant(ZoneOffset.UTC), false).query(new RSQLVisitor()));
     assertTrue(instance.menu.getStyleClass().contains("query-filter-selected"));
   }
@@ -129,7 +130,7 @@ public class DateRangeFilterControllerTest extends UITest {
     Optional<List<Condition>> result = instance.getCondition();
 
     assertTrue(result.isPresent());
-    assertEquals(result.get().get(0).query(new RSQLVisitor()),
+    assertEquals(result.get().getFirst().query(new RSQLVisitor()),
         property.before(before.atStartOfDay().toInstant(ZoneOffset.UTC), false).query(new RSQLVisitor()));
     assertTrue(instance.menu.getStyleClass().contains("query-filter-selected"));
   }
@@ -145,9 +146,22 @@ public class DateRangeFilterControllerTest extends UITest {
     assertEquals(result.get().get(1).query(new RSQLVisitor()),
         new QBuilder<>().instant(propertyName).before(before.atStartOfDay().toInstant(ZoneOffset.UTC), false)
             .query(new RSQLVisitor()));
-    assertEquals(result.get().get(0).query(new RSQLVisitor()),
+    assertEquals(result.get().getFirst().query(new RSQLVisitor()),
         new QBuilder<>().instant(propertyName).after(after.atStartOfDay().toInstant(ZoneOffset.UTC), false)
             .query(new RSQLVisitor()));
     assertTrue(instance.menu.getStyleClass().contains("query-filter-selected"));
+  }
+
+  @Test
+  public void testPersistentPropertiesGetsDates() {
+    ObjectProperty<LocalDate> persistentBeforeDate = new SimpleObjectProperty<LocalDate>();
+    ObjectProperty<LocalDate> persistentAfterDate = new SimpleObjectProperty<LocalDate>();
+    persistentBeforeDate.bind(instance.beforeDateProperty());
+    persistentAfterDate.bind(instance.afterDateProperty());
+    instance.setAfterDate(after);
+    instance.setBeforeDate(before);
+
+    assertEquals(persistentBeforeDate.get(), before);
+    assertEquals(persistentAfterDate.get(), after);
   }
 }

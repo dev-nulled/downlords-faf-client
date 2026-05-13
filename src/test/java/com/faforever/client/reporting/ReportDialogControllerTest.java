@@ -1,41 +1,41 @@
 package com.faforever.client.reporting;
 
-import com.faforever.client.builders.ModerationReportBeanBuilder;
-import com.faforever.client.builders.PlayerBeanBuilder;
-import com.faforever.client.builders.ReplayBeanBuilder;
-import com.faforever.client.domain.ModerationReportBean;
-import com.faforever.client.domain.PlayerBean;
-import com.faforever.client.domain.ReplayBean;
+import com.faforever.client.builders.PlayerInfoBuilder;
+import com.faforever.client.domain.api.ModerationReport;
+import com.faforever.client.domain.api.Replay;
+import com.faforever.client.domain.server.PlayerInfo;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.notification.NotificationService;
 import com.faforever.client.player.PlayerService;
 import com.faforever.client.replay.ReplayService;
-import com.faforever.client.test.UITest;
-import com.faforever.client.theme.UiService;
+import com.faforever.client.test.PlatformTest;
 import com.faforever.client.util.TimeService;
 import javafx.collections.FXCollections;
+import org.instancio.Instancio;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.testfx.util.WaitForAsyncUtils;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
 
+import static org.instancio.Select.field;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-public class ReportDialogControllerTest extends UITest {
+public class ReportDialogControllerTest extends PlatformTest {
   @InjectMocks
   private ReportDialogController instance;
 
@@ -43,8 +43,6 @@ public class ReportDialogControllerTest extends UITest {
   private ModerationService moderationService;
   @Mock
   private I18n i18n;
-  @Mock
-  private UiService uiService;
   @Mock
   private TimeService timeService;
   @Mock
@@ -54,28 +52,29 @@ public class ReportDialogControllerTest extends UITest {
   @Mock
   private ReplayService replayService;
 
-  private PlayerBean player;
-  private ReplayBean replay;
+  private PlayerInfo player;
+  private Replay replay;
 
   @BeforeEach
   public void setUp() throws Exception {
-    player = PlayerBeanBuilder.create().defaultValues().username("junit").get();
-    replay = ReplayBeanBuilder.create().defaultValues()
-        .teams(FXCollections.observableMap(new HashMap<>(Map.of("1", List.of(player.getUsername())))))
-        .get();
+    player = PlayerInfoBuilder.create().defaultValues().username("junit").get();
+    replay = Instancio.of(Replay.class).set(field(Replay::teams),
+                           FXCollections.observableMap(new HashMap<>(Map.of("1", List.of(player.getUsername())))))
+                      .create();
 
-    when(i18n.get("report.noReports")).thenReturn("noReports");
+    lenient().when(i18n.get("report.noReports")).thenReturn("noReports");
 
-    when(playerService.getCurrentPlayer()).thenReturn(player);
-    when(playerService.getPlayerByName(player.getUsername())).thenReturn(CompletableFuture.completedFuture(Optional.of(player)));
-    when(replayService.findById(replay.getId())).thenReturn(CompletableFuture.completedFuture(Optional.of(replay)));
-    when(moderationService.getModerationReports()).thenReturn(CompletableFuture.completedFuture(List.of()));
-    when(moderationService.postModerationReport(any())).thenReturn(CompletableFuture.completedFuture(ModerationReportBeanBuilder.create().defaultValues().get()));
+    lenient().when(playerService.getCurrentPlayer()).thenReturn(player);
+    lenient().when(playerService.getPlayerByName(player.getUsername())).thenReturn(Mono.just(player));
+    lenient().when(replayService.findById(replay.id())).thenReturn(Mono.just(replay));
+    lenient().when(moderationService.getModerationReports()).thenReturn(Flux.just());
+    lenient().when(moderationService.postModerationReport(any()))
+             .thenReturn(Mono.just(Instancio.create(ModerationReport.class)));
 
     loadFxml("theme/reporting/report_dialog.fxml", clazz -> instance);
 
     instance.offender.setText(player.getUsername());
-    instance.gameId.setText(String.valueOf(replay.getId()));
+    instance.gameId.setText(String.valueOf(replay.id()));
     instance.gameTime.setText("now");
     instance.reportDescription.setText("Testing");
   }
@@ -86,7 +85,7 @@ public class ReportDialogControllerTest extends UITest {
 
     runOnFxThreadAndWait(() -> instance.onReportButtonClicked());
 
-    verify(moderationService).postModerationReport(any(ModerationReportBean.class));
+    verify(moderationService).postModerationReport(any(ModerationReport.class));
     verify(notificationService).addImmediateInfoNotification("report.success");
     assertEquals("submit", instance.reportButton.getText());
     assertFalse(instance.reportDialogRoot.isDisabled());
@@ -115,11 +114,11 @@ public class ReportDialogControllerTest extends UITest {
 
   @Test
   public void testOnReportGameIdHasHashTag() {
-    instance.gameId.setText("#" + replay.getId());
+    instance.gameId.setText("#" + replay.id());
 
     instance.onReportButtonClicked();
 
-    verify(moderationService).postModerationReport(any(ModerationReportBean.class));
+    verify(moderationService).postModerationReport(any(ModerationReport.class));
     assertTrue(instance.offender.getText().isBlank());
     assertTrue(instance.reportDescription.getText().isBlank());
     assertTrue(instance.gameTime.getText().isBlank());
@@ -128,7 +127,7 @@ public class ReportDialogControllerTest extends UITest {
 
   @Test
   public void testOnReportNoPlayer() {
-    when(playerService.getPlayerByName(player.getUsername())).thenReturn(CompletableFuture.completedFuture(Optional.empty()));
+    when(playerService.getPlayerByName(player.getUsername())).thenReturn(Mono.empty());
 
     instance.onReportButtonClicked();
 
@@ -137,11 +136,11 @@ public class ReportDialogControllerTest extends UITest {
 
   @Test
   public void testOnReportNoGame() {
-    when(replayService.findById(replay.getId())).thenReturn(CompletableFuture.completedFuture(Optional.empty()));
+    when(replayService.findById(replay.id())).thenReturn(Mono.empty());
 
     instance.onReportButtonClicked();
 
-    verify(notificationService).addImmediateWarnNotification("report.warning.title");
+    verify(notificationService).addImmediateWarnNotification("report.warning.noGame");
   }
 
   @Test
@@ -155,7 +154,9 @@ public class ReportDialogControllerTest extends UITest {
 
   @Test
   public void testOnReportOffenderNotInGame() {
-    replay.getTeams().clear();
+    Replay replay = Instancio.of(Replay.class).ignore(field(Replay::teams)).create();
+    lenient().when(replayService.findById(replay.id())).thenReturn(Mono.just(replay));
+    instance.gameId.setText(String.valueOf(replay.id()));
 
     instance.onReportButtonClicked();
 
@@ -210,6 +211,6 @@ public class ReportDialogControllerTest extends UITest {
   @Test
   public void testSetGame() {
     instance.setReplay(replay);
-    assertEquals(String.valueOf(replay.getId()), instance.gameId.getText());
+    assertEquals(String.valueOf(replay.id()), instance.gameId.getText());
   }
 }

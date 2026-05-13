@@ -1,9 +1,6 @@
 package com.faforever.client.teammatchmaking.event;
 
-import com.faforever.client.domain.PlayerBean;
-import lombok.Value;
+import com.faforever.client.domain.server.PlayerInfo;
 
-@Value
-public class PartyOwnerChangedEvent {
-  PlayerBean newOwner;
+public record PartyOwnerChangedEvent(PlayerInfo newOwner) {
 }

@@ -1,25 +1,32 @@
 package com.faforever.client.preferences;
 
 import com.faforever.commons.lobby.Faction;
-import javafx.beans.property.ListProperty;
-import javafx.beans.property.SimpleListProperty;
 import javafx.collections.ObservableList;
-import lombok.AccessLevel;
-import lombok.experimental.FieldDefaults;
+import javafx.collections.ObservableMap;
+import javafx.collections.ObservableSet;
 
 import static javafx.collections.FXCollections.observableArrayList;
+import static javafx.collections.FXCollections.observableHashMap;
+import static javafx.collections.FXCollections.observableSet;
 
-@FieldDefaults(makeFinal=true, level= AccessLevel.PRIVATE)
+
 public class MatchmakerPrefs {
+  private final ObservableList<Faction> factions = observableArrayList(Faction.AEON, Faction.CYBRAN, Faction.UEF,
+                                                                       Faction.SERAPHIM);
+  private final ObservableSet<Integer> unselectedQueueIds = observableSet();
 
-  ListProperty<Faction> factions = new SimpleListProperty<>(observableArrayList(Faction.AEON, Faction.CYBRAN, Faction.UEF, Faction.SERAPHIM));
+  private final ObservableMap<VetoKey, Integer> appliedVetoes = observableHashMap();
 
   public ObservableList<Faction> getFactions() {
-    return factions.get();
+    return factions;
   }
 
-  public ListProperty<Faction> factionsProperty() {
-    return factions;
+  public ObservableSet<Integer> getUnselectedQueueIds() {
+    return unselectedQueueIds;
+  }
+
+  public ObservableMap<VetoKey, Integer> getAppliedVetoes() {
+    return appliedVetoes;
   }
 
 }

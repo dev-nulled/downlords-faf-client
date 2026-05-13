@@ -1,17 +1,20 @@
 package com.faforever.client.map;
 
-import com.faforever.client.builders.MapVersionBeanBuilder;
-import com.faforever.client.domain.MapVersionBean;
-import com.faforever.client.fx.JavaFxUtil;
+import com.faforever.client.domain.api.MapVersion;
 import com.faforever.client.fx.PlatformService;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.notification.NotificationService;
 import com.faforever.client.preferences.Preferences;
-import com.faforever.client.preferences.PreferencesService;
+import com.faforever.client.preferences.VaultPrefs;
+import com.faforever.client.query.CategoryFilterController;
+import com.faforever.client.query.DateRangeFilterController;
 import com.faforever.client.query.LogicalNodeController;
+import com.faforever.client.query.RangeFilterController;
 import com.faforever.client.query.SpecificationController;
+import com.faforever.client.query.TextFilterController;
+import com.faforever.client.query.ToggleFilterController;
 import com.faforever.client.reporting.ReportingService;
-import com.faforever.client.test.UITest;
+import com.faforever.client.test.PlatformTest;
 import com.faforever.client.theme.UiService;
 import com.faforever.client.vault.VaultEntityController;
 import com.faforever.client.vault.VaultEntityController.SearchType;
@@ -19,28 +22,38 @@ import com.faforever.client.vault.VaultEntityController.ShowRoomCategory;
 import com.faforever.client.vault.search.SearchController;
 import com.faforever.client.vault.search.SearchController.SearchConfig;
 import com.faforever.client.vault.search.SearchController.SortConfig;
-import com.google.common.eventbus.EventBus;
+import javafx.beans.property.SimpleBooleanProperty;
+import javafx.beans.property.SimpleDoubleProperty;
+import javafx.beans.property.SimpleListProperty;
+import javafx.beans.property.SimpleObjectProperty;
+import javafx.beans.property.SimpleStringProperty;
 import javafx.scene.layout.Pane;
+import org.instancio.Instancio;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.testfx.util.WaitForAsyncUtils;
+import org.mockito.Spy;
 import reactor.core.publisher.Mono;
 
 import java.net.MalformedURLException;
+import java.time.LocalDate;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-public class MapVaultControllerTest extends UITest {
+public class MapVaultControllerTest extends PlatformTest {
 
   @Mock
   private MapService mapService;
@@ -48,10 +61,7 @@ public class MapVaultControllerTest extends UITest {
   private UiService uiService;
   @Mock
   private I18n i18n;
-  @Mock
-  private EventBus eventBus;
-  @Mock
-  private PreferencesService preferencesService;
+
   @Mock
   private NotificationService notificationService;
   @Mock
@@ -64,6 +74,18 @@ public class MapVaultControllerTest extends UITest {
   private ReportingService reportingService;
   @Mock
   private PlatformService platformService;
+  @Mock
+  private CategoryFilterController categoryFilterController;
+  @Mock
+  private DateRangeFilterController dateRangeFilterController;
+  @Mock
+  private TextFilterController textFilterController;
+  @Mock
+  private RangeFilterController rangeFilterController;
+  @Mock
+  private ToggleFilterController toggleFilterController;
+  @Spy
+  private VaultPrefs vaultPrefs;
 
   @InjectMocks
   private MapVaultController instance;
@@ -72,7 +94,6 @@ public class MapVaultControllerTest extends UITest {
 
   @BeforeEach
   public void setUp() throws Exception {
-    when(preferencesService.getPreferences()).thenReturn(new Preferences());
     when(i18n.get(anyString())).thenReturn("test");
 
     doAnswer(invocation -> {
@@ -81,9 +102,21 @@ public class MapVaultControllerTest extends UITest {
       return mapDetailController;
     }).when(uiService).loadFxml("theme/vault/map/map_detail.fxml");
 
-    when(mapService.getRecommendedMapPageCount(VaultEntityController.TOP_ELEMENT_COUNT)).thenReturn(CompletableFuture.completedFuture(0));
-
-    SortConfig sortOrder = preferencesService.getPreferences().getVault().getMapSortConfig();
+    when(mapService.getRecommendedMapPageCount(VaultEntityController.TOP_ELEMENT_COUNT)).thenReturn(Mono.just(0));
+    when(searchController.addCategoryFilter(any(), any(), anyMap())).thenReturn(categoryFilterController);
+    when(categoryFilterController.getCheckedItems()).thenReturn(new SimpleListProperty<String>());
+    when(searchController.addTextFilter(anyString(), anyString(), anyBoolean())).thenReturn(textFilterController);
+    when(textFilterController.textFieldProperty()).thenReturn(new SimpleStringProperty());
+    when(searchController.addRangeFilter(anyString(), anyString(), anyDouble(), anyDouble(), anyInt(), anyInt(), anyInt())).thenReturn(rangeFilterController);
+    when(searchController.addRangeFilter(anyString(), anyString(), anyDouble(), anyDouble(), anyInt(), anyInt(), anyInt(), any())).thenReturn(rangeFilterController);
+    when(rangeFilterController.lowValueProperty()).thenReturn(new SimpleDoubleProperty());
+    when(rangeFilterController.highValueProperty()).thenReturn(new SimpleDoubleProperty());
+    when(searchController.addToggleFilter(anyString(), anyString(), anyString())).thenReturn(toggleFilterController);
+    when(toggleFilterController.selectedProperty()).thenReturn(new SimpleBooleanProperty());
+    when(searchController.addDateRangeFilter(anyString(), anyString(), anyInt())).thenReturn(dateRangeFilterController);
+    when(dateRangeFilterController.beforeDateProperty()).thenReturn(new SimpleObjectProperty<LocalDate>());
+    when(dateRangeFilterController.afterDateProperty()).thenReturn(new SimpleObjectProperty<LocalDate>());
+    SortConfig sortOrder = new Preferences().getVault().getMapSortConfig();
     standardSearchConfig = new SearchConfig(sortOrder, "query");
 
 
@@ -99,11 +132,16 @@ public class MapVaultControllerTest extends UITest {
       }
       return instance;
     }, instance);
-    when(mapService.getHighestRatedMapsWithPageCount(anyInt(), anyInt())).thenReturn(Mono.zip(Mono.just(List.<MapVersionBean>of()), Mono.just(0)).toFuture());
-    when(mapService.getNewestMapsWithPageCount(anyInt(), anyInt())).thenReturn(Mono.zip(Mono.just(List.<MapVersionBean>of()), Mono.just(0)).toFuture());
-    when(mapService.getMostPlayedMapsWithPageCount(anyInt(), anyInt())).thenReturn(Mono.zip(Mono.just(List.<MapVersionBean>of()), Mono.just(0)).toFuture());
-    when(mapService.getRecommendedMapsWithPageCount(anyInt(), anyInt())).thenReturn(Mono.zip(Mono.just(List.<MapVersionBean>of()), Mono.just(0)).toFuture());
-    when(mapService.getOwnedMapsWithPageCount(anyInt(), anyInt())).thenReturn(Mono.zip(Mono.just(List.<MapVersionBean>of()), Mono.just(0)).toFuture());
+    lenient().when(mapService.getHighestRatedMapsWithPageCount(anyInt(), anyInt())).thenReturn(
+        Mono.zip(Mono.just(List.<MapVersion>of()), Mono.just(0)));
+    lenient().when(mapService.getNewestMapsWithPageCount(anyInt(), anyInt())).thenReturn(
+        Mono.zip(Mono.just(List.<MapVersion>of()), Mono.just(0)));
+    lenient().when(mapService.getMostPlayedMapsWithPageCount(anyInt(), anyInt())).thenReturn(
+        Mono.zip(Mono.just(List.<MapVersion>of()), Mono.just(0)));
+    lenient().when(mapService.getRecommendedMapsWithPageCount(anyInt(), anyInt())).thenReturn(
+        Mono.zip(Mono.just(List.<MapVersion>of()), Mono.just(0)));
+    lenient().when(mapService.getOwnedMapsWithPageCount(anyInt(), anyInt())).thenReturn(
+        Mono.zip(Mono.just(List.of()), Mono.just(0)));
   }
 
   @Test
@@ -131,9 +169,8 @@ public class MapVaultControllerTest extends UITest {
 
   @Test
   public void testShowMapDetail() throws MalformedURLException {
-    MapVersionBean mapBean = MapVersionBeanBuilder.create().defaultValues().get();
-    JavaFxUtil.runLater(() -> instance.onDisplayDetails(mapBean));
-    WaitForAsyncUtils.waitForFxEvents();
+    MapVersion mapBean = Instancio.create(MapVersion.class);
+    runOnFxThreadAndWait(() -> instance.onDisplayDetails(mapBean));
 
     verify(mapDetailController).setMapVersion(mapBean);
     assertTrue(mapDetailController.getRoot().isVisible());
@@ -141,9 +178,9 @@ public class MapVaultControllerTest extends UITest {
 
   @Test
   public void testGetShowRoomCategories() {
-    List<VaultEntityController<MapVersionBean>.ShowRoomCategory> categories = instance.getShowRoomCategories();
-    for (ShowRoomCategory category : categories) {
-      category.getEntitySupplier().get();
+    List<VaultEntityController.ShowRoomCategory<MapVersion>> categories = instance.getShowRoomCategories();
+    for (ShowRoomCategory<MapVersion> category : categories) {
+      category.entitySupplier().get();
     }
     verify(mapService).getHighestRatedMapsWithPageCount(anyInt(), anyInt());
     verify(mapService).getNewestMapsWithPageCount(anyInt(), anyInt());

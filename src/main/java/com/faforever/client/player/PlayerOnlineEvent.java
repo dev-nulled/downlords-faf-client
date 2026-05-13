@@ -1,9 +1,5 @@
 package com.faforever.client.player;
 
-import com.faforever.client.domain.PlayerBean;
-import lombok.Value;
+import com.faforever.client.domain.server.PlayerInfo;
 
-@Value
-public class PlayerOnlineEvent {
-  PlayerBean player;
-}
+public record PlayerOnlineEvent(PlayerInfo player) {}

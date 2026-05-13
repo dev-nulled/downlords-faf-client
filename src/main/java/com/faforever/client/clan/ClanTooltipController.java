@@ -1,8 +1,8 @@
 package com.faforever.client.clan;
 
 
-import com.faforever.client.domain.ClanBean;
-import com.faforever.client.fx.Controller;
+import com.faforever.client.domain.api.Clan;
+import com.faforever.client.fx.NodeController;
 import com.faforever.client.i18n.I18n;
 import javafx.scene.Node;
 import javafx.scene.control.Label;
@@ -15,7 +15,7 @@ import java.util.Optional;
 
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
-public class ClanTooltipController implements Controller<Node> {
+public class ClanTooltipController extends NodeController<Node> {
 
   public Pane clanTooltipRoot;
   public Label nameLabel;
@@ -25,7 +25,8 @@ public class ClanTooltipController implements Controller<Node> {
   public Label descriptionTitleLabel;
   private final I18n i18n;
 
-  public void initialize() {
+  @Override
+  protected void onInitialize() {
     descriptionLabel.managedProperty().bind(descriptionLabel.visibleProperty());
     descriptionTitleLabel.managedProperty().bind(descriptionTitleLabel.visibleProperty());
     descriptionLabel.visibleProperty().bind(descriptionLabel.textProperty().isNotEmpty());
@@ -36,15 +37,15 @@ public class ClanTooltipController implements Controller<Node> {
     this.i18n = i18n;
   }
 
-  public void setClan(ClanBean clan) {
-    nameLabel.setText(clan.getName());
-    // TODO improve formatting
-    membersLabel.setText(i18n.number(clan.getMembers().size()));
-    descriptionLabel.setText(clan.getDescription());
-    leaderLabel.setText(clan.getLeader().getUsername());
-    descriptionLabel.setText(Optional.ofNullable(clan.getDescription()).orElse(""));
+  public void setClan(Clan clan) {
+    nameLabel.setText(clan.name());
+    membersLabel.setText(i18n.number(clan.members().size()));
+    descriptionLabel.setText(clan.description());
+    leaderLabel.setText(clan.leader().getUsername());
+    descriptionLabel.setText(Optional.ofNullable(clan.description()).orElse(""));
   }
 
+  @Override
   public Pane getRoot() {
     return clanTooltipRoot;
   }

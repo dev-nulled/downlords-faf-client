@@ -4,11 +4,13 @@ import com.github.rutledgepaulv.qbuilders.builders.QBuilder;
 import com.github.rutledgepaulv.qbuilders.conditions.Condition;
 import com.github.rutledgepaulv.qbuilders.properties.concrete.StringProperty;
 import javafx.beans.InvalidationListener;
+import javafx.beans.property.BooleanProperty;
 import javafx.scene.Node;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.layout.GridPane;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
@@ -19,8 +21,9 @@ import java.util.Optional;
 
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
-@Data
-public class ToggleFilterController implements FilterNodeController {
+@Getter
+@Setter
+public class ToggleFilterController extends FilterNodeController {
 
   public GridPane toggleFilter;
   public Label title;
@@ -28,6 +31,7 @@ public class ToggleFilterController implements FilterNodeController {
   private String propertyName;
   private String value;
 
+  @Override
   public Optional<List<Condition>> getCondition() {
     QBuilder qBuilder = new QBuilder<>();
     StringProperty property = qBuilder.string(propertyName);
@@ -38,16 +42,27 @@ public class ToggleFilterController implements FilterNodeController {
     }
   }
 
+  @Override
   public void addQueryListener(InvalidationListener queryListener) {
     checkBox.selectedProperty().addListener(queryListener);
   }
 
+  @Override
   public void clear() {
     checkBox.setSelected(false);
   }
 
+  @Override
   public void setTitle(String title) {
     this.title.setText(title + ":");
+  }
+
+  public BooleanProperty selectedProperty() {
+    return this.checkBox.selectedProperty();
+  }
+
+  public void setSelected(boolean isSelected) {
+    checkBox.setSelected(isSelected);
   }
 
   @Override

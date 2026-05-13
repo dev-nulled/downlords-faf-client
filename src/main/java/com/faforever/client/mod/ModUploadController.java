@@ -1,24 +1,21 @@
 package com.faforever.client.mod;
 
 import com.faforever.client.config.ClientProperties;
-import com.faforever.client.domain.ModVersionBean;
-import com.faforever.client.fx.Controller;
-import com.faforever.client.fx.JavaFxUtil;
+import com.faforever.client.domain.api.ModVersion;
+import com.faforever.client.fx.FxApplicationThreadExecutor;
+import com.faforever.client.fx.NodeController;
 import com.faforever.client.fx.PlatformService;
 import com.faforever.client.i18n.I18n;
-import com.faforever.client.mod.event.ModUploadedEvent;
 import com.faforever.client.notification.Action;
 import com.faforever.client.notification.CopyErrorAction;
 import com.faforever.client.notification.DismissAction;
 import com.faforever.client.notification.GetHelpAction;
-import com.faforever.client.notification.ImmediateNotification;
 import com.faforever.client.notification.NotificationService;
+import com.faforever.client.notification.ServerNotification;
 import com.faforever.client.reporting.ReportingService;
 import com.faforever.client.task.CompletableTask;
 import com.faforever.client.util.ConcurrentUtil;
 import com.faforever.commons.api.dto.ApiException;
-import com.google.common.eventbus.EventBus;
-import javafx.beans.binding.Bindings;
 import javafx.scene.Node;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
@@ -35,7 +32,6 @@ import org.springframework.stereotype.Component;
 import java.nio.file.Path;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 
 import static com.faforever.client.notification.Severity.ERROR;
@@ -45,7 +41,7 @@ import static java.util.Arrays.asList;
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
 @RequiredArgsConstructor
 @Slf4j
-public class ModUploadController implements Controller<Node> {
+public class ModUploadController extends NodeController<Node> {
 
   private final ModService modService;
   private final ExecutorService executorService;
@@ -54,7 +50,8 @@ public class ModUploadController implements Controller<Node> {
   private final I18n i18n;
   private final PlatformService platformService;
   private final ClientProperties clientProperties;
-  private final EventBus eventBus;
+  private final FxApplicationThreadExecutor fxApplicationThreadExecutor;
+
   public Label uploadTaskMessageLabel;
   public Label uploadTaskTitleLabel;
   public Pane parseProgressPane;
@@ -72,10 +69,12 @@ public class ModUploadController implements Controller<Node> {
   public Label rulesLabel;
   private Path modPath;
   private CompletableTask<Void> modUploadTask;
-  private ModVersionBean modVersionInfo;
+  private ModVersion modVersionInfo;
   private Runnable cancelButtonClickedListener;
+  private Runnable uploadListener;
 
-  public void initialize() {
+  @Override
+  protected void onInitialize() {
     modInfoPane.managedProperty().bind(modInfoPane.visibleProperty());
     uploadProgressPane.managedProperty().bind(uploadProgressPane.visibleProperty());
     parseProgressPane.managedProperty().bind(parseProgressPane.visibleProperty());
@@ -90,13 +89,7 @@ public class ModUploadController implements Controller<Node> {
   public void setModPath(Path modPath) {
     this.modPath = modPath;
     enterParsingState();
-    CompletableFuture.supplyAsync(() -> {
-      try {
-        return modService.extractModInfo(modPath);
-      } catch (ModLoadException e) {
-        throw new CompletionException(e);
-      }
-    }, executorService)
+    CompletableFuture.supplyAsync(() -> modService.extractModInfo(modPath), executorService)
         .thenAccept(this::setModVersionInfo)
         .exceptionally(throwable -> {
           throwable = ConcurrentUtil.unwrapIfCompletionException(throwable);
@@ -113,17 +106,15 @@ public class ModUploadController implements Controller<Node> {
     uploadCompletePane.setVisible(false);
   }
 
-  private void setModVersionInfo(ModVersionBean modVersion) {
+  private void setModVersionInfo(ModVersion modVersion) {
     this.modVersionInfo = modVersion;
-    JavaFxUtil.runLater(() -> {
+    fxApplicationThreadExecutor.execute(() -> {
       enterModInfoState();
-      modNameLabel.textProperty().bind(modVersion.getMod().displayNameProperty());
-      descriptionLabel.textProperty().bind(modVersion.descriptionProperty());
-      versionLabel.textProperty().bind(modVersion.versionProperty().asString());
-      uidLabel.textProperty().bind(modVersion.uidProperty());
-      thumbnailImageView.imageProperty().bind(
-          Bindings.createObjectBinding(() -> modService.loadThumbnail(modVersion), modVersion.idProperty(), modVersion.imagePathProperty())
-      );
+      modNameLabel.setText(modVersion.mod().displayName());
+      descriptionLabel.setText(modVersion.description());
+      versionLabel.setText(modVersion.version().toString());
+      uidLabel.setText(modVersion.uid());
+      thumbnailImageView.setImage(modService.loadThumbnail(modVersion));
     });
   }
 
@@ -142,7 +133,7 @@ public class ModUploadController implements Controller<Node> {
   private void onUploadFailed(Throwable throwable) {
     enterModInfoState();
     if (throwable instanceof ApiException) {
-      notificationService.addServerNotification(new ImmediateNotification(
+      notificationService.addNotification(new ServerNotification(
           i18n.get("errorTitle"), i18n.get("modVault.upload.failed", throwable.getLocalizedMessage()), ERROR,
           asList(
               new GetHelpAction(i18n, reportingService),
@@ -150,10 +141,9 @@ public class ModUploadController implements Controller<Node> {
           )
       ));
     } else {
-      notificationService.addServerNotification(new ImmediateNotification(
+      notificationService.addNotification(new ServerNotification(
           i18n.get("errorTitle"), i18n.get("modVault.upload.failed", throwable.getLocalizedMessage()), ERROR, throwable,
-          asList(
-              new Action(i18n.get("modVault.upload.retry"), event -> onUploadClicked()),
+          asList(new Action(i18n.get("modVault.upload.retry"), this::onUploadClicked),
               new CopyErrorAction(i18n, reportingService, throwable),
               new GetHelpAction(i18n, reportingService),
               new DismissAction(i18n)
@@ -176,8 +166,12 @@ public class ModUploadController implements Controller<Node> {
     uploadProgressBar.progressProperty().bind(modUploadTask.progressProperty());
 
     modUploadTask.getFuture()
-        .thenAccept(v -> eventBus.post(new ModUploadedEvent(modVersionInfo)))
-        .thenAccept(aVoid -> enterUploadCompleteState())
+                 .thenRun(() -> {
+                   if (uploadListener != null) {
+                     uploadListener.run();
+                   }
+                 })
+        .thenRun(this::enterUploadCompleteState)
         .exceptionally(throwable -> {
           if (!(throwable instanceof CancellationException)) {
             onUploadFailed(throwable.getCause());
@@ -208,11 +202,16 @@ public class ModUploadController implements Controller<Node> {
     cancelButtonClickedListener.run();
   }
 
+  @Override
   public Region getRoot() {
     return modUploadRoot;
   }
 
   public void setOnCancelButtonClickedListener(Runnable cancelButtonClickedListener) {
     this.cancelButtonClickedListener = cancelButtonClickedListener;
+  }
+
+  public void setUploadListener(Runnable uploadListener) {
+    this.uploadListener = uploadListener;
   }
 }

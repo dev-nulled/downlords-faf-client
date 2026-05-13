@@ -1,8 +1,8 @@
 package com.faforever.client.patch;
 
-import com.faforever.client.domain.FeaturedModBean;
+import org.jetbrains.annotations.Nullable;
 
-import java.util.Set;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -12,15 +12,13 @@ import java.util.concurrent.CompletableFuture;
 public interface GameUpdater {
 
   /**
-   * Adds an updater to the chain. For each mod to update, the first updater which can update a mod will be called.
-   */
-  GameUpdater addFeaturedModUpdater(FeaturedModUpdater featuredModUpdater);
-
-  /**
-   * @param featuredMod the featured mod to update
-   * @param version the version of the featured mod to update to
-   * @param simModUIDs a list of sim mod UIDs to update
+   * @param featuredModName the featured mod to update
+   * @param baseVersion the version of faf to update to
+   * @param featuredModFileVersions a map of the featuredModFileIds to the version of the file
+   * @param useReplayFolder whether to update the files in the replay or the game path
    * @return a completion stage that completes when the mod is fully updated
    */
-  CompletableFuture<Void> update(FeaturedModBean featuredMod, Integer version, Set<String> simModUIDs);
+  CompletableFuture<Void> update(String featuredModName,
+                                 @Nullable Map<String, Integer> featuredModFileVersions, @Nullable Integer baseVersion,
+                                 boolean useReplayFolder);
 }

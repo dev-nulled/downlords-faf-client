@@ -6,9 +6,12 @@ import com.github.rutledgepaulv.qbuilders.conditions.Condition;
 import com.github.rutledgepaulv.qbuilders.properties.concrete.StringProperty;
 import javafx.beans.InvalidationListener;
 import javafx.beans.binding.Bindings;
+import javafx.collections.ObservableList;
 import javafx.scene.Node;
 import javafx.scene.control.MenuButton;
-import lombok.Data;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import org.controlsfx.control.CheckListView;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.context.annotation.Scope;
@@ -26,8 +29,10 @@ import java.util.stream.Collectors;
  */
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
-@Data
-public class CategoryFilterController implements FilterNodeController {
+@RequiredArgsConstructor
+@Setter
+@Getter
+public class CategoryFilterController extends FilterNodeController {
 
   private final I18n i18n;
 
@@ -47,6 +52,7 @@ public class CategoryFilterController implements FilterNodeController {
   }
 
 
+  @Override
   public Optional<List<Condition>> getCondition() {
     QBuilder qBuilder = new QBuilder<>();
     StringProperty property = qBuilder.string(propertyName);
@@ -65,14 +71,17 @@ public class CategoryFilterController implements FilterNodeController {
     }
   }
 
+  @Override
   public void addQueryListener(InvalidationListener queryListener) {
     checkListView.getCheckModel().getCheckedItems().addListener(queryListener);
   }
 
+  @Override
   public void clear() {
     checkListView.getItems().forEach(item -> checkListView.getItemBooleanProperty(item).setValue(false));
   }
 
+  @Override
   public void setTitle(String title) {
     menu.textProperty().unbind();
     menu.textProperty().bind(Bindings.createStringBinding(() -> i18n.get("query.categoryFilter", title, String.join(", ", checkListView.getCheckModel().getCheckedItems())), checkListView.getCheckModel().getCheckedItems()));
@@ -83,4 +92,11 @@ public class CategoryFilterController implements FilterNodeController {
     return menu;
   }
 
+  public void checkItem(String item) {
+    checkListView.getItemBooleanProperty(item).setValue(true);
+  }
+
+  public ObservableList<String> getCheckedItems() {
+    return checkListView.getCheckModel().getCheckedItems();
+  }
 }

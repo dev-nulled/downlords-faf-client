@@ -1,9 +1,9 @@
 package com.faforever.client.fx.contextmenu;
 
-import com.faforever.client.domain.GameBean;
-import com.faforever.client.domain.PlayerBean;
-import com.faforever.client.game.JoinGameHelper;
-import com.faforever.client.game.PlayerStatus;
+import com.faforever.client.domain.server.GameInfo;
+import com.faforever.client.domain.server.PlayerInfo;
+import com.faforever.client.game.GameRunner;
+import com.faforever.client.game.PlayerGameStatus;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.player.SocialStatus;
 import com.faforever.client.util.Assert;
@@ -18,26 +18,26 @@ import static com.faforever.client.player.SocialStatus.SELF;
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
 @RequiredArgsConstructor
-public class JoinGameMenuItem extends AbstractMenuItem<PlayerBean> {
+public class JoinGameMenuItem extends AbstractMenuItem<PlayerInfo> {
 
   private final I18n i18n;
-  private final JoinGameHelper joinGameHelper;
+  private final GameRunner gameRunner;
 
   @Override
   protected void onClicked() {
     Assert.checkNullIllegalState(object, "no player has been set");
-    joinGameHelper.join(object.getGame());
+    gameRunner.join(object.getGame());
   }
 
   @Override
-  protected boolean isItemVisible() {
+  protected boolean isDisplayed() {
     if (object == null) {
       return false;
     }
     SocialStatus socialStatus = object.getSocialStatus();
-    PlayerStatus playerStatus = object.getStatus();
-    GameBean game = object.getGame();
-    return socialStatus != SELF && (playerStatus == PlayerStatus.LOBBYING || playerStatus == PlayerStatus.HOSTING)
+    PlayerGameStatus playerGameStatus = object.getGameStatus();
+    GameInfo game = object.getGame();
+    return socialStatus != SELF && (playerGameStatus == PlayerGameStatus.LOBBYING || playerGameStatus == PlayerGameStatus.HOSTING)
         && game != null && game.getGameType() != GameType.MATCHMAKER;
   }
 

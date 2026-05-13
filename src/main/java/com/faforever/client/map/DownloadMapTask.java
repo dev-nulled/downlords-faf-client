@@ -1,15 +1,15 @@
 package com.faforever.client.map;
 
 import com.faforever.client.i18n.I18n;
-import com.faforever.client.preferences.PreferencesService;
+import com.faforever.client.preferences.ForgedAlliancePrefs;
 import com.faforever.client.task.CompletableTask;
 import com.faforever.commons.io.Unzipper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
-import javax.inject.Inject;
 import java.io.InputStream;
 import java.net.URL;
 import java.net.URLConnection;
@@ -21,17 +21,17 @@ import java.util.Objects;
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
 public class DownloadMapTask extends CompletableTask<Void> {
 
-  private final PreferencesService preferencesService;
   private final I18n i18n;
+  private final ForgedAlliancePrefs forgedAlliancePrefs;
 
   private URL mapUrl;
   private String folderName;
 
-  @Inject
-  public DownloadMapTask(PreferencesService preferencesService, I18n i18n) {
+  @Autowired
+  public DownloadMapTask(I18n i18n, ForgedAlliancePrefs forgedAlliancePrefs) {
     super(Priority.HIGH);
 
-    this.preferencesService = preferencesService;
+    this.forgedAlliancePrefs = forgedAlliancePrefs;
     this.i18n = i18n;
   }
 
@@ -46,7 +46,7 @@ public class DownloadMapTask extends CompletableTask<Void> {
     URLConnection urlConnection = mapUrl.openConnection();
     int bytesToRead = urlConnection.getContentLength();
 
-    Path targetDirectory = preferencesService.getPreferences().getForgedAlliance().getMapsDirectory();
+    Path targetDirectory = forgedAlliancePrefs.getMapsDirectory();
 
     try (InputStream inputStream = urlConnection.getInputStream()) {
       Unzipper.from(inputStream)

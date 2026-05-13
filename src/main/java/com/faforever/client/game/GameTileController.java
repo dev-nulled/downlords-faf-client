@@ -1,25 +1,32 @@
 package com.faforever.client.game;
 
-import com.faforever.client.domain.GameBean;
-import com.faforever.client.fx.Controller;
+import com.faforever.client.avatar.AvatarService;
+import com.faforever.client.domain.api.FeaturedMod;
+import com.faforever.client.domain.server.GameInfo;
+import com.faforever.client.domain.server.PlayerInfo;
+import com.faforever.client.featuredmod.FeaturedModService;
+import com.faforever.client.fx.FxApplicationThreadExecutor;
+import com.faforever.client.fx.ImageViewHelper;
 import com.faforever.client.fx.JavaFxUtil;
+import com.faforever.client.fx.NodeController;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.map.MapService;
 import com.faforever.client.map.MapService.PreviewSize;
-import com.faforever.client.mod.ModService;
 import com.faforever.client.player.PlayerService;
-import com.faforever.client.util.Assert;
+import com.faforever.client.social.SocialService;
 import com.google.common.base.Joiner;
-import javafx.beans.InvalidationListener;
-import javafx.beans.WeakInvalidationListener;
+import javafx.beans.binding.Bindings;
+import javafx.beans.property.ObjectProperty;
+import javafx.beans.property.SimpleObjectProperty;
 import javafx.css.PseudoClass;
 import javafx.scene.Node;
 import javafx.scene.control.Label;
-import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
+import javafx.scene.layout.Region;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.context.annotation.Scope;
@@ -28,22 +35,27 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
 @Component
 @RequiredArgsConstructor
-public class GameTileController implements Controller<Node> {
+@Slf4j
+public class GameTileController extends NodeController<Node> {
 
   public static final PseudoClass FRIEND_IN_GAME_PSEUDO_CLASS = PseudoClass.getPseudoClass("friendInGame");
 
   private final MapService mapService;
   private final I18n i18n;
-  private final JoinGameHelper joinGameHelper;
-  private final ModService modService;
+  private final GameRunner gameRunner;
+  private final FeaturedModService featuredModService;
   private final PlayerService playerService;
+  private final AvatarService avatarService;
+  private final SocialService socialService;
+  private final ImageViewHelper imageViewHelper;
+  private final FxApplicationThreadExecutor fxApplicationThreadExecutor;
+
   public Node lockIconLabel;
   public Label gameTypeLabel;
   public Node gameCardRoot;
@@ -53,79 +65,86 @@ public class GameTileController implements Controller<Node> {
   public Label avgRatingLabel;
   public Label hostLabel;
   public ImageView avatarImageView;
+  public Region defaultHostIcon;
   public Label modsLabel;
   public ImageView mapImageView;
-  private Consumer<GameBean> onSelectedListener;
-  private GameBean game;
+  private Consumer<GameInfo> onSelectedListener;
 
-  private InvalidationListener numPlayersInvalidationListener;
-  private InvalidationListener gamePropertiesInvalidationListener;
+  private final ObjectProperty<GameInfo> game = new SimpleObjectProperty<>();
 
-  public void setOnSelectedListener(Consumer<GameBean> onSelectedListener) {
+  public void setOnSelectedListener(Consumer<GameInfo> onSelectedListener) {
     this.onSelectedListener = onSelectedListener;
   }
 
-  public void initialize() {
-    JavaFxUtil.bindManagedToVisible(modsLabel, gameTypeLabel, lockIconLabel);
+  @Override
+  protected void onInitialize() {
+    JavaFxUtil.bindManagedToVisible(modsLabel, gameTypeLabel, lockIconLabel, defaultHostIcon, avatarImageView);
     modsLabel.visibleProperty().bind(modsLabel.textProperty().isNotEmpty());
+    defaultHostIcon.visibleProperty().bind(avatarImageView.imageProperty().isNull());
+    avatarImageView.visibleProperty().bind(avatarImageView.imageProperty().isNotNull());
 
-    numPlayersInvalidationListener = observable -> onNumPlayersChanged();
-    gamePropertiesInvalidationListener = observable -> onGamePropertyChanged();
+    gameTitleLabel.textProperty()
+                  .bind(game.flatMap(GameInfo::titleProperty).map(StringUtils::normalizeSpace).when(showing));
+    hostLabel.textProperty().bind(game.flatMap(GameInfo::hostProperty).when(showing));
+    avatarImageView.imageProperty().bind(game.flatMap(GameInfo::hostProperty)
+                             .map(playerService::getPlayerByNameIfOnline)
+                             .map(optional -> optional.orElse(null)).flatMap(PlayerInfo::avatarProperty)
+                             .map(avatarService::loadAvatar)
+                             .when(showing));
+    gameMapLabel.textProperty().bind(game.flatMap(GameInfo::mapFolderNameProperty).when(showing));
+    mapImageView.imageProperty().bind(game.flatMap(GameInfo::mapFolderNameProperty)
+                          .flatMap(mapFolderName -> Bindings.createObjectBinding(
+                              () -> mapService.loadPreview(mapFolderName, PreviewSize.SMALL),
+                              mapService.isInstalledBinding(mapFolderName)))
+                          .flatMap(imageViewHelper::createPlaceholderImageOnErrorObservable)
+                          .when(showing));
+    modsLabel.textProperty()
+             .bind(game.flatMap(GameInfo::simModsProperty).map(this::getSimModsLabelContent).when(showing));
+    lockIconLabel.visibleProperty().bind(game.flatMap(GameInfo::passwordProtectedProperty).when(showing));
+    numberOfPlayersLabel.textProperty()
+                        .bind(game.flatMap(gameValue -> Bindings.createStringBinding(
+                            () -> i18n.get("game.detail.players.format", gameValue.getNumActivePlayers(),
+                                           gameValue.getMaxPlayers()), gameValue.numActivePlayersProperty(),
+                            gameValue.maxPlayersProperty()).when(showing)));
+    avgRatingLabel.textProperty()
+                  .bind(game.flatMap(playerService::getAverageRatingPropertyForGame)
+                            .map(average -> Math.round(average / 100.0) * 100.0)
+                            .map(roundedAverage -> i18n.get("game.avgRating.format", roundedAverage))
+                            .when(showing));
+    game.when(showing).subscribe(this::onGamePropertyChanged);
+    game.flatMap(GameInfo::featuredModProperty).when(showing).subscribe(this::onFeaturedModChanged);
   }
 
+  @Override
   public Node getRoot() {
     return gameCardRoot;
   }
 
-  private void onGamePropertyChanged() {
-    Optional<Image> avatar = playerService.getCurrentAvatarByPlayerName(game.getHost());
-    JavaFxUtil.runLater(() -> {
-      gameTitleLabel.setText(StringUtils.normalizeSpace(game.getTitle()));
-      hostLabel.setText(game.getHost());
-      avatarImageView.setImage(avatar.orElse(null));
-      gameMapLabel.setText(game.getMapFolderName());
-      mapImageView.setImage(mapService.loadPreview(game.getMapFolderName(), PreviewSize.LARGE));
-      modsLabel.setText(getSimModsLabelContent(game.getSimMods()));
-      lockIconLabel.setVisible(game.isPasswordProtected());
-    });
+  private void onGamePropertyChanged(GameInfo newValue) {
+    getRoot().pseudoClassStateChanged(FRIEND_IN_GAME_PSEUDO_CLASS, socialService.areFriendsInGame(newValue));
   }
 
-  private void onNumPlayersChanged() {
-    boolean friendsInGame = playerService.areFriendsInGame(game);
-    JavaFxUtil.runLater(() -> {
-      numberOfPlayersLabel.setText(i18n.get("game.detail.players.format", game.getNumPlayers(), game.getMaxPlayers()));
-      avgRatingLabel.setText(i18n.get("game.avgRating.format", Math.round(game.getAverageRating() / 100.0) * 100.0));
-      getRoot().pseudoClassStateChanged(FRIEND_IN_GAME_PSEUDO_CLASS, friendsInGame);
-    });
+  private void onFeaturedModChanged(String featuredMod) {
+    if (featuredMod == null) {
+      return;
+    }
+
+    featuredModService.getFeaturedMod(featuredMod).map(FeaturedMod::displayName)
+                      .map(StringUtils::defaultString)
+                      .publishOn(fxApplicationThreadExecutor.asScheduler())
+                      .subscribe(gameTypeLabel::setText,
+                                 throwable -> log.error("Unable to set game type label", throwable));
   }
 
-  public void setGame(GameBean game) {
-    Assert.checkNotNullIllegalState(this.game, "Game has already been set");
-    this.game = game;
-
-    modService.getFeaturedMod(game.getFeaturedMod())
-        .thenAccept(featuredModBean -> JavaFxUtil.runLater(() -> gameTypeLabel.setText(StringUtils.defaultString(featuredModBean.getDisplayName()))));
-
-    WeakInvalidationListener weakGamePropertiesListener = new WeakInvalidationListener(gamePropertiesInvalidationListener);
-    WeakInvalidationListener weakNumPlayersListener = new WeakInvalidationListener(numPlayersInvalidationListener);
-
-    JavaFxUtil.addListener(game.titleProperty(), weakGamePropertiesListener);
-    JavaFxUtil.addListener(game.mapFolderNameProperty(), weakGamePropertiesListener);
-    JavaFxUtil.addListener(game.hostProperty(), weakGamePropertiesListener);
-    JavaFxUtil.addListener(game.simModsProperty(), weakGamePropertiesListener);
-    JavaFxUtil.addAndTriggerListener(game.passwordProtectedProperty(), weakGamePropertiesListener);
-    JavaFxUtil.addListener(game.numPlayersProperty(), weakNumPlayersListener);
-    JavaFxUtil.addListener(game.maxPlayersProperty(), weakNumPlayersListener);
-    JavaFxUtil.addAndTriggerListener(game.averageRatingProperty(), weakNumPlayersListener);
+  public void setGame(GameInfo game) {
+    this.game.set(game);
   }
 
   private String getSimModsLabelContent(Map<String, String> simMods) {
-    List<String> modNames = simMods.values().stream()
-        .limit(2)
-        .collect(Collectors.toList());
+    List<String> modNames = simMods.values().stream().limit(2).collect(Collectors.toList());
 
     if (simMods.size() > 2) {
-      return i18n.get("game.mods.twoAndMore", modNames.get(0), simMods.size() - 1);
+      return i18n.get("game.mods.twoAndMore", modNames.getFirst(), simMods.size() - 1);
     }
     return Joiner.on(i18n.get("textSeparator")).join(modNames);
   }
@@ -135,11 +154,12 @@ public class GameTileController implements Controller<Node> {
     Objects.requireNonNull(game, "gameInfoBean has not been set");
 
     gameCardRoot.requestFocus();
-    onSelectedListener.accept(game);
+    GameInfo gameValue = game.get();
+    onSelectedListener.accept(gameValue);
 
     if (mouseEvent.getButton() == MouseButton.PRIMARY && mouseEvent.getClickCount() == 2) {
       mouseEvent.consume();
-      joinGameHelper.join(game);
+      gameRunner.join(gameValue);
     }
   }
 }

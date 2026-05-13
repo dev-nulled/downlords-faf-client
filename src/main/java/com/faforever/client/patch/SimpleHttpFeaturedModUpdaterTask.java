@@ -1,15 +1,17 @@
 package com.faforever.client.patch;
 
-import com.faforever.client.domain.FeaturedModBean;
+import com.faforever.client.domain.api.FeaturedMod;
+import com.faforever.client.featuredmod.FeaturedModService;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.io.ChecksumMismatchException;
 import com.faforever.client.io.DownloadService;
 import com.faforever.client.io.FeaturedModFileCacheService;
-import com.faforever.client.mod.ModService;
+import com.faforever.client.preferences.DataPrefs;
 import com.faforever.client.preferences.PreferencesService;
 import com.faforever.client.task.CompletableTask;
 import com.faforever.commons.api.dto.FeaturedModFile;
 import com.faforever.commons.fa.ForgedAllianceExePatcher;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.maven.artifact.versioning.ComparableVersion;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
@@ -17,53 +19,65 @@ import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
-import java.net.URL;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.security.NoSuchAlgorithmException;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
 @Slf4j
+@Setter
 public class SimpleHttpFeaturedModUpdaterTask extends CompletableTask<PatchResult> {
-  private final ModService modService;
-  private final PreferencesService preferencesService;
+  private final FeaturedModService featuredModService;
   private final DownloadService downloadService;
   private final I18n i18n;
   private final FeaturedModFileCacheService featuredModFileCacheService;
+  private final DataPrefs dataPrefs;
 
-  private FeaturedModBean featuredMod;
+  private String featuredModName;
   private Integer version;
+  private boolean useReplayFolder;
 
   public SimpleHttpFeaturedModUpdaterTask(
-      ModService modService,
-      PreferencesService preferencesService,
+      FeaturedModService featuredModService,
       DownloadService downloadService,
       I18n i18n,
-      FeaturedModFileCacheService featuredModFileCacheService
-  ) {
+      FeaturedModFileCacheService featuredModFileCacheService,
+      DataPrefs dataPrefs) {
     super(Priority.HIGH);
 
-    this.modService = modService;
-    this.preferencesService = preferencesService;
+    this.featuredModService = featuredModService;
     this.downloadService = downloadService;
     this.i18n = i18n;
     this.featuredModFileCacheService = featuredModFileCacheService;
+    this.dataPrefs = dataPrefs;
   }
 
   @Override
   protected PatchResult call() throws Exception {
-    String initFileName = "init_" + featuredMod.getTechnicalName() + ".lua";
+    FeaturedMod featuredMod = featuredModService.getFeaturedMod(featuredModName).blockOptional().orElseThrow();
+
+    String initFileName = "init_" + featuredMod.technicalName() + ".lua";
 
     updateTitle(i18n.get("updater.taskTitle"));
     updateMessage(i18n.get("updater.readingFileList"));
 
-    Path fafDataDirectory = preferencesService.getPreferences().getData().getBaseDataDirectory();
+    Path fafDataDirectory;
+    if (useReplayFolder) {
+      fafDataDirectory = dataPrefs.getReplayDataDirectory();
+    } else {
+      fafDataDirectory = dataPrefs.getBaseDataDirectory();
+    }
 
-    List<FeaturedModFile> featuredModFiles = modService.getFeaturedModFiles(featuredMod, version).join();
+    List<FeaturedModFile> featuredModFiles = featuredModService.getFeaturedModFiles(featuredMod, version)
+                                                               .collectList()
+                                                               .blockOptional()
+                                                               .orElse(List.of());
 
     featuredModFiles
         .forEach(featuredModFile -> {
@@ -102,12 +116,16 @@ public class SimpleHttpFeaturedModUpdaterTask extends CompletableTask<PatchResul
             .resolve(featuredModFile.getName()))
         .filter(Files::exists)
         .findAny()
-        .orElseThrow(() -> new IllegalStateException("No init file found for featured mod: " + featuredMod.getTechnicalName()));
+                                    .orElseThrow(() -> new IllegalStateException(
+                                        "No init file found for featured mod: " + featuredMod.technicalName()));
 
     int maxVersion = featuredModFiles.stream()
         .mapToInt(mod -> Integer.parseInt(mod.getVersion()))
         .max()
-        .orElseThrow(() -> new IllegalStateException("No version found for featured mod: " + featuredMod.getTechnicalName()));
+                                     .orElseThrow(() -> new IllegalStateException(
+                                         "No version found for featured mod: " + featuredMod.technicalName()));
+
+    log.info("Featured mod `{}` updated to version `{}`", featuredMod.technicalName(), maxVersion);
 
     return new PatchResult(new ComparableVersion(String.valueOf(maxVersion)), initFile);
   }
@@ -141,16 +159,14 @@ public class SimpleHttpFeaturedModUpdaterTask extends CompletableTask<PatchResul
     Files.createDirectories(targetPath.getParent());
     updateMessage(i18n.get("updater.downloadingFile", featuredModFile.getName()));
 
-    String url = featuredModFile.getUrl();
     String md5sum = featuredModFile.getMd5();
-    downloadService.downloadFileWithMirrors(new URL(url), targetPath, this::updateProgress, md5sum);
-  }
 
-  public void setFeaturedMod(FeaturedModBean featuredMod) {
-    this.featuredMod = featuredMod;
-  }
+    // We can perform cloudflare hmac verification either with a query parameter or by sending a request header hmac with the value
+    // Using a request header is preferred as this allows us to cache the url on cloudflare without the query string as the
+    // query string effectively renders the cache ineffective.
+    Map<String, String> requestParameters = Map.of(featuredModFile.getHmacParameter(), featuredModFile.getHmacToken());
 
-  public void setVersion(Integer version) {
-    this.version = version;
+    downloadService.downloadFile(URI.create(featuredModFile.getCacheableUrl()).toURL(), requestParameters, targetPath,
+                                 this::updateProgress, md5sum);
   }
 }

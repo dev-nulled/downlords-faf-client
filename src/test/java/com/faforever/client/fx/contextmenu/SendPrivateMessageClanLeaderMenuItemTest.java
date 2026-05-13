@@ -1,77 +1,64 @@
 package com.faforever.client.fx.contextmenu;
 
-import com.faforever.client.builders.ClanBeanBuilder;
-import com.faforever.client.builders.PlayerBeanBuilder;
-import com.faforever.client.chat.InitiatePrivateChatEvent;
-import com.faforever.client.domain.ClanBean;
-import com.faforever.client.domain.PlayerBean;
+import com.faforever.client.builders.PlayerInfoBuilder;
+import com.faforever.client.chat.ChatService;
+import com.faforever.client.clan.ClanService;
+import com.faforever.client.domain.api.Clan;
+import com.faforever.client.domain.server.PlayerInfo;
 import com.faforever.client.i18n.I18n;
-import com.faforever.client.player.PlayerService;
-import com.faforever.client.test.UITest;
-import com.google.common.eventbus.EventBus;
+import com.faforever.client.test.PlatformTest;
+import org.instancio.Instancio;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import reactor.core.publisher.Mono;
 
+import static org.instancio.Select.field;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-public class SendPrivateMessageClanLeaderMenuItemTest extends UITest {
+public class SendPrivateMessageClanLeaderMenuItemTest extends PlatformTest {
 
   @Mock
   private I18n i18n;
   @Mock
-  private PlayerService playerService;
+  private ClanService clanService;
   @Mock
-  private EventBus eventBus;
+  private ChatService chatService;
 
-  @InjectMocks
   private SendPrivateMessageClanLeaderMenuItem instance;
+
+  @BeforeEach
+  public void setup() {
+    instance = new SendPrivateMessageClanLeaderMenuItem(i18n, clanService, chatService);
+  }
 
   @Test
   public void testSendMessageClanLeader() {
-    PlayerBean player = PlayerBeanBuilder.create().defaultValues().id(100).get();
-    when(playerService.getCurrentPlayer()).thenReturn(player);
+    when(clanService.getClanByTag(any())).thenReturn(
+        Mono.just(Instancio.of(Clan.class).set(field(Clan::leader), PlayerInfoBuilder.create()
+                                                                                              .defaultValues()
+                                                                                              .get())
+                                                                        .create()));
 
-    instance.setObject(ClanBeanBuilder.create().defaultValues().get());
+    instance.setObject(PlayerInfoBuilder.create().get());
     instance.onClicked();
-    verify(eventBus).post(any(InitiatePrivateChatEvent.class));
+    verify(chatService).joinPrivateChat(any());
   }
 
   @Test
   public void testVisibleItem() {
-    ClanBean clan = ClanBeanBuilder.create().defaultValues().get();
-    PlayerBean player = PlayerBeanBuilder.create().defaultValues().get();
-    when(playerService.getCurrentPlayer()).thenReturn(player);
-    when(playerService.isOnline(clan.getLeader().getId())).thenReturn(true);
-    instance.setObject(clan);
+    PlayerInfo player = PlayerInfoBuilder.create().defaultValues().get();
+    instance.setObject(player);
     assertTrue(instance.isVisible());
   }
 
   @Test
   public void testInvisibleItemWhenNoClan() {
     instance.setObject(null);
-    assertFalse(instance.isVisible());
-  }
-
-  @Test
-  public void testInvisibleItemWhenOwnPlayerIsLeader() {
-    ClanBean clan = ClanBeanBuilder.create().defaultValues().get();
-    when(playerService.getCurrentPlayer()).thenReturn(clan.getLeader());
-    instance.setObject(clan);
-    assertFalse(instance.isVisible());
-  }
-
-  @Test
-  public void testInvisibleItemWhenLeaderIsOffline() {
-    ClanBean clan = ClanBeanBuilder.create().defaultValues().get();
-    PlayerBean player = PlayerBeanBuilder.create().defaultValues().get();
-    when(playerService.getCurrentPlayer()).thenReturn(player);
-    when(playerService.isOnline(clan.getLeader().getId())).thenReturn(false);
-    instance.setObject(clan);
     assertFalse(instance.isVisible());
   }
 

@@ -1,30 +1,28 @@
 package com.faforever.client.preferences;
 
 import com.faforever.client.chat.ChatColorMode;
-import com.faforever.client.chat.ChatFormat;
 import com.faforever.client.chat.ChatUserCategory;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ImmutableMap;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.IntegerProperty;
-import javafx.beans.property.ListProperty;
 import javafx.beans.property.MapProperty;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.SimpleDoubleProperty;
 import javafx.beans.property.SimpleIntegerProperty;
-import javafx.beans.property.SimpleListProperty;
 import javafx.beans.property.SimpleMapProperty;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.collections.ObservableMap;
+import javafx.collections.ObservableSet;
 import javafx.scene.paint.Color;
-import lombok.AccessLevel;
-import lombok.experimental.FieldDefaults;
 
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 
 import static com.faforever.client.chat.ChatColorMode.DEFAULT;
@@ -32,43 +30,36 @@ import static com.faforever.client.preferences.LanguageChannel.FRENCH;
 import static com.faforever.client.preferences.LanguageChannel.GERMAN;
 import static com.faforever.client.preferences.LanguageChannel.RUSSIAN;
 
-@FieldDefaults(makeFinal=true, level= AccessLevel.PRIVATE)
+
 public class ChatPrefs {
 
   @VisibleForTesting
-  public static final ImmutableMap<Locale, LanguageChannel> LOCALE_LANGUAGES_TO_CHANNELS = ImmutableMap.<Locale, LanguageChannel>builder()
-      .put(Locale.FRENCH, FRENCH)
-      .put(Locale.GERMAN, GERMAN)
-      .put(new Locale("ru"), RUSSIAN)
-      .put(new Locale("be"), RUSSIAN)
-      .build();
+  public static final Map<Locale, LanguageChannel> LOCALE_LANGUAGES_TO_CHANNELS = Map.of(Locale.FRENCH, FRENCH,
+                                                                                         Locale.GERMAN, GERMAN,
+                                                                                         Locale.of("ru"), RUSSIAN,
+                                                                                         Locale.of("be"), RUSSIAN);
 
-  DoubleProperty zoom = new SimpleDoubleProperty(1);
-  BooleanProperty learnedAutoComplete = new SimpleBooleanProperty(false);
-  BooleanProperty previewImageUrls = new SimpleBooleanProperty(true);
-  IntegerProperty maxMessages = new SimpleIntegerProperty(500);
-  ObjectProperty<ChatColorMode> chatColorMode = new SimpleObjectProperty<>(DEFAULT);
-  IntegerProperty channelTabScrollPaneWidth = new SimpleIntegerProperty(250);
-  MapProperty<String, Color> userToColor = new SimpleMapProperty<>(FXCollections.observableHashMap());
-  MapProperty<ChatUserCategory, Color> groupToColor = new SimpleMapProperty<>(FXCollections.observableHashMap());
-  BooleanProperty hideFoeMessages = new SimpleBooleanProperty(true);
-  BooleanProperty playerListShown = new SimpleBooleanProperty(true);
-  ObjectProperty<TimeInfo> timeFormat = new SimpleObjectProperty<>(TimeInfo.AUTO);
-  ObjectProperty<DateInfo> dateFormat = new SimpleObjectProperty<>(DateInfo.AUTO);
-  ObjectProperty<ChatFormat> chatFormat = new SimpleObjectProperty<>(ChatFormat.COMPACT);
-  ListProperty<String> autoJoinChannels = new SimpleListProperty<>(FXCollections.observableArrayList());
-  /**
-   * Time in minutes a player has to be inactive to be considered idle.
-   */
-  IntegerProperty idleThreshold = new SimpleIntegerProperty(10);
-  BooleanProperty showMapName = new SimpleBooleanProperty(false);
-  BooleanProperty showMapPreview = new SimpleBooleanProperty(false);
-  MapProperty<String, ObservableList<ChatUserCategory>> channelNameToHiddenCategories = new SimpleMapProperty<>(FXCollections.observableHashMap());
+  private final DoubleProperty zoom = new SimpleDoubleProperty(1);
+  private final BooleanProperty previewImageUrls = new SimpleBooleanProperty(true);
+  private final IntegerProperty maxMessages = new SimpleIntegerProperty(500);
+  private final ObjectProperty<ChatColorMode> chatColorMode = new SimpleObjectProperty<>(DEFAULT);
+  private final MapProperty<String, Color> userToColor = new SimpleMapProperty<>(FXCollections.observableHashMap());
+  private final MapProperty<ChatUserCategory, Color> groupToColor = new SimpleMapProperty<>(
+      FXCollections.observableHashMap());
+  private final BooleanProperty hideFoeMessages = new SimpleBooleanProperty(true);
+  private final ObservableSet<String> mutedUsers = FXCollections.synchronizedObservableSet(
+      FXCollections.observableSet());
+  private final BooleanProperty playerListShown = new SimpleBooleanProperty(true);
+  private final ObjectProperty<TimeInfo> timeFormat = new SimpleObjectProperty<>(TimeInfo.AUTO);
+  private final ObservableList<String> autoJoinChannels = FXCollections.observableArrayList();
+  private final BooleanProperty showMapName = new SimpleBooleanProperty(false);
+  private final BooleanProperty showMapPreview = new SimpleBooleanProperty(false);
+  private final ObservableMap<String, ObservableSet<ChatUserCategory>> channelNameToHiddenCategories = FXCollections.synchronizedObservableMap(
+      FXCollections.observableHashMap());
 
   public ChatPrefs() {
-    Locale localeLanguage = new Locale(Locale.getDefault().getLanguage());
-    Optional.ofNullable(LOCALE_LANGUAGES_TO_CHANNELS.get(localeLanguage))
-        .ifPresent(channel -> autoJoinChannels.get().add(channel.getChannelName()));
+    Optional.ofNullable(LOCALE_LANGUAGES_TO_CHANNELS.get(Locale.of(Locale.getDefault().getLanguage())))
+            .ifPresent(channel -> autoJoinChannels.add(channel.getChannelName()));
   }
 
   public ChatColorMode getChatColorMode() {
@@ -87,26 +78,8 @@ public class ChatPrefs {
     this.timeFormat.set(time);
   }
 
-  @Deprecated
-  public DateInfo getDateFormat() {
-    return dateFormat.get();
-  }
-
-  @Deprecated
-  public void setDateFormat(DateInfo date) {
-    this.dateFormat.set(date);
-  }
-
-  public ChatFormat getChatFormat() {
-    return this.chatFormat.get();
-  }
-
-  public void setChatFormat(ChatFormat chatFormat) {
-    this.chatFormat.setValue(chatFormat);
-  }
-
-  public ObjectProperty<ChatFormat> chatFormatProperty() {
-    return chatFormat;
+  public ObjectProperty<TimeInfo> timeFormatProperty() {
+    return timeFormat;
   }
 
   public ObjectProperty<ChatColorMode> chatColorModeProperty() {
@@ -137,7 +110,7 @@ public class ChatPrefs {
     return groupToColor;
   }
 
-  public boolean getPreviewImageUrls() {
+  public boolean isPreviewImageUrls() {
     return previewImageUrls.get();
   }
 
@@ -149,8 +122,8 @@ public class ChatPrefs {
     return previewImageUrls;
   }
 
-  public Double getZoom() {
-    return zoom.getValue();
+  public double getZoom() {
+    return zoom.get();
   }
 
   public void setZoom(double zoom) {
@@ -159,18 +132,6 @@ public class ChatPrefs {
 
   public DoubleProperty zoomProperty() {
     return zoom;
-  }
-
-  public boolean getLearnedAutoComplete() {
-    return learnedAutoComplete.get();
-  }
-
-  public void setLearnedAutoComplete(boolean learnedAutoComplete) {
-    this.learnedAutoComplete.set(learnedAutoComplete);
-  }
-
-  public BooleanProperty learnedAutoCompleteProperty() {
-    return learnedAutoComplete;
   }
 
   public int getMaxMessages() {
@@ -185,20 +146,7 @@ public class ChatPrefs {
     return maxMessages;
   }
 
-  public int getChannelTabScrollPaneWidth() {
-    return channelTabScrollPaneWidth.get();
-  }
-
-  public void setChannelTabScrollPaneWidth(int channelTabScrollPaneWidth) {
-    this.channelTabScrollPaneWidth.set(channelTabScrollPaneWidth);
-  }
-
-  public IntegerProperty channelTabScrollPaneWidthProperty() {
-    return channelTabScrollPaneWidth;
-  }
-
-
-  public boolean getHideFoeMessages() {
+  public boolean isHideFoeMessages() {
     return hideFoeMessages.get();
   }
 
@@ -210,20 +158,19 @@ public class ChatPrefs {
     return hideFoeMessages;
   }
 
-  public int getIdleThreshold() {
-    return idleThreshold.get();
+  public ObservableSet<String> getMutedUsers() {
+    return mutedUsers;
   }
 
-  public void setIdleThreshold(int idleThreshold) {
-    this.idleThreshold.set(idleThreshold);
-  }
-
-  public IntegerProperty idleThresholdProperty() {
-    return idleThreshold;
+  public void setMutedUsers(Collection<String> mutedUsers) {
+    this.mutedUsers.clear();
+    if (mutedUsers != null) {
+      this.mutedUsers.addAll(new HashSet<>(mutedUsers));
+    }
   }
 
   public ObservableList<String> getAutoJoinChannels() {
-    return autoJoinChannels.get();
+    return autoJoinChannels;
   }
 
   public boolean isPlayerListShown() {
@@ -262,11 +209,12 @@ public class ChatPrefs {
     this.showMapName.set(showMapName);
   }
 
-  public MapProperty<String, ObservableList<ChatUserCategory>> getChannelNameToHiddenCategories() {
+  public ObservableMap<String, ObservableSet<ChatUserCategory>> getChannelNameToHiddenCategories() {
     return channelNameToHiddenCategories;
   }
 
-  public void setChannelNameToHiddenCategories(ObservableMap<String, ObservableList<ChatUserCategory>> channelNameToHiddenCategories) {
-    this.channelNameToHiddenCategories.set(channelNameToHiddenCategories);
+  public void setChannelNameToHiddenCategories(Map<String, ObservableSet<ChatUserCategory>> channelNameToHiddenCategories) {
+    this.channelNameToHiddenCategories.clear();
+    this.channelNameToHiddenCategories.putAll(channelNameToHiddenCategories);
   }
 }

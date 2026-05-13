@@ -1,17 +1,18 @@
 package com.faforever.client.tournament;
 
 
-import com.faforever.client.domain.TournamentBean;
+import com.faforever.client.domain.api.Tournament;
+import com.faforever.client.domain.api.Tournament.Status;
 import com.faforever.client.exception.AssetLoadException;
-import com.faforever.client.fx.AbstractViewController;
-import com.faforever.client.fx.JavaFxUtil;
+import com.faforever.client.fx.FxApplicationThreadExecutor;
+import com.faforever.client.fx.NodeController;
 import com.faforever.client.fx.WebViewConfigurer;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.main.event.NavigateEvent;
-import com.faforever.client.notification.NotificationService;
 import com.faforever.client.theme.UiService;
 import com.faforever.client.util.TimeService;
 import com.google.common.io.CharStreams;
+import javafx.collections.FXCollections;
 import javafx.scene.Node;
 import javafx.scene.control.ListView;
 import javafx.scene.layout.Pane;
@@ -33,7 +34,7 @@ import java.util.Comparator;
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
 @Slf4j
 @RequiredArgsConstructor
-public class TournamentsController extends AbstractViewController<Node> {
+public class TournamentsController extends NodeController<Node> {
   private static final ClassPathResource TOURNAMENT_DETAIL_HTML_RESOURCE = new ClassPathResource("/theme/tournaments/tournament_detail.html");
 
   private final TimeService timeService;
@@ -41,13 +42,13 @@ public class TournamentsController extends AbstractViewController<Node> {
   private final TournamentService tournamentService;
   private final UiService uiService;
   private final WebViewConfigurer webViewConfigurer;
-  private final NotificationService notificationService;
+  private final FxApplicationThreadExecutor fxApplicationThreadExecutor;
 
   public Pane tournamentRoot;
   public WebView tournamentDetailWebView;
   public Pane loadingIndicator;
   public Node contentPane;
-  public ListView<TournamentBean> tournamentListView;
+  public ListView<Tournament> tournamentListView;
 
   @Override
   public Node getRoot() {
@@ -55,7 +56,7 @@ public class TournamentsController extends AbstractViewController<Node> {
   }
 
   @Override
-  public void initialize() {
+  protected void onInitialize() {
     contentPane.managedProperty().bind(contentPane.visibleProperty());
     contentPane.setVisible(false);
 
@@ -64,11 +65,11 @@ public class TournamentsController extends AbstractViewController<Node> {
   }
 
   private void onLoadingStart() {
-    JavaFxUtil.runLater(() -> loadingIndicator.setVisible(true));
+    fxApplicationThreadExecutor.execute(() -> loadingIndicator.setVisible(true));
   }
 
   private void onLoadingStop() {
-    JavaFxUtil.runLater(() -> {
+    fxApplicationThreadExecutor.execute(() -> {
       tournamentRoot.getChildren().remove(loadingIndicator);
       loadingIndicator = null;
       contentPane.setVisible(true);
@@ -76,7 +77,7 @@ public class TournamentsController extends AbstractViewController<Node> {
   }
 
   @Override
-  protected void onDisplay(NavigateEvent navigateEvent) {
+  protected void onNavigate(NavigateEvent navigateEvent) {
     if (contentPane.isVisible()) {
       return;
     }
@@ -86,40 +87,41 @@ public class TournamentsController extends AbstractViewController<Node> {
     webViewConfigurer.configureWebView(tournamentDetailWebView);
 
     tournamentService.getAllTournaments()
-        .thenAccept(tournaments -> JavaFxUtil.runLater(() -> {
-          tournaments.sort(
-              Comparator.<TournamentBean, Integer>comparing(o -> o.getStatus().getSortOrderPriority())
-                  .thenComparing(TournamentBean::getCreatedAt)
-                  .reversed()
-          );
-          tournamentListView.getItems().setAll(tournaments);
-          tournamentListView.getSelectionModel().selectFirst();
-          onLoadingStop();
-        })).exceptionally(throwable -> {
-      log.error("Tournaments could not be loaded", throwable);
-      return null;
-    });
+                     .sort(Comparator.<Tournament, Status>comparing(Tournament::status)
+                                     .thenComparing(Tournament::createdAt)
+                                     .reversed())
+                     .collectList()
+                     .map(FXCollections::observableList)
+                     .publishOn(fxApplicationThreadExecutor.asScheduler())
+                     .subscribe(tournaments -> {
+                       tournamentListView.getItems().setAll(tournaments);
+                       tournamentListView.getSelectionModel().selectFirst();
+                       onLoadingStop();
+                     }, throwable -> log.error("Tournaments could not be loaded", throwable));
   }
 
-  private void displayTournamentItem(TournamentBean tournamentBean) {
+  private void displayTournamentItem(Tournament tournament) {
     String startingDate = i18n.get("tournament.noStartingDate");
-    if (tournamentBean.getStartingAt() != null) {
-      startingDate = MessageFormat.format(i18n.get("dateWithTime"), timeService.asDate(tournamentBean.getStartingAt()), timeService.asShortTime(tournamentBean.getStartingAt()));
+    if (tournament.startingAt() != null) {
+      startingDate = MessageFormat.format(i18n.get("dateWithTime"), timeService.asDate(tournament.startingAt()),
+                                          timeService.asShortTime(tournament.startingAt()));
     }
 
     String completedDate = i18n.get("tournament.noCompletionDate");
-    if (tournamentBean.getCompletedAt() != null) {
-      completedDate = MessageFormat.format(i18n.get("dateWithTime"), timeService.asDate(tournamentBean.getCompletedAt()), timeService.asShortTime(tournamentBean.getCompletedAt()));
+    if (tournament.completedAt() != null) {
+      completedDate = MessageFormat.format(i18n.get("dateWithTime"), timeService.asDate(tournament.completedAt()),
+                                           timeService.asShortTime(tournament.completedAt()));
     }
 
     try (Reader reader = new InputStreamReader(TOURNAMENT_DETAIL_HTML_RESOURCE.getInputStream())) {
-      String html = CharStreams.toString(reader).replace("{name}", tournamentBean.getName())
-          .replace("{challonge-url}", tournamentBean.getChallongeUrl())
-          .replace("{tournament-type}", tournamentBean.getTournamentType())
+      String html = CharStreams.toString(reader)
+                               .replace("{name}", tournament.name())
+                               .replace("{challonge-url}", tournament.challongeUrl())
+                               .replace("{tournament-type}", tournament.tournamentType())
           .replace("{starting-date}", startingDate)
           .replace("{completed-date}", completedDate)
-          .replace("{description}", tournamentBean.getDescription())
-          .replace("{tournament-image}", tournamentBean.getLiveImageUrl())
+                               .replace("{description}", tournament.description())
+                               .replace("{tournament-image}", tournament.liveImageUrl())
           .replace("{open-on-challonge-label}", i18n.get("tournament.openOnChallonge"))
           .replace("{game-type-label}", i18n.get("tournament.gameType"))
           .replace("{starting-at-label}", i18n.get("tournament.startingAt"))

@@ -1,16 +1,16 @@
 package com.faforever.client.update;
 
 import com.faforever.client.i18n.I18n;
-import com.faforever.client.preferences.PreferencesService;
+import com.faforever.client.preferences.DataPrefs;
 import com.faforever.client.task.CompletableTask;
 import com.faforever.client.task.ResourceLocks;
 import com.faforever.commons.io.ByteCopier;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
-import javax.inject.Inject;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -25,25 +25,25 @@ import java.nio.file.StandardCopyOption;
 public class DownloadUpdateTask extends CompletableTask<Path> {
 
   private final I18n i18n;
-  private final PreferencesService preferencesService;
+  private final DataPrefs dataPrefs;
 
   private UpdateInfo updateInfo;
 
-  @Inject
-  public DownloadUpdateTask(I18n i18n, PreferencesService preferencesService) {
+  @Autowired
+  public DownloadUpdateTask(I18n i18n, DataPrefs dataPrefs) {
     super(Priority.MEDIUM);
 
     this.i18n = i18n;
-    this.preferencesService = preferencesService;
+    this.dataPrefs = dataPrefs;
   }
 
   @Override
   protected Path call() throws Exception {
     updateTitle(i18n.get("clientUpdateDownloadTask.title"));
-    URL url = updateInfo.getUrl();
+    URL url = updateInfo.url();
 
-    Path updateDirectory = preferencesService.getPreferences().getData().getCacheDirectory().resolve("update");
-    Path targetFile = updateDirectory.resolve(updateInfo.getFileName());
+    Path updateDirectory = dataPrefs.getCacheDirectory().resolve("update");
+    Path targetFile = updateDirectory.resolve(updateInfo.fileName());
     Files.createDirectories(targetFile.getParent());
 
     Path tempFile = Files.createTempFile(targetFile.getParent(), "update", null);
@@ -52,7 +52,7 @@ public class DownloadUpdateTask extends CompletableTask<Path> {
     try (InputStream inputStream = url.openStream(); OutputStream outputStream = Files.newOutputStream(tempFile)) {
       ByteCopier.from(inputStream)
           .to(outputStream)
-          .totalBytes(updateInfo.getSize())
+                .totalBytes(updateInfo.size())
           .listener(this::updateProgress)
           .copy();
 

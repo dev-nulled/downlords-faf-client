@@ -1,7 +1,6 @@
 faf-client:
   server:
-    host: lobby.faforever.com
-    port: 8001
+    url: wss://ws.faforever.com
 
   irc:
     host: irc.faforever.com
@@ -14,24 +13,23 @@ faf-client:
   news:
     feed-url: https://direct.faforever.com/news/feed
 
-  replay:
-    remote-host: lobby.faforever.com
-    remote-port: 15000
-
   website:
     base-url: https://www.faforever.com
 
   api:
     base-url: https://api.faforever.com
-    client-id: 3bc8282c-7730-11e5-8bcf-feff819cdc9f
-    client-secret: 6035bd78-7730-11e5-8bcf-feff819cdc9f
 
   oauth:
     base-url: https://hydra.faforever.com
     scopes: openid offline public_profile upload_map upload_mod lobby
-    client-id: faf-java-client
+    client-id: 2e8808cf-5889-469b-b2c3-01f0cc58c4af
 
   forged-alliance:
     exe-url: https://content.faforever.com/faf/updaterNew/updates_faf_files/ForgedAlliance.exe
 
   use-remote-preferences: true
+
+spring:
+  reactor:
+    debug-agent:
+      enabled: false

@@ -4,17 +4,17 @@ import com.google.common.base.Strings;
 import com.sun.javafx.stage.PopupWindowHelper;
 import com.sun.jna.Pointer;
 import com.sun.jna.platform.win32.User32;
-import javafx.animation.KeyFrame;
-import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.beans.InvalidationListener;
 import javafx.beans.Observable;
+import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.IntegerProperty;
 import javafx.beans.property.MapProperty;
 import javafx.beans.property.Property;
 import javafx.beans.property.StringProperty;
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
+import javafx.collections.FXCollections;
 import javafx.collections.ListChangeListener;
 import javafx.collections.MapChangeListener;
 import javafx.collections.ObservableList;
@@ -25,25 +25,31 @@ import javafx.embed.swing.SwingFXUtils;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.Node;
 import javafx.scene.Parent;
+import javafx.scene.control.Labeled;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextField;
 import javafx.scene.control.Tooltip;
 import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.layout.AnchorPane;
 import javafx.scene.paint.Color;
 import javafx.stage.Screen;
 import javafx.stage.Stage;
-import javafx.util.Duration;
 import javafx.util.StringConverter;
 import javafx.util.converter.NumberStringConverter;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.tuple.Pair;
+import org.controlsfx.control.RangeSlider;
 import org.springframework.util.Assert;
 
 import java.awt.image.BufferedImage;
 import java.io.IOException;
-import java.lang.reflect.Field;
 import java.nio.file.Path;
+import java.text.DecimalFormat;
+import java.text.ParseException;
 import java.util.Arrays;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 import static java.nio.file.Files.createDirectories;
 import static javax.imageio.ImageIO.write;
@@ -104,31 +110,8 @@ public final class JavaFxUtil {
   }
 
   /**
-   * Uses reflection to change to tooltip delay/duration to some sane values.
-   * <p>
-   * See <a href="https://javafx-jira.kenai.com/browse/RT-19538">https://javafx-jira.kenai.com/browse/RT-19538</a>
-   */
-  public static void fixTooltipDuration() throws NoSuchFieldException, IllegalAccessException {
-    Field fieldBehavior = Tooltip.class.getDeclaredField("BEHAVIOR");
-    fieldBehavior.setAccessible(true);
-    Object objBehavior = fieldBehavior.get(null);
-
-    Field activationTimerField = objBehavior.getClass().getDeclaredField("activationTimer");
-    activationTimerField.setAccessible(true);
-    Timeline objTimer = (Timeline) activationTimerField.get(objBehavior);
-
-    objTimer.getKeyFrames().setAll(new KeyFrame(new Duration(500)));
-
-    Field hideTimerField = objBehavior.getClass().getDeclaredField("hideTimer");
-    hideTimerField.setAccessible(true);
-    objTimer = (Timeline) hideTimerField.get(objBehavior);
-
-    objTimer.getKeyFrames().setAll(new KeyFrame(new Duration(100000)));
-  }
-
-  /**
-   * Better version of {@link Tooltip#setGraphic(Node)} that does not add unnecessary space. Javadoc of {@link
-   * Tooltip#setGraphic(Node)} explains that this method is meant for adding icons.
+   * Better version of {@link Tooltip#setGraphic(Node)} that does not add unnecessary space. Javadoc of
+   * {@link Tooltip#setGraphic(Node)} explains that this method is meant for adding icons.
    *
    * @param content - The content of the tooltip.
    * @return New Tooltip with added content.
@@ -165,10 +148,7 @@ public final class JavaFxUtil {
     }
 
     Parent parent = node.getParent();
-    if (parent == null) {
-      return node.getScene() != null;
-    }
-    return isVisibleRecursively(parent);
+    return parent == null ? node.getScene() != null : isVisibleRecursively(parent);
   }
 
   public static String toRgbCode(Color color) {
@@ -179,59 +159,89 @@ public final class JavaFxUtil {
   }
 
   /**
-   * Updates the specified list with any changes made to the specified map, but not vice versa.
+   * Returns an unmodifiable observable list from the specified list that mirrors any changes made to the specified
+   * map.
    */
-  public static <K, V> void attachListToMap(ObservableList<V> list, ObservableMap<K, V> map) {
+  public static <K, V> ObservableList<K> attachListToMapKeys(ObservableList<K> list, ObservableMap<K, V> map) {
     addListener(map, (MapChangeListener<K, V>) change -> {
-      synchronized (list) {
-        if (change.wasRemoved()) {
-          list.remove(change.getValueRemoved());
-        }
-        if (change.wasAdded()) {
-          list.add(change.getValueAdded());
-        }
+      if (change.wasRemoved()) {
+        list.remove(change.getKey());
+      }
+      if (change.wasAdded()) {
+        list.add(change.getKey());
       }
     });
+    return FXCollections.unmodifiableObservableList(list);
+  }
+
+  /**
+   * Returns an unmodifiable observable list from the specified list that mirrors any changes made to the specified
+   * map.
+   */
+  public static <K, V> ObservableList<V> attachListToMap(ObservableList<V> list, ObservableMap<K, V> map) {
+    addListener(map, (MapChangeListener<K, V>) change -> {
+      if (change.wasRemoved()) {
+        list.remove(change.getValueRemoved());
+      }
+      if (change.wasAdded()) {
+        list.add(change.getValueAdded());
+      }
+    });
+    return FXCollections.unmodifiableObservableList(list);
+  }
+
+  /**
+   * Returns an unmodifiable observable list from the specified list that mirrors any changes made to the specified
+   * map.
+   */
+  public static <K, V> ObservableSet<V> attachSetToMap(ObservableSet<V> set, ObservableMap<K, V> map) {
+    addListener(map, (MapChangeListener<K, V>) change -> {
+      if (change.wasRemoved()) {
+        set.remove(change.getValueRemoved());
+      }
+      if (change.wasAdded()) {
+        set.add(change.getValueAdded());
+      }
+    });
+    return FXCollections.unmodifiableObservableSet(set);
   }
 
   public static void persistImage(Image image, Path path, String format) {
     if (image == null) {
       return;
     }
-    if (image.isBackgroundLoading() && image.getProgress() < 1) {
-      // Let's hope that loading doesn't finish before the listener is added
-      JavaFxUtil.addListener(image.progressProperty(), new ChangeListener<>() {
-        @Override
-        public void changed(ObservableValue<? extends Number> observable, Number oldValue, Number newValue) {
-          if (newValue.intValue() >= 1) {
-            writeImage(image, path, format);
-            image.progressProperty().removeListener(this);
-          }
+
+    JavaFxUtil.addAndTriggerListener(image.progressProperty(), new ChangeListener<>() {
+      @Override
+      public void changed(ObservableValue<? extends Number> observable, Number oldValue, Number newValue) {
+        if (newValue.intValue() >= 1) {
+          writeImageLater(image, path, format);
+          observable.removeListener(this);
         }
-      });
-    } else {
-      writeImage(image, path, format);
-    }
+      }
+    });
   }
 
-  private static void writeImage(Image image, Path path, String format) {
-    try {
-      if (image == null) {
-        return;
+  private static void writeImageLater(Image image, Path path, String format) {
+    CompletableFuture.runAsync(() -> {
+      try {
+        if (image == null) {
+          return;
+        }
+        if (path.getParent() != null) {
+          createDirectories(path.getParent());
+        }
+        BufferedImage bufferedImage = SwingFXUtils.fromFXImage(image, null);
+        if (bufferedImage == null) {
+          log.warn("Could not read image from {} for {}", image.getUrl(), path);
+          return;
+        }
+        write(bufferedImage, format, path.toFile());
+        log.trace("Image written to {}", path);
+      } catch (IOException e) {
+        log.warn("Could not write image to {}", path, e);
       }
-      if (path.getParent() != null) {
-        createDirectories(path.getParent());
-      }
-      BufferedImage bufferedImage = SwingFXUtils.fromFXImage(image, null);
-      if (bufferedImage == null) {
-        log.warn("Could not read image from {} for {}", image.getUrl(), path);
-        return;
-      }
-      write(bufferedImage, format, path.toFile());
-      log.trace("Image written to {}", path);
-    } catch (IOException e) {
-      log.warn("Could not write image to {}", path, e);
-    }
+    });
   }
 
   public static void setAnchors(Node node, double value) {
@@ -271,50 +281,6 @@ public final class JavaFxUtil {
     synchronized (observable) {
       observable.addListener(listener);
       listener.invalidated(observable);
-    }
-  }
-
-  /**
-   * Since the JavaFX properties API is not thread safe, adding listeners must be synchronized on the property - which
-   * is what this method does. Also manually triggers listener after adding.
-   */
-  public static <K, V> void addAndTriggerListener(ObservableMap<K, V> observable, MapChangeListener<K, V> listener) {
-    synchronized (observable) {
-      observable.addListener(listener);
-      listener.onChanged(null);
-    }
-  }
-
-  /**
-   * Since the JavaFX properties API is not thread safe, adding listeners must be synchronized on the property - which
-   * is what this method does. Also manually triggers listener after adding.
-   */
-  public static <T> void addAndTriggerListener(ObservableList<T> observable, ListChangeListener<T> listener) {
-    synchronized (observable) {
-      observable.addListener(listener);
-      listener.onChanged(null);
-    }
-  }
-
-  /**
-   * Since the JavaFX properties API is not thread safe, adding listeners must be synchronized on the property - which
-   * is what this method does. Also manually triggers listener after adding.
-   */
-  public static <K, V> void addAndTriggerListener(MapProperty<K, V> mapProperty, MapChangeListener<? super K, ? super V> listener) {
-    synchronized (mapProperty) {
-      mapProperty.addListener(listener);
-      listener.onChanged(null);
-    }
-  }
-
-  /**
-   * Since the JavaFX properties API is not thread safe, adding listeners must be synchronized on the property - which
-   * is what this method does. Also manually triggers listener after adding.
-   */
-  public static <T> void addAndTriggerListener(ObservableSet<T> set, SetChangeListener<T> listener) {
-    synchronized (set) {
-      set.addListener(listener);
-      listener.onChanged(null);
     }
   }
 
@@ -362,7 +328,8 @@ public final class JavaFxUtil {
    * Since the JavaFX properties API is not thread safe, adding listeners must be synchronized on the property - which
    * is what this method does.
    */
-  public static <K, V> void addListener(MapProperty<K, V> mapProperty, MapChangeListener<? super K, ? super V> listener) {
+  public static <K, V> void addListener(MapProperty<K, V> mapProperty,
+                                        MapChangeListener<? super K, ? super V> listener) {
     synchronized (mapProperty) {
       mapProperty.addListener(listener);
     }
@@ -440,12 +407,13 @@ public final class JavaFxUtil {
 
   /**
    * Since the JavaFX properties API is not thread safe, binding properties must be synchronized on the properties -
-   * which is what this method does. Since synchronization happens on both property in order {@code property1,
-   * property2}, this is prone to deadlocks. To avoid this, pass the property with the lower visibility (e.g. method- or
-   * controller-only) as first and the property with higher visibility (e.g. a property from a shared object or service)
-   * as second parameter.
+   * which is what this method does. Since synchronization happens on both property in order
+   * {@code property1, property2}, this is prone to deadlocks. To avoid this, pass the property with the lower
+   * visibility (e.g. method- or controller-only) as first and the property with higher visibility (e.g. a property from
+   * a shared object or service) as second parameter.
    */
-  public static void bindBidirectional(StringProperty stringProperty, IntegerProperty integerProperty, NumberStringConverter numberStringConverter) {
+  public static void bindBidirectional(StringProperty stringProperty, IntegerProperty integerProperty,
+                                       NumberStringConverter numberStringConverter) {
     synchronized (stringProperty) {
       synchronized (integerProperty) {
         stringProperty.bindBidirectional(integerProperty, numberStringConverter);
@@ -455,10 +423,10 @@ public final class JavaFxUtil {
 
   /**
    * Since the JavaFX properties API is not thread safe, binding properties must be synchronized on the properties -
-   * which is what this method does. Since synchronization happens on both property in order {@code property1,
-   * property2}, this is prone to deadlocks. To avoid this, pass the property with the lower visibility (e.g. method- or
-   * controller-only) as first and the property with higher visibility (e.g. a property from a shared object or service)
-   * as second parameter.
+   * which is what this method does. Since synchronization happens on both property in order
+   * {@code property1, property2}, this is prone to deadlocks. To avoid this, pass the property with the lower
+   * visibility (e.g. method- or controller-only) as first and the property with higher visibility (e.g. a property from
+   * a shared object or service) as second parameter.
    */
   public static <T> void bindBidirectional(Property<T> property1, Property<T> property2) {
     synchronized (property1) {
@@ -473,19 +441,59 @@ public final class JavaFxUtil {
     return User32.INSTANCE.GetActiveWindow().getPointer();
   }
 
-  public static void runLater(Runnable runnable) {
-    if (Platform.isFxApplicationThread()) {
-      try {
-        runnable.run();
-      } catch (Exception e) {
-        log.error("Uncaught Application Thread Error", e);
-      }
-    } else {
-      Platform.runLater(runnable);
-    }
-  }
-
   public static void bindManagedToVisible(Node... nodes) {
     Arrays.stream(nodes).forEach(node -> node.managedProperty().bind(node.visibleProperty()));
+  }
+
+  public static void bindVisibleToTextNotEmpty(Labeled... labeleds) {
+    Arrays.stream(labeleds).forEach(labeled -> labeled.visibleProperty().bind(labeled.textProperty().isNotEmpty()));
+  }
+
+  public static void bindVisibleToImageNotNull(ImageView... images) {
+    Arrays.stream(images).forEach(image -> image.visibleProperty().bind(image.imageProperty().isNotNull()));
+  }
+
+  public static void bindTextFieldAndRangeSlider(TextField lowValueTextField, TextField highValueTextField,
+                                                 RangeSlider rangeSlider) {
+    DecimalFormat numberFormat = (DecimalFormat) DecimalFormat.getInstance();
+    numberFormat.setMaximumFractionDigits(0);
+    bindTextFieldAndRangeSlider(lowValueTextField, highValueTextField, rangeSlider, numberFormat);
+  }
+
+  public static void bindTextFieldAndRangeSlider(TextField lowValueTextField, TextField highValueTextField,
+                                                 RangeSlider rangeSlider, DecimalFormat format) {
+    Map.of(
+        lowValueTextField, Pair.of(rangeSlider.lowValueProperty(), rangeSlider.getMin()),
+        highValueTextField, Pair.of(rangeSlider.highValueProperty(), rangeSlider.getMax())
+    ).forEach((textField, pair) -> {
+      DoubleProperty valueProperty = pair.getLeft();
+      Double value = pair.getRight();
+      textField.textProperty().bindBidirectional(valueProperty, new StringConverter<>() {
+        @Override
+        public String toString(Number number) {
+          if (!number.equals(value)) {
+            return format.format(number);
+          } else {
+            return "";
+          }
+        }
+
+        @Override
+        public Number fromString(String string) {
+          String decimalSeparator = Character.toString(format.getDecimalFormatSymbols().getDecimalSeparator());
+          try {
+            Number number = format.parse(string);
+            String decimalSeparatorSuffix = string.endsWith(decimalSeparator) && format.getMaximumFractionDigits() > 0 ? decimalSeparator : "";
+            textField.setText(format.format(number) + decimalSeparatorSuffix);
+            return number;
+          } catch (ParseException e) {
+            if (!string.equals("-") && !string.equals(decimalSeparator)) {
+              textField.setText("");
+            }
+            return value;
+          }
+        }
+      });
+    });
   }
 }

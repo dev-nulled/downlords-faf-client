@@ -3,18 +3,20 @@ package com.faforever.client.player;
 import ch.micheljung.fxwindow.FxStage;
 import com.faforever.client.achievements.AchievementItemController;
 import com.faforever.client.achievements.AchievementService;
-import com.faforever.client.domain.LeaderboardBean;
-import com.faforever.client.domain.LeaderboardRatingBean;
-import com.faforever.client.domain.LeaderboardRatingJournalBean;
-import com.faforever.client.domain.NameRecordBean;
-import com.faforever.client.domain.PlayerBean;
-import com.faforever.client.fx.Controller;
+import com.faforever.client.domain.api.Leaderboard;
+import com.faforever.client.domain.api.LeaderboardRatingJournal;
+import com.faforever.client.domain.api.NameRecord;
+import com.faforever.client.domain.server.PlayerInfo;
+import com.faforever.client.fx.FxApplicationThreadExecutor;
 import com.faforever.client.fx.JavaFxUtil;
+import com.faforever.client.fx.NodeController;
+import com.faforever.client.fx.ObservableConstant;
 import com.faforever.client.fx.OffsetDateTimeCell;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.leaderboard.LeaderboardService;
 import com.faforever.client.notification.NotificationService;
 import com.faforever.client.stats.StatisticsService;
+import com.faforever.client.theme.ThemeService;
 import com.faforever.client.theme.UiService;
 import com.faforever.client.util.Assert;
 import com.faforever.client.util.RatingUtil;
@@ -53,6 +55,7 @@ import org.jetbrains.annotations.NotNull;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
+import reactor.core.publisher.Mono;
 
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -63,7 +66,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 import static com.faforever.client.player.EventService.EVENT_AEON_PLAYS;
@@ -86,7 +88,7 @@ import static javafx.collections.FXCollections.observableList;
 @Component
 @Slf4j
 @RequiredArgsConstructor
-public class PlayerInfoWindowController implements Controller<Node> {
+public class PlayerInfoWindowController extends NodeController<Node> {
 
   private final StatisticsService statisticsService;
   private final CountryFlagService countryFlagService;
@@ -94,12 +96,16 @@ public class PlayerInfoWindowController implements Controller<Node> {
   private final EventService eventService;
   private final I18n i18n;
   private final UiService uiService;
+  private final ThemeService themeService;
   private final TimeService timeService;
   private final PlayerService playerService;
   private final NotificationService notificationService;
   private final LeaderboardService leaderboardService;
+  private final FxApplicationThreadExecutor fxApplicationThreadExecutor;
+
   private final Map<String, AchievementItemController> achievementItemById = new HashMap<>();
   private final Map<String, AchievementDefinition> achievementDefinitionById = new HashMap<>();
+
   public Label lockedAchievementsHeaderLabel;
   public Label unlockedAchievementsHeaderLabel;
   public PieChart gamesPlayedChart;
@@ -121,89 +127,107 @@ public class PlayerInfoWindowController implements Controller<Node> {
   public NumberAxis xAxis;
   public PlayerRatingChart ratingHistoryChart;
   public VBox loadingHistoryPane;
+  public HBox selectionStatsPane;
+  public Label selectionDateRangeLabel;
+  public Label selectionMinRatingLabel;
+  public Label selectionMaxRatingLabel;
   public ComboBox<TimePeriod> timePeriodComboBox;
-  public ComboBox<LeaderboardBean> ratingTypeComboBox;
+  public ComboBox<Leaderboard> ratingTypeComboBox;
   public Label usernameLabel;
   public Label countryLabel;
   public ImageView countryImageView;
   public Pane userInfoRoot;
-  public TableView<NameRecordBean> nameHistoryTable;
-  public TableColumn<NameRecordBean, OffsetDateTime> changeDateColumn;
-  public TableColumn<NameRecordBean, String> nameColumn;
-  private PlayerBean player;
+  public TableView<NameRecord> nameHistoryTable;
+  public TableColumn<NameRecord, OffsetDateTime> changeDateColumn;
+  public TableColumn<NameRecord, String> nameColumn;
+  private PlayerInfo player;
   private Window ownerWindow;
-  private List<LeaderboardRatingJournalBean> ratingData;
+  private List<LeaderboardRatingJournal> ratingData;
 
   private static boolean isUnlocked(PlayerAchievement playerAchievement) {
     return AchievementState.UNLOCKED == AchievementState.valueOf(playerAchievement.getState().name());
   }
 
-  public void initialize() {
-    JavaFxUtil.bindManagedToVisible(loadingHistoryPane, loadingProgressLabel, achievementsPane, mostRecentAchievementPane,
-        unlockedAchievementsHeader, unlockedAchievementsContainer, lockedAchievementsHeader, lockedAchievementsContainer,
-        ratingHistoryChart);
+  @Override
+  protected void onInitialize() {
+    JavaFxUtil.bindManagedToVisible(loadingHistoryPane, loadingProgressLabel, achievementsPane,
+                                    mostRecentAchievementPane, unlockedAchievementsHeader,
+                                    unlockedAchievementsContainer, lockedAchievementsHeader,
+                                    lockedAchievementsContainer, ratingHistoryChart, selectionStatsPane);
 
     unlockedAchievementsHeader.visibleProperty().bind(unlockedAchievementsContainer.visibleProperty());
-    unlockedAchievementsContainer.visibleProperty().bind(Bindings.createBooleanBinding(
-        () -> !unlockedAchievementsContainer.getChildren().isEmpty(), unlockedAchievementsContainer.getChildren()));
+    unlockedAchievementsContainer.visibleProperty()
+                                 .bind(Bindings.createBooleanBinding(
+                                     () -> !unlockedAchievementsContainer.getChildren().isEmpty(),
+                                     unlockedAchievementsContainer.getChildren()));
 
     lockedAchievementsHeader.visibleProperty().bind(lockedAchievementsContainer.visibleProperty());
-    lockedAchievementsContainer.visibleProperty().bind(Bindings.createBooleanBinding(
-        () -> !lockedAchievementsContainer.getChildren().isEmpty(), lockedAchievementsContainer.getChildren()));
+    lockedAchievementsContainer.visibleProperty()
+                               .bind(Bindings.createBooleanBinding(
+                                   () -> !lockedAchievementsContainer.getChildren().isEmpty(),
+                                   lockedAchievementsContainer.getChildren()));
 
-    lockedAchievementsContainer.getChildren().addListener((InvalidationListener) observable ->
-        lockedAchievementsHeaderLabel.setText(i18n.get("achievements.locked", lockedAchievementsContainer.getChildren().size()))
-    );
-    unlockedAchievementsContainer.getChildren().addListener((InvalidationListener) observable ->
-        unlockedAchievementsHeaderLabel.setText(i18n.get("achievements.unlocked", unlockedAchievementsContainer.getChildren().size()))
-    );
+    lockedAchievementsContainer.getChildren()
+                               .addListener((InvalidationListener) observable -> lockedAchievementsHeaderLabel.setText(
+                                   i18n.get("achievements.locked", lockedAchievementsContainer.getChildren().size())));
+    unlockedAchievementsContainer.getChildren()
+                                 .addListener(
+                                     (InvalidationListener) observable -> unlockedAchievementsHeaderLabel.setText(
+                                         i18n.get("achievements.unlocked",
+                                                  unlockedAchievementsContainer.getChildren().size())));
 
-    nameColumn.setCellValueFactory(param -> param.getValue().nameProperty());
-    changeDateColumn.setCellValueFactory(param -> param.getValue().changeTimeProperty());
+    nameColumn.setCellValueFactory(param -> ObservableConstant.valueOf(param.getValue().name()));
+    changeDateColumn.setCellValueFactory(param -> ObservableConstant.valueOf(param.getValue().changeTime()));
     changeDateColumn.setCellFactory(param -> new OffsetDateTimeCell<>(timeService));
 
     timePeriodComboBox.setConverter(timePeriodStringConverter());
 
     timePeriodComboBox.getItems().addAll(TimePeriod.values());
-    timePeriodComboBox.setValue(TimePeriod.ALL_TIME);
+    timePeriodComboBox.setValue(TimePeriod.LAST_MONTH);
 
-    leaderboardService.getLeaderboards().thenAccept(leaderboards -> JavaFxUtil.runLater(() -> {
-      ratingTypeComboBox.getItems().clear();
-      ratingTypeComboBox.getItems().addAll(leaderboards);
-      ratingTypeComboBox.setConverter(leaderboardStringConverter());
-      ratingTypeComboBox.getSelectionModel().selectFirst();
-    }));
+    ratingTypeComboBox.setConverter(leaderboardStringConverter());
+
+    leaderboardService.getLeaderboards()
+                      .collectList()
+                      .map(FXCollections::observableList)
+                      .publishOn(fxApplicationThreadExecutor.asScheduler())
+                      .subscribe(leaderboards -> {
+                        ratingTypeComboBox.setItems(leaderboards);
+                        ratingTypeComboBox.getSelectionModel().selectFirst();
+                      });
 
     ratingData = List.of();
     ratingHistoryChart.initializeTooltip(uiService);
+    ratingHistoryChart.selectionRangeProperty().addListener((observable, oldRange, newRange) -> onChartSelection(newRange));
   }
 
+  @Override
   public Region getRoot() {
     return userInfoRoot;
   }
 
   private void setAvailableAchievements(List<AchievementDefinition> achievementDefinitions) {
     ObservableList<Node> children = lockedAchievementsContainer.getChildren();
-    JavaFxUtil.runLater(children::clear);
+    fxApplicationThreadExecutor.execute(children::clear);
 
     achievementDefinitions.forEach(achievementDefinition -> {
       AchievementItemController controller = uiService.loadFxml("theme/achievement_item.fxml");
       controller.setAchievementDefinition(achievementDefinition);
       achievementDefinitionById.put(achievementDefinition.getId(), achievementDefinition);
       achievementItemById.put(achievementDefinition.getId(), controller);
-      JavaFxUtil.runLater(() -> children.add(controller.getRoot()));
+      fxApplicationThreadExecutor.execute(() -> children.add(controller.getRoot()));
     });
   }
 
-  public void setPlayer(PlayerBean player) {
+  public void setPlayer(PlayerInfo player) {
     if (player.getLeaderboardRatings().isEmpty()) {
-      updateRatings(player).thenAccept(updatedPlayer -> JavaFxUtil.runLater(() -> setOnlinePlayer(updatedPlayer)));
+      updateRatings(player).publishOn(fxApplicationThreadExecutor.asScheduler()).subscribe(this::setOnlinePlayer);
     } else {
       setOnlinePlayer(player);
     }
   }
 
-  public void setOnlinePlayer(PlayerBean player) {
+  public void setOnlinePlayer(PlayerInfo player) {
     this.player = player;
 
     usernameLabel.setText(player.getUsername());
@@ -216,107 +240,114 @@ public class PlayerInfoWindowController implements Controller<Node> {
     onRatingTypeChange();
 
     loadAchievements();
-    eventService.getPlayerEvents(player.getId())
-        .thenAccept(events -> {
-          plotFactionsChart(events);
-          plotUnitsByCategoriesChart(events);
-          plotTechBuiltChart(events);
-          plotGamesPlayedChart();
-        })
-        .exceptionally(throwable -> {
-          log.error("Could not load player events", throwable);
-          notificationService.addImmediateErrorNotification(throwable, "userInfo.statistics.errorLoading");
-          return null;
-        });
-  }
-
-  public CompletableFuture<PlayerBean> updateRatings(PlayerBean player) {
-    return leaderboardService.getEntriesForPlayer(player).thenApply(leaderboardEntryBeans -> {
-      Map<String, LeaderboardRatingBean> ratingMap = new HashMap<>();
-      leaderboardEntryBeans.forEach(leaderboardEntryBean -> {
-        LeaderboardRatingBean rating = new LeaderboardRatingBean();
-        rating.setDeviation(0);
-        rating.setMean((float) leaderboardEntryBean.getRating());
-        rating.setNumberOfGames(leaderboardEntryBean.getGamesPlayed());
-        ratingMap.put(leaderboardEntryBean.getLeaderboard().getTechnicalName(), rating);
-      });
-      player.setLeaderboardRatings(ratingMap);
-      return player;
+    eventService.getPlayerEvents(player.getId()).collectMap(playerEvent -> playerEvent.getEvent().getId()).subscribe(events -> {
+      plotFactionsChart(events);
+      plotUnitsByCategoriesChart(events);
+      plotTechBuiltChart(events);
+      plotGamesPlayedChart();
+    }, throwable -> {
+      log.error("Could not load player events", throwable);
+      notificationService.addImmediateErrorNotification(throwable, "userInfo.statistics.errorLoading");
     });
   }
 
+  public Mono<PlayerInfo> updateRatings(PlayerInfo player) {
+    return leaderboardService.getEntriesForPlayer(player).collectList().doOnNext(leaderboardEntryBeans -> {
+      Map<String, LeaderboardRating> ratingMap = new HashMap<>();
+      leaderboardEntryBeans.forEach(leaderboardEntryBean -> {
+        LeaderboardRating rating = new LeaderboardRating(0, leaderboardEntryBean.rating(),
+                                                         leaderboardEntryBean.gamesPlayed());
+        ratingMap.put(leaderboardEntryBean.leaderboard().technicalName(), rating);
+      });
+      player.setLeaderboardRatings(ratingMap);
+    }).thenReturn(player);
+  }
+
   private void updateRatingGrids() {
-    leaderboardService.getLeaderboards().thenAccept(leaderboards ->
-      leaderboardService.getActiveSeasons().thenAccept(leagueSeasonBeans ->
-        leaderboards.forEach(leaderboard -> {
-          LeaderboardRatingBean leaderboardRating = player.getLeaderboardRatings().get(leaderboard.getTechnicalName());
-          if (leaderboardRating != null) {
-            UserLeaderboardInfoController controller = uiService.loadFxml("theme/user_leaderboard_info.fxml");
-            controller.setLeaderboardInfo(player, leaderboard);
+    leaderboardService.getLeaderboards()
+                      .collectList()
+                      .subscribe(leaderboards -> leaderboardService.getActiveSeasons()
+                                                                   .collectList()
+                                                                   .subscribe(leagueSeasonBeans -> leaderboards.forEach(
+                                                                       leaderboard -> {
+                                                                         LeaderboardRating leaderboardRating = player.getLeaderboardRatings()
+                                                                                                                     .get(
+                                                                                                                             leaderboard.technicalName());
+                                                                         if (leaderboardRating != null) {
+                                                                           UserLeaderboardInfoController controller = uiService.loadFxml(
+                                                                               "theme/user_leaderboard_info.fxml");
+                                                                           controller.setLeaderboardInfo(player,
+                                                                                                         leaderboard);
 
-            if (leagueSeasonBeans.stream().anyMatch(season -> Objects.equals(season.getLeaderboard(), leaderboard))) {
-              leaderboardService.getActiveLeagueEntryForPlayer(player, leaderboard).thenAccept(leagueEntry ->
-                  leagueEntry.ifPresentOrElse(controller::setLeagueInfo, controller::setUnlistedLeague));
-            }
+                                                                           if (leagueSeasonBeans.stream()
+                                                                                                .anyMatch(
+                                                                                                    season -> Objects.equals(
+                                                                                                        season.leagueLeaderboard()
+                                                                                                              .technicalName(),
+                                                                                                        leaderboard.technicalName()))) {
+                                                                             leaderboardService.getActiveLeagueEntryForPlayer(
+                                                                                                   player, leaderboard.technicalName())
+                                                                                               .subscribe(
+                                                                                                   controller::setLeagueInfo);
+                                                                           }
 
-            JavaFxUtil.runLater(() -> leaderboardBox.getChildren().add(controller.getRoot()));
-          }
-        })
-      )
-    );
+                                                                           fxApplicationThreadExecutor.execute(
+                                                                               () -> leaderboardBox.getChildren()
+                                                                                                   .add(
+                                                                                                       controller.getRoot()));
+                                                                         }
+                                                                       })));
   }
 
   private void updateNameHistory() {
     playerService.getPlayerNames(player)
-        .thenAccept(names -> nameHistoryTable.setItems(FXCollections.observableList(names)))
-        .exceptionally(throwable -> {
-          log.error("Could not load player name history", throwable);
-          notificationService.addImmediateErrorNotification(throwable, "userInfo.nameHistory.errorLoading");
-          return null;
-        });
+                 .collectList()
+                 .map(FXCollections::observableList)
+                 .publishOn(fxApplicationThreadExecutor.asScheduler())
+                 .subscribe(nameHistoryTable::setItems, throwable -> {
+                   log.error("Could not load player name history", throwable);
+                   notificationService.addImmediateErrorNotification(throwable, "userInfo.nameHistory.errorLoading");
+                 });
   }
 
   private void loadAchievements() {
     enterAchievementsLoadingState();
     achievementService.getAchievementDefinitions()
-        .exceptionally(throwable -> {
-          log.error("Player achievements could not be loaded", throwable);
-          notificationService.addImmediateErrorNotification(throwable, "userInfo.achievements.errorLoading");
-          return Collections.emptyList();
-        })
-        .thenAccept(this::setAvailableAchievements)
-        .exceptionally(throwable -> {
-          log.error("Could not set available achievements", throwable);
-          notificationService.addImmediateErrorNotification(throwable, "userInfo.achievements.errorLDisplaying");
-          return null;
-        })
-        .thenCompose(aVoid -> achievementService.getPlayerAchievements(player.getId()))
-        .exceptionally(throwable -> {
-          log.error("Could not get PlayerAchievements", throwable);
-          notificationService.addImmediateErrorNotification(throwable, "userInfo.achievements.errorLDisplaying");
-          return null;
-        })
-        .thenAccept(playerAchievements -> {
-          updatePlayerAchievements(playerAchievements);
-          enterAchievementsLoadedState();
-        })
-        .exceptionally(throwable -> {
-          log.warn("Could not display achievement definitions", throwable);
-          notificationService.addImmediateErrorNotification(throwable, "userInfo.achievements.errorLDisplaying");
-          return null;
-        });
+                      .onErrorResume(throwable -> {
+                        log.error("Player achievements could not be loaded", throwable);
+                        notificationService.addImmediateErrorNotification(throwable,
+                                                                          "userInfo.achievements.errorLoading");
+                        return Mono.empty();
+                      })
+                      .collectList()
+                      .doOnNext(this::setAvailableAchievements)
+                      .flatMapMany(aVoid -> achievementService.getPlayerAchievements(player.getId()))
+                      .collectList()
+                      .subscribe(playerAchievements -> {
+                        updatePlayerAchievements(playerAchievements);
+                        enterAchievementsLoadedState();
+                      }, throwable -> {
+                        log.warn("Could not display achievement definitions", throwable);
+                        notificationService.addImmediateErrorNotification(throwable,
+                                                                          "userInfo.achievements.errorLDisplaying");
+                      });
   }
 
   private void plotFactionsChart(Map<String, PlayerEvent> playerEvents) {
-    int aeonPlays = playerEvents.containsKey(EVENT_AEON_PLAYS) ? playerEvents.get(EVENT_AEON_PLAYS).getCurrentCount() : 0;
-    int cybranPlays = playerEvents.containsKey(EVENT_CYBRAN_PLAYS) ? playerEvents.get(EVENT_CYBRAN_PLAYS).getCurrentCount() : 0;
+    int aeonPlays = playerEvents.containsKey(EVENT_AEON_PLAYS) ? playerEvents.get(EVENT_AEON_PLAYS)
+                                                                             .getCurrentCount() : 0;
+    int cybranPlays = playerEvents.containsKey(EVENT_CYBRAN_PLAYS) ? playerEvents.get(EVENT_CYBRAN_PLAYS)
+                                                                                 .getCurrentCount() : 0;
     int uefPlays = playerEvents.containsKey(EVENT_UEF_PLAYS) ? playerEvents.get(EVENT_UEF_PLAYS).getCurrentCount() : 0;
-    int seraphimPlays = playerEvents.containsKey(EVENT_SERAPHIM_PLAYS) ? playerEvents.get(EVENT_SERAPHIM_PLAYS).getCurrentCount() : 0;
+    int seraphimPlays = playerEvents.containsKey(EVENT_SERAPHIM_PLAYS) ? playerEvents.get(EVENT_SERAPHIM_PLAYS)
+                                                                                     .getCurrentCount() : 0;
 
     int aeonWins = playerEvents.containsKey(EVENT_AEON_WINS) ? playerEvents.get(EVENT_AEON_WINS).getCurrentCount() : 0;
-    int cybranWins = playerEvents.containsKey(EVENT_CYBRAN_WINS) ? playerEvents.get(EVENT_CYBRAN_WINS).getCurrentCount() : 0;
+    int cybranWins = playerEvents.containsKey(EVENT_CYBRAN_WINS) ? playerEvents.get(EVENT_CYBRAN_WINS)
+                                                                               .getCurrentCount() : 0;
     int uefWins = playerEvents.containsKey(EVENT_UEF_WINS) ? playerEvents.get(EVENT_UEF_WINS).getCurrentCount() : 0;
-    int seraphimWins = playerEvents.containsKey(EVENT_SERAPHIM_WINS) ? playerEvents.get(EVENT_SERAPHIM_WINS).getCurrentCount() : 0;
+    int seraphimWins = playerEvents.containsKey(EVENT_SERAPHIM_WINS) ? playerEvents.get(EVENT_SERAPHIM_WINS)
+                                                                                   .getCurrentCount() : 0;
 
     XYChart.Series<String, Integer> winsSeries = new XYChart.Series<>();
     winsSeries.setName(i18n.get("userInfo.wins"));
@@ -332,43 +363,54 @@ public class PlayerInfoWindowController implements Controller<Node> {
     lossSeries.getData().add(new XYChart.Data<>("UEF", uefPlays - uefWins));
     lossSeries.getData().add(new XYChart.Data<>("Seraphim", seraphimPlays - seraphimWins));
 
-    JavaFxUtil.runLater(() -> factionsChart.getData().addAll(List.of(winsSeries, lossSeries)));
+    fxApplicationThreadExecutor.execute(() -> factionsChart.getData().addAll(List.of(winsSeries, lossSeries)));
   }
 
   private void plotUnitsByCategoriesChart(Map<String, PlayerEvent> playerEvents) {
-    int airBuilt = playerEvents.containsKey(EVENT_BUILT_AIR_UNITS) ? playerEvents.get(EVENT_BUILT_AIR_UNITS).getCurrentCount() : 0;
-    int landBuilt = playerEvents.containsKey(EVENT_BUILT_LAND_UNITS) ? playerEvents.get(EVENT_BUILT_LAND_UNITS).getCurrentCount() : 0;
-    int navalBuilt = playerEvents.containsKey(EVENT_BUILT_NAVAL_UNITS) ? playerEvents.get(EVENT_BUILT_NAVAL_UNITS).getCurrentCount() : 0;
+    int airBuilt = playerEvents.containsKey(EVENT_BUILT_AIR_UNITS) ? playerEvents.get(EVENT_BUILT_AIR_UNITS)
+                                                                                 .getCurrentCount() : 0;
+    int landBuilt = playerEvents.containsKey(EVENT_BUILT_LAND_UNITS) ? playerEvents.get(EVENT_BUILT_LAND_UNITS)
+                                                                                   .getCurrentCount() : 0;
+    int navalBuilt = playerEvents.containsKey(EVENT_BUILT_NAVAL_UNITS) ? playerEvents.get(EVENT_BUILT_NAVAL_UNITS)
+                                                                                     .getCurrentCount() : 0;
 
-    JavaFxUtil.runLater(() -> unitsBuiltChart.setData(FXCollections.observableArrayList(
-        new PieChart.Data(i18n.get("stats.air"), airBuilt),
-        new PieChart.Data(i18n.get("stats.land"), landBuilt),
-        new PieChart.Data(i18n.get("stats.naval"), navalBuilt)
-    )));
+    fxApplicationThreadExecutor.execute(() -> unitsBuiltChart.setData(
+        FXCollections.observableArrayList(new PieChart.Data(i18n.get("stats.air"), airBuilt),
+                                          new PieChart.Data(i18n.get("stats.land"), landBuilt),
+                                          new PieChart.Data(i18n.get("stats.naval"), navalBuilt))));
   }
 
   private void plotTechBuiltChart(Map<String, PlayerEvent> playerEvents) {
-    int tech1Built = playerEvents.containsKey(EVENT_BUILT_TECH_1_UNITS) ? playerEvents.get(EVENT_BUILT_TECH_1_UNITS).getCurrentCount() : 0;
-    int tech2Built = playerEvents.containsKey(EVENT_BUILT_TECH_2_UNITS) ? playerEvents.get(EVENT_BUILT_TECH_2_UNITS).getCurrentCount() : 0;
-    int tech3Built = playerEvents.containsKey(EVENT_BUILT_TECH_3_UNITS) ? playerEvents.get(EVENT_BUILT_TECH_3_UNITS).getCurrentCount() : 0;
+    int tech1Built = playerEvents.containsKey(EVENT_BUILT_TECH_1_UNITS) ? playerEvents.get(EVENT_BUILT_TECH_1_UNITS)
+                                                                                      .getCurrentCount() : 0;
+    int tech2Built = playerEvents.containsKey(EVENT_BUILT_TECH_2_UNITS) ? playerEvents.get(EVENT_BUILT_TECH_2_UNITS)
+                                                                                      .getCurrentCount() : 0;
+    int tech3Built = playerEvents.containsKey(EVENT_BUILT_TECH_3_UNITS) ? playerEvents.get(EVENT_BUILT_TECH_3_UNITS)
+                                                                                      .getCurrentCount() : 0;
 
-    JavaFxUtil.runLater(() -> techBuiltChart.setData(FXCollections.observableArrayList(
-        new PieChart.Data(i18n.get("stats.tech1"), tech1Built),
-        new PieChart.Data(i18n.get("stats.tech2"), tech2Built),
-        new PieChart.Data(i18n.get("stats.tech3"), tech3Built)
-    )));
+    fxApplicationThreadExecutor.execute(() -> techBuiltChart.setData(
+        FXCollections.observableArrayList(new PieChart.Data(i18n.get("stats.tech1"), tech1Built),
+                                          new PieChart.Data(i18n.get("stats.tech2"), tech2Built),
+                                          new PieChart.Data(i18n.get("stats.tech3"), tech3Built))));
   }
 
   private void plotGamesPlayedChart() {
-    JavaFxUtil.runLater(() -> gamesPlayedChart.getData().clear());
-    leaderboardService.getEntriesForPlayer(player).thenAccept(leaderboardEntries -> JavaFxUtil.runLater(() ->
-        leaderboardEntries.forEach(leaderboardEntry ->
-            gamesPlayedChart.getData().add(new PieChart.Data(i18n.getOrDefault(leaderboardEntry.getLeaderboard().getTechnicalName(), leaderboardEntry.getLeaderboard().getNameKey()),
-                leaderboardEntry.getGamesPlayed())))))
-        .exceptionally(throwable -> {
-          log.error("Leaderboard entry could not be read for player: " + player.getUsername(), throwable);
-          return null;
-        });
+    fxApplicationThreadExecutor.execute(() -> gamesPlayedChart.getData().clear());
+    leaderboardService.getEntriesForPlayer(player)
+                      .collectList()
+                      .publishOn(fxApplicationThreadExecutor.asScheduler())
+                      .subscribe(leaderboardEntries -> leaderboardEntries.forEach(
+                                     leaderboardEntry -> gamesPlayedChart.getData()
+                                                                         .add(new PieChart.Data(i18n.getOrDefault(
+                                                                             leaderboardEntry.leaderboard()
+                                                                                             .technicalName(),
+                                                                             leaderboardEntry.leaderboard()
+                                                                                             .nameKey()),
+                                                                                                leaderboardEntry.gamesPlayed()))),
+                                 throwable -> {
+                                   log.error("Leaderboard entry could not be read for player: " + player.getUsername(),
+                                             throwable);
+                                 });
   }
 
   private void enterAchievementsLoadingState() {
@@ -380,16 +422,18 @@ public class PlayerInfoWindowController implements Controller<Node> {
     PlayerAchievement mostRecentPlayerAchievement = null;
 
     ObservableList<Node> children = unlockedAchievementsContainer.getChildren();
-    JavaFxUtil.runLater(children::clear);
+    fxApplicationThreadExecutor.execute(children::clear);
 
     for (PlayerAchievement playerAchievement : playerAchievements) {
-      AchievementItemController achievementItemController = achievementItemById.get(playerAchievement.getAchievement().getId());
+      AchievementItemController achievementItemController = achievementItemById.get(
+          playerAchievement.getAchievement().getId());
       achievementItemController.setPlayerAchievement(playerAchievement);
 
       if (isUnlocked(playerAchievement)) {
-        JavaFxUtil.runLater(() -> children.add(achievementItemController.getRoot()));
-        if (mostRecentPlayerAchievement == null
-            || playerAchievement.getUpdateTime().compareTo(mostRecentPlayerAchievement.getUpdateTime()) > 0) {
+        fxApplicationThreadExecutor.execute(() -> children.add(achievementItemController.getRoot()));
+        if (mostRecentPlayerAchievement == null || playerAchievement.getUpdateTime()
+                                                                    .isAfter(
+                                                                        mostRecentPlayerAchievement.getUpdateTime())) {
           mostRecentPlayerAchievement = playerAchievement;
         }
       }
@@ -399,17 +443,19 @@ public class PlayerInfoWindowController implements Controller<Node> {
       mostRecentAchievementPane.setVisible(false);
     } else {
       mostRecentAchievementPane.setVisible(true);
-      AchievementDefinition mostRecentAchievement = achievementDefinitionById.get(mostRecentPlayerAchievement.getAchievement().getId());
+      AchievementDefinition mostRecentAchievement = achievementDefinitionById.get(
+          mostRecentPlayerAchievement.getAchievement().getId());
       if (mostRecentAchievement == null) {
         return;
       }
       String mostRecentAchievementName = mostRecentAchievement.getName();
       String mostRecentAchievementDescription = mostRecentAchievement.getDescription();
 
-      JavaFxUtil.runLater(() -> {
+      fxApplicationThreadExecutor.execute(() -> {
         mostRecentAchievementNameLabel.setText(mostRecentAchievementName);
         mostRecentAchievementDescriptionLabel.setText(mostRecentAchievementDescription);
-        mostRecentAchievementImageView.setImage(achievementService.getImage(mostRecentAchievement, AchievementState.UNLOCKED));
+        mostRecentAchievementImageView.setImage(
+            achievementService.getImage(mostRecentAchievement, AchievementState.UNLOCKED));
       });
     }
   }
@@ -424,57 +470,102 @@ public class PlayerInfoWindowController implements Controller<Node> {
       ratingHistoryChart.setVisible(false);
       loadingHistoryPane.setVisible(true);
       if (player != null) {
-        loadStatistics(ratingTypeComboBox.getValue()).thenRun(() -> JavaFxUtil.runLater(this::plotPlayerRatingGraph));
+        loadStatistics(ratingTypeComboBox.getValue()).publishOn(fxApplicationThreadExecutor.asScheduler())
+                                                     .subscribe(null, null, this::plotPlayerRatingGraph);
       }
     }
   }
 
-  private CompletableFuture<Void> loadStatistics(LeaderboardBean leaderboard) {
-    return statisticsService.getRatingHistory(player, leaderboard)
-        .thenAccept(ratingHistory -> ratingData = ratingHistory)
-        .exceptionally(throwable -> {
-          // FIXME display to user
-          log.error("Statistics could not be loaded", throwable);
-          return null;
-        });
+  private Mono<Void> loadStatistics(Leaderboard leaderboard) {
+    TimePeriod timePeriod = timePeriodComboBox.getValue() != null ? timePeriodComboBox.getValue() : TimePeriod.ALL_TIME;
+    OffsetDateTime since = timePeriod == TimePeriod.ALL_TIME
+        ? null
+        : OffsetDateTime.of(timePeriod.getDate(), ZoneOffset.UTC);
+    return statisticsService.getRatingHistory(player, leaderboard, since)
+                            .collectList()
+                            .doOnNext(ratingHistory -> ratingData = ratingHistory)
+                            .doOnError(throwable -> {
+                              // FIXME display to user
+                              log.error("Statistics could not be loaded", throwable);
+                            })
+                            .then();
   }
 
   public void plotPlayerRatingGraph() {
     JavaFxUtil.assertApplicationThread();
     OffsetDateTime afterDate = OffsetDateTime.of(timePeriodComboBox.getValue().getDate(), ZoneOffset.UTC);
-    List<XYChart.Data<Double, Double>> values = ratingData.stream()
-        .filter(ratingJournal -> {
-          OffsetDateTime scoreTime = ratingJournal.getGamePlayerStats().getScoreTime();
-          return scoreTime != null && scoreTime.isAfter(afterDate);
-        })
-        .sorted(Comparator.comparing(ratingJournal -> ratingJournal.getGamePlayerStats().getScoreTime()))
-        .map(ratingJournal -> new Data<>((double) ratingJournal.getGamePlayerStats().getScoreTime().toEpochSecond(), (double) RatingUtil.getRating(ratingJournal)))
-        .collect(Collectors.toList());
+    List<XYChart.Data<Number, Number>> values = ratingData.stream()
+                                                          .filter(ratingJournal -> {
+                                                            OffsetDateTime scoreTime = ratingJournal
+                                                                                                    .scoreTime();
+                                                            return scoreTime != null && scoreTime.isAfter(afterDate);
+                                                          })
+                                                          .sorted(Comparator.comparing(
+                                                              LeaderboardRatingJournal::scoreTime))
+                                                          .map(ratingJournal -> new Data<>(
+                                                              (Number) ratingJournal.scoreTime()
+                                                                                    .toEpochSecond(),
+                                                              (Number) RatingUtil.getRating(ratingJournal)))
+                                                          .collect(Collectors.toList());
 
     xAxis.setTickLabelFormatter(ratingLabelFormatter());
-    if (values.size() > 0) {
-      xAxis.setLowerBound(values.get(0).getXValue());
-      xAxis.setUpperBound(values.get(values.size() - 1).getXValue());
+    if (!values.isEmpty()) {
+      xAxis.setLowerBound(values.getFirst().getXValue().doubleValue());
+      xAxis.setUpperBound(values.getLast().getXValue().doubleValue());
     }
     xAxis.setTickUnit((xAxis.getUpperBound() - xAxis.getLowerBound()) / 10);
 
-    XYChart.Series<Double, Double> series = new XYChart.Series<>(observableList(values));
+    XYChart.Series<Number, Number> series = new XYChart.Series<>(observableList(values));
     series.setName(i18n.get("userInfo.ratingOverTime"));
     ratingHistoryChart.setData(FXCollections.observableList(Collections.singletonList(series)));
     loadingHistoryPane.setVisible(false);
     ratingHistoryChart.setVisible(true);
+    // clear any previous drag selection when new data is loaded
+    ratingHistoryChart.clearSelection();
+  }
+
+  private void onChartSelection(PlayerRatingChart.SelectionRange range) {
+    fxApplicationThreadExecutor.execute(() -> {
+      if (range == null) {
+        selectionStatsPane.setVisible(false);
+        return;
+      }
+      OffsetDateTime afterDate = OffsetDateTime.of(timePeriodComboBox.getValue().getDate(), ZoneOffset.UTC);
+      List<LeaderboardRatingJournal> selected = ratingData.stream()
+          .filter(j -> j.scoreTime() != null && j.scoreTime().isAfter(afterDate))
+          .filter(j -> {
+            long t = j.scoreTime().toEpochSecond();
+            return t >= range.startTimeSec() && t <= range.endTimeSec();
+          })
+          .toList();
+
+      if (selected.isEmpty()) {
+        selectionStatsPane.setVisible(false);
+        return;
+      }
+
+      int minRating = selected.stream().mapToInt(RatingUtil::getRating).min().orElse(0);
+      int maxRating = selected.stream().mapToInt(RatingUtil::getRating).max().orElse(0);
+
+      String startDate = timeService.asDate(Instant.ofEpochSecond(range.startTimeSec()));
+      String endDate = timeService.asDate(Instant.ofEpochSecond(range.endTimeSec()));
+      selectionDateRangeLabel.setText(startDate + " – " + endDate);
+      selectionMinRatingLabel.setText(i18n.number(minRating));
+      selectionMaxRatingLabel.setText(i18n.number(maxRating));
+      selectionStatsPane.setVisible(true);
+    });
   }
 
   @NotNull
-  private StringConverter<LeaderboardBean> leaderboardStringConverter() {
+  private StringConverter<Leaderboard> leaderboardStringConverter() {
     return new StringConverter<>() {
       @Override
-      public String toString(LeaderboardBean leaderboard) {
-        return i18n.getOrDefault(leaderboard.getTechnicalName(), leaderboard.getNameKey());
+      public String toString(Leaderboard leaderboard) {
+        return i18n.getOrDefault(leaderboard.technicalName(), leaderboard.nameKey());
       }
 
       @Override
-      public LeaderboardBean fromString(String string) {
+      public Leaderboard fromString(String string) {
         return null;
       }
     };
@@ -514,12 +605,8 @@ public class PlayerInfoWindowController implements Controller<Node> {
   public void show() {
     Assert.checkNullIllegalState(ownerWindow, "ownerWindow must be set");
 
-    FxStage fxStage = FxStage.create(userInfoRoot)
-        .initOwner(ownerWindow)
-        .initModality(Modality.WINDOW_MODAL)
-        .withSceneFactory(uiService::createScene)
-        .allowMinimize(false)
-        .apply();
+    FxStage fxStage = FxStage.create(userInfoRoot).initOwner(ownerWindow).initModality(Modality.WINDOW_MODAL)
+                             .withSceneFactory(themeService::createScene).allowMinimize(false).apply();
 
     Stage stage = fxStage.getStage();
     stage.showingProperty().addListener((observable, oldValue, newValue) -> {

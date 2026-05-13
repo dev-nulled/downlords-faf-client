@@ -137,7 +137,9 @@
                         </columnConstraints>
                     </GridPane>
                     <Separator/>
-                    <Label fx:id="queueHeadingLabel" styleClass="h1-tmm" text="%teammatchmaking.queueTitle"/>
+                    <ToggleButton fx:id="searchButton" mnemonicParsing="false" styleClass="tmm, start-search"
+                                  alignment="CENTER" maxWidth="1.7976931348623157E308"
+                                  text="%teammatchmaking.searchButton" onAction="#onSearchButtonClicked"/>
                     <FlowPane fx:id="queuePane" hgap="12.0"/>
                 </children>
                 <padding>
@@ -146,6 +148,8 @@
             </VBox>
         </ScrollPane>
         <TabPane fx:id="chatTabPane" styleClass="chat-tab-pane" tabClosingPolicy="UNAVAILABLE"
-                 GridPane.columnIndex="1" GridPane.rowSpan="2"/>
+                 GridPane.columnIndex="1" GridPane.rowSpan="2">
+            <fx:include fx:id="matchmakingChat" source="../chat/matchmaking_chat.fxml"/>
+        </TabPane>
     </GridPane>
 </StackPane>

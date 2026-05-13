@@ -8,25 +8,29 @@ import com.github.rutledgepaulv.qbuilders.conditions.Condition;
 import com.github.rutledgepaulv.qbuilders.properties.concrete.InstantProperty;
 import javafx.beans.InvalidationListener;
 import javafx.beans.binding.Bindings;
+import javafx.beans.property.ObjectProperty;
 import javafx.scene.Node;
 import javafx.scene.control.DatePicker;
 import javafx.scene.control.MenuButton;
-import lombok.Data;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
 import java.time.ZoneOffset;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
-@Data
-public class DateRangeFilterController implements FilterNodeController {
+@Setter
+@Getter
+@RequiredArgsConstructor
+public class DateRangeFilterController extends FilterNodeController {
 
   private final I18n i18n;
   private final TimeService timeService;
@@ -37,12 +41,14 @@ public class DateRangeFilterController implements FilterNodeController {
   private String propertyName;
   private int initialYearsBefore;
 
-  public void initialize() {
+  @Override
+  protected void onInitialize() {
     JavaFxUtil.bindManagedToVisible(menu);
     beforeDate.setValue(null);
     afterDate.setValue(null);
   }
 
+  @Override
   public Optional<List<Condition>> getCondition() {
     List<Condition> conditions = new ArrayList<>();
     if (afterDate.getValue() != null) {
@@ -66,20 +72,23 @@ public class DateRangeFilterController implements FilterNodeController {
     }
   }
 
+  @Override
   public void addQueryListener(InvalidationListener queryListener) {
     afterDate.valueProperty().addListener(queryListener);
     beforeDate.valueProperty().addListener(queryListener);
   }
 
+  @Override
   public void clear() {
     beforeDate.setValue(null);
     if (initialYearsBefore > 0) {
-      afterDate.setValue(LocalDate.now().minus(initialYearsBefore, ChronoUnit.YEARS));
+      afterDate.setValue(LocalDate.now().minusYears(initialYearsBefore));
     } else {
       afterDate.setValue(null);
     }
   }
 
+  @Override
   public void setTitle(String title) {
     menu.textProperty().unbind();
     menu.textProperty().bind(Bindings.createStringBinding(() -> i18n.get("query.dateRangeFilter", title, timeService.asDate(afterDate.getValue()), timeService.asDate(beforeDate.getValue())), afterDate.valueProperty(), beforeDate.valueProperty()));
@@ -95,9 +104,17 @@ public class DateRangeFilterController implements FilterNodeController {
 
   public void setInitialYearsBefore(int initialYearsBefore) {
     this.initialYearsBefore = initialYearsBefore;
-    afterDate.setValue(LocalDate.now().minus(initialYearsBefore, ChronoUnit.YEARS));
+    afterDate.setValue(LocalDate.now().minusYears(initialYearsBefore));
   }
 
+  public ObjectProperty<LocalDate> beforeDateProperty() {
+    return this.beforeDate.valueProperty();
+  }
+
+  public ObjectProperty<LocalDate> afterDateProperty() {
+    return this.afterDate.valueProperty();
+  }
+  
   @Override
   public Node getRoot() {
     return menu;

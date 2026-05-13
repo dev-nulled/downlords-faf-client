@@ -1,11 +1,14 @@
 package com.faforever.client.update;
 
 import com.faforever.client.i18n.I18n;
+import com.faforever.client.os.OperatingSystem;
+import com.faforever.client.os.OsPosix;
+import com.faforever.client.os.OsUnknown;
+import com.faforever.client.os.OsWindows;
 import com.faforever.client.preferences.PreferencesService;
 import com.faforever.client.task.CompletableTask;
 import com.faforever.client.update.ClientConfiguration.ReleaseInfo;
 import com.faforever.client.util.FileSizeReader;
-import com.google.common.annotations.VisibleForTesting;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.context.annotation.Scope;
@@ -21,17 +24,14 @@ public class CheckForUpdateTask extends CompletableTask<UpdateInfo> {
   private final I18n i18n;
   private final PreferencesService preferencesService;
   private final FileSizeReader fileSizeReader;
+  private final OperatingSystem operatingSystem;
 
-  public CheckForUpdateTask(I18n i18n, PreferencesService preferencesService, FileSizeReader fileSizeReader) {
+  public CheckForUpdateTask(I18n i18n, PreferencesService preferencesService, FileSizeReader fileSizeReader, OperatingSystem operatingSystem) {
     super(Priority.LOW);
     this.i18n = i18n;
     this.preferencesService = preferencesService;
     this.fileSizeReader  = fileSizeReader;
-  }
-
-  @VisibleForTesting
-  int getFileSize(URL url) {
-    return fileSizeReader.getFileSize(url).join();
+    this.operatingSystem = operatingSystem;
   }
 
   @Override
@@ -43,21 +43,17 @@ public class CheckForUpdateTask extends CompletableTask<UpdateInfo> {
       ReleaseInfo latestRelease = clientConfiguration.getLatestRelease();
       String version = latestRelease.getVersion();
 
-      URL downloadUrl;
-      if (org.bridj.Platform.isWindows()) {
-        downloadUrl = latestRelease.getWindowsUrl();
-      } else if (org.bridj.Platform.isLinux()) {
-        downloadUrl = latestRelease.getLinuxUrl();
-      } else if (org.bridj.Platform.isMacOSX()) {
-        downloadUrl = latestRelease.getMacUrl();
-      } else {
-        return null;
-      }
+      URL downloadUrl = switch (operatingSystem) {
+        case OsWindows osWindows -> latestRelease.getWindowsUrl();
+        case OsPosix osPosix -> latestRelease.getLinuxUrl();
+        case OsUnknown osUnknown -> null;
+      };
+
       if (downloadUrl == null) {
         return null;
       }
 
-      int fileSize = getFileSize(downloadUrl);
+      int fileSize = fileSizeReader.getFileSize(downloadUrl).join();
 
       return new UpdateInfo(
           version,

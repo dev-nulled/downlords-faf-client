@@ -2,12 +2,12 @@ package com.faforever.client.update;
 
 import com.faforever.client.config.ClientProperties;
 import com.faforever.client.i18n.I18n;
-import com.faforever.client.preferences.PreferencesService;
 import com.faforever.client.test.ServiceTest;
 import com.faforever.client.util.FileSizeReader;
 import com.google.common.io.CharStreams;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.compress.utils.IOUtils;
+import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang3.SystemUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
@@ -41,8 +41,7 @@ public class CheckForUpdateTaskTest extends ServiceTest {
 
   @Mock
   private I18n i18n;
-  @Mock
-  private PreferencesService preferencesService;
+
   @Mock
   private FileSizeReader fileSizeReader;
 
@@ -71,17 +70,20 @@ public class CheckForUpdateTaskTest extends ServiceTest {
 
     UpdateInfo updateInfo = instance.call();
 
-    assertThat(updateInfo.getSize(), is(123));
-    assertThat(updateInfo.getFileName(), is("dfaf_windows_0_4_7-alpha.exe"));
-    assertThat(updateInfo.getName(), is("0.4.7-alpha"));
-    assertThat(updateInfo.getReleaseNotesUrl(), is(new URL("https://www.example.com/")));
+    assertThat(updateInfo.size(), is(123));
+    assertThat(updateInfo.fileName(), is("dfaf_windows_0_4_7-alpha.exe"));
+    assertThat(updateInfo.name(), is("0.4.7-alpha"));
+    assertThat(updateInfo.releaseNotesUrl(), is(new URL("https://www.example.com/")));
 
-    if (org.bridj.Platform.isWindows()) {
-      assertThat(updateInfo.getUrl(), is(new URL("https://github.com/faforever/downlords-faf-client/releases/download/v0.4.7-alpha/dfaf_windows_0_4_7-alpha.exe")));
-    } else if (org.bridj.Platform.isLinux()) {
-      assertThat(updateInfo.getUrl(), is(new URL("https://github.com/faforever/downlords-faf-client/releases/download/v0.4.7-alpha/dfaf_linux_0_4_7-alpha.tar.gz")));
-    } else if (org.bridj.Platform.isMacOSX()) {
-      assertThat(updateInfo.getUrl(), is(new URL("https://github.com/faforever/downlords-faf-client/releases/download/v0.4.7-alpha/dfaf_mac_0_4_7-alpha.dmg")));
+    if (SystemUtils.IS_OS_WINDOWS) {
+      assertThat(updateInfo.url(), is(new URL(
+          "https://github.com/faforever/downlords-faf-client/releases/download/v0.4.7-alpha/dfaf_windows_0_4_7-alpha.exe")));
+    } else if (SystemUtils.IS_OS_LINUX) {
+      assertThat(updateInfo.url(), is(new URL(
+          "https://github.com/faforever/downlords-faf-client/releases/download/v0.4.7-alpha/dfaf_linux_0_4_7-alpha.tar.gz")));
+    } else if (SystemUtils.IS_OS_MAC_OSX) {
+      assertThat(updateInfo.url(), is(new URL(
+          "https://github.com/faforever/downlords-faf-client/releases/download/v0.4.7-alpha/dfaf_mac_0_4_7-alpha.dmg")));
     } else {
       throw new IllegalStateException("Unsupported platform");
     }

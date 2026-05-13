@@ -1,13 +1,11 @@
 package com.faforever.client.i18n;
 
-import com.faforever.client.builders.PreferencesBuilder;
-import com.faforever.client.preferences.Preferences;
-import com.faforever.client.preferences.PreferencesService;
+import com.faforever.client.preferences.DataPrefs;
+import com.faforever.client.preferences.LocalizationPrefs;
 import com.faforever.client.test.ServiceTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
-import org.mockito.Mock;
 import org.mockito.Spy;
 import org.springframework.context.support.ReloadableResourceBundleMessageSource;
 
@@ -16,32 +14,29 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
-import java.util.stream.Stream;
 
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.collection.IsCollectionWithSize.hasSize;
-import static org.mockito.Mockito.when;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class I18nTest extends ServiceTest {
 
   @InjectMocks
   private I18n instance;
 
-  @Mock
-  private PreferencesService preferencesService;
+
   @Spy
-  private ReloadableResourceBundleMessageSource messageSource = new ReloadableResourceBundleMessageSource();
+  private LocalizationPrefs localizationPrefs;
+  @Spy
+  private DataPrefs dataPrefs;
+  @Spy
+  private ReloadableResourceBundleMessageSource messageSource;
 
   @BeforeEach
   public void setUp() throws Exception {
-    Preferences preferences = PreferencesBuilder.create().defaultValues()
-        .localizationPrefs()
-        .language(Locale.GERMAN)
-        .then()
-        .get();
+    localizationPrefs.setLanguage(Locale.GERMAN);
 
-    when(preferencesService.getPreferences()).thenReturn(preferences);
+    dataPrefs.setBaseDataDirectory(Path.of("."));
 
     messageSource.setBasenames("classpath:i18n/messages");
     messageSource.setDefaultEncoding(StandardCharsets.UTF_8.name());
@@ -107,9 +102,14 @@ public class I18nTest extends ServiceTest {
   @Test
   public void testLoadedLanguagesAreComplete() throws IOException {
     final Path path = Path.of("src", "main", "resources", "i18n");
-    try (Stream<Path> walk = Files.walk(path)) {
-      final long messageFileCount = walk.filter(propertiesFile -> Files.isRegularFile(propertiesFile) && propertiesFile.getFileName().toString().endsWith(".properties")).count();
-      assertThat(instance.getAvailableLanguages(), hasSize((int) messageFileCount));
-    }
+    instance.getAvailableLanguages().forEach(locale -> {
+      if (locale.toString().equals("en_US")) {
+        assertTrue(Files.exists(path.resolve("messages.properties")),
+                   "messages file for %s does not exist".formatted(locale));
+      } else {
+        assertTrue(Files.exists(path.resolve("messages_" + locale + ".properties")),
+                   "messages file for %s does not exist".formatted(locale));
+      }
+    });
   }
 }

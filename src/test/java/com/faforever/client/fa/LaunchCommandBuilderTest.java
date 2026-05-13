@@ -54,6 +54,16 @@ public class LaunchCommandBuilderTest extends ServiceTest {
   }
 
   @Test
+  public void testDivisionNullAllowed() throws Exception {
+    assertDoesNotThrow(() -> defaultBuilder().division(null).build());
+  }
+
+  @Test
+  public void testSubdivisionNullAllowed() throws Exception {
+    assertDoesNotThrow(() -> defaultBuilder().subdivision(null).build());
+  }
+
+  @Test
   public void testCountryNullAllowed() throws Exception {
     assertDoesNotThrow(() -> defaultBuilder().country(null).build());
   }
@@ -155,19 +165,6 @@ public class LaunchCommandBuilderTest extends ServiceTest {
   }
 
   @Test
-  public void testRehost() throws Exception {
-    assertThat(
-        defaultBuilder().rehost(true).build(),
-        contains(
-            Path.of("test.exe").toAbsolutePath().toString(),
-            "/init", "init.lua",
-            "/nobugreport",
-            "/log", Path.of("preferences.log").toAbsolutePath().toString(),
-            "/rehost"
-        ));
-  }
-
-  @Test
   public void testGpgPort() throws Exception {
     assertThat(
         defaultBuilder().localGpgPort(0).build(),
@@ -195,7 +192,33 @@ public class LaunchCommandBuilderTest extends ServiceTest {
   }
 
   @Test
-  public void testCountryPort() throws Exception {
+  public void testDivision() throws Exception {
+    assertThat(
+        defaultBuilder().division("Gold").build(),
+        contains(
+            Path.of("test.exe").toAbsolutePath().toString(),
+            "/init", "init.lua",
+            "/nobugreport",
+            "/log", Path.of("preferences.log").toAbsolutePath().toString(),
+            "/division", "Gold"
+        ));
+  }
+
+  @Test
+  public void testSubdivision() throws Exception {
+    assertThat(
+        defaultBuilder().subdivision("II").build(),
+        contains(
+            Path.of("test.exe").toAbsolutePath().toString(),
+            "/init", "init.lua",
+            "/nobugreport",
+            "/log", Path.of("preferences.log").toAbsolutePath().toString(),
+            "/subdivision", "II"
+        ));
+  }
+
+  @Test
+  public void testCountry() throws Exception {
     assertThat(
         defaultBuilder().country("USA").build(),
         contains(
@@ -313,8 +336,7 @@ public class LaunchCommandBuilderTest extends ServiceTest {
 
   @Test
   public void testRating() throws Exception {
-    assertThat(
-        defaultBuilder().mean(0f).deviation(0f).build(),
+    assertThat(defaultBuilder().mean(0d).deviation(0d).build(),
         contains(
             Path.of("test.exe").toAbsolutePath().toString(),
             "/init", "init.lua",
@@ -367,7 +389,7 @@ public class LaunchCommandBuilderTest extends ServiceTest {
   @Test
   public void testUseDebugger() throws Exception {
     assertEquals(Path.of("debugger").toAbsolutePath().toString(),
-        defaultBuilder().debuggerExecutable(Path.of("debugger")).build().get(0)
+                 defaultBuilder().debuggerExecutable(Path.of("debugger")).build().getFirst()
     );
   }
 }

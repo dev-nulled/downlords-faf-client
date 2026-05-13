@@ -11,29 +11,41 @@ import javafx.beans.property.SimpleIntegerProperty;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
-import lombok.AccessLevel;
-import lombok.experimental.FieldDefaults;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
 
-@FieldDefaults(makeFinal=true, level= AccessLevel.PRIVATE)
+
 public class GeneratorPrefs {
-  ObjectProperty<GenerationType> generationType = new SimpleObjectProperty<>(GenerationType.CASUAL);
-  StringProperty commandLineArgs = new SimpleStringProperty("");
-  IntegerProperty spawnCount = new SimpleIntegerProperty(6);
-  IntegerProperty numTeams = new SimpleIntegerProperty(2);
-  DoubleProperty mapSizeInKm = new SimpleDoubleProperty(10);
-  StringProperty mapStyle = new SimpleStringProperty("");
-  IntegerProperty waterDensity = new SimpleIntegerProperty(0);
-  BooleanProperty waterRandom = new SimpleBooleanProperty(true);
-  IntegerProperty plateauDensity = new SimpleIntegerProperty(0);
-  BooleanProperty plateauRandom = new SimpleBooleanProperty(true);
-  IntegerProperty mountainDensity = new SimpleIntegerProperty(0);
-  BooleanProperty mountainRandom = new SimpleBooleanProperty(true);
-  IntegerProperty rampDensity = new SimpleIntegerProperty(0);
-  BooleanProperty rampRandom = new SimpleBooleanProperty(true);
-  IntegerProperty mexDensity = new SimpleIntegerProperty(0);
-  BooleanProperty mexRandom = new SimpleBooleanProperty(true);
-  IntegerProperty reclaimDensity = new SimpleIntegerProperty(0);
-  BooleanProperty reclaimRandom = new SimpleBooleanProperty(true);
+  private final ObjectProperty<GenerationType> generationType = new SimpleObjectProperty<>(GenerationType.CASUAL);
+  private final StringProperty commandLineArgs = new SimpleStringProperty("");
+  private final IntegerProperty spawnCount = new SimpleIntegerProperty(6);
+  private final IntegerProperty numTeams = new SimpleIntegerProperty(2);
+  private final DoubleProperty mapSizeInKm = new SimpleDoubleProperty(10);
+  private final ObservableList<String> mapStyles = FXCollections.observableArrayList();
+  private final ObservableList<String> symmetry = FXCollections.observableArrayList();
+  private final StringProperty seed = new SimpleStringProperty("");
+  private final BooleanProperty fixedSeed = new SimpleBooleanProperty(false);
+  private final BooleanProperty customStyle = new SimpleBooleanProperty(false);
+  private final ObservableList<String> terrainStyles = FXCollections.observableArrayList();
+  private final ObservableList<String> textureStyles = FXCollections.observableArrayList();
+  private final ObservableList<String> resourceStyles = FXCollections.observableArrayList();
+  private final ObservableList<String> propStyles = FXCollections.observableArrayList();
+  private final IntegerProperty reclaimDensityMin = new SimpleIntegerProperty(0);
+  private final IntegerProperty reclaimDensityMax = new SimpleIntegerProperty(127);
+  private final IntegerProperty resourceDensityMin = new SimpleIntegerProperty(0);
+  private final IntegerProperty resourceDensityMax = new SimpleIntegerProperty(127);
+
+  public GenerationType getGenerationType() {
+    return generationType.get();
+  }
+
+  public void setGenerationType(GenerationType generationType) {
+    this.generationType.set(generationType);
+  }
+
+  public ObjectProperty<GenerationType> generationTypeProperty() {
+    return generationType;
+  }
 
   public String getCommandLineArgs() {
     return commandLineArgs.get();
@@ -83,171 +95,119 @@ public class GeneratorPrefs {
     return mapSizeInKm;
   }
 
-  public String getMapStyle() {
-    return mapStyle.get();
+  public ObservableList<String> getMapStyles() {
+    return mapStyles;
   }
 
-  public void setMapStyle(String mapStyle) {
-    this.mapStyle.set(mapStyle);
+  public ObservableList<String> getSymmetries() {
+    return symmetry;
   }
 
-  public StringProperty mapStyleProperty() {
-    return mapStyle;
+  public String getSeed() {
+    return seed.get();
   }
 
-  public GenerationType getGenerationType() {
-    return generationType.get();
+  public void setSeed(String seed) {
+    this.seed.set(seed);
   }
 
-  public void setGenerationType(GenerationType generationType) {
-    this.generationType.set(generationType);
+  public StringProperty seedProperty() {
+    return seed;
   }
 
-  public ObjectProperty<GenerationType> generationTypeProperty() {
-    return generationType;
+  public boolean getFixedSeed() {
+    return fixedSeed.get();
   }
 
-  public int getWaterDensity() {
-    return waterDensity.get();
+  public void setFixedSeed(boolean fixedSeed) {
+    this.fixedSeed.set(fixedSeed);
   }
 
-  public void setWaterDensity(int waterDensity) {
-    this.waterDensity.set(waterDensity);
+  public BooleanProperty fixedSeedProperty() {
+    return fixedSeed;
   }
 
-  public IntegerProperty waterDensityProperty() {
-    return waterDensity;
+  public boolean getCustomStyle() {
+    return customStyle.get();
   }
 
-  public int getPlateauDensity() {
-    return plateauDensity.get();
+  public void setCustomStyle(boolean customStyle) {
+    this.customStyle.set(customStyle);
   }
 
-  public void setPlateauDensity(int plateauDensity) {
-    this.plateauDensity.set(plateauDensity);
+  public BooleanProperty customStyleProperty() {
+    return customStyle;
   }
 
-  public IntegerProperty plateauDensityProperty() {
-    return plateauDensity;
+  public ObservableList<String> getTerrainStyles() {
+    return terrainStyles;
   }
 
-  public int getMountainDensity() {
-    return mountainDensity.get();
+  public ObservableList<String> getTextureStyles() {
+    return textureStyles;
   }
 
-  public void setMountainDensity(int mountainDensity) {
-    this.mountainDensity.set(mountainDensity);
+  public ObservableList<String> getResourceStyles() {
+    return resourceStyles;
   }
 
-  public IntegerProperty mountainDensityProperty() {
-    return mountainDensity;
+  public ObservableList<String> getPropStyles() {
+    return propStyles;
   }
 
-  public int getRampDensity() {
-    return rampDensity.get();
+  public boolean isFixedSeed() {
+    return fixedSeed.get();
   }
 
-  public void setRampDensity(int rampDensity) {
-    this.rampDensity.set(rampDensity);
+  public boolean isCustomStyle() {
+    return customStyle.get();
   }
 
-  public IntegerProperty rampDensityProperty() {
-    return rampDensity;
+  public int getReclaimDensityMin() {
+    return reclaimDensityMin.get();
   }
 
-  public int getMexDensity() {
-    return mexDensity.get();
+  public IntegerProperty reclaimDensityMinProperty() {
+    return reclaimDensityMin;
   }
 
-  public void setMexDensity(int mexDensity) {
-    this.mexDensity.set(mexDensity);
+  public void setReclaimDensityMin(int min) {
+    this.reclaimDensityMin.set(min);
   }
 
-  public IntegerProperty mexDensityProperty() {
-    return mexDensity;
+  public int getReclaimDensityMax() {
+    return reclaimDensityMax.get();
   }
 
-  public int getReclaimDensity() {
-    return reclaimDensity.get();
+  public IntegerProperty reclaimDensityMaxProperty() {
+    return reclaimDensityMax;
   }
 
-  public void setReclaimDensity(int reclaimDensity) {
-    this.reclaimDensity.set(reclaimDensity);
+  public void setReclaimDensityMax(int max) {
+    this.reclaimDensityMax.set(max);
   }
 
-  public IntegerProperty reclaimDensityProperty() {
-    return reclaimDensity;
+  public int getResourceDensityMin() {
+    return resourceDensityMin.get();
   }
 
-  public boolean getWaterRandom() {
-    return waterRandom.get();
+  public IntegerProperty resourceDensityMinProperty() {
+    return resourceDensityMin;
   }
 
-  public void setWaterRandom(boolean waterRandom) {
-    this.waterRandom.set(waterRandom);
+  public void setResourceDensityMin(int min) {
+    this.resourceDensityMin.set(min);
   }
 
-  public BooleanProperty waterRandomProperty() {
-    return waterRandom;
+  public int getResourceDensityMax() {
+    return resourceDensityMax.get();
   }
 
-  public boolean getMountainRandom() {
-    return mountainRandom.get();
+  public IntegerProperty resourceDensityMaxProperty() {
+    return resourceDensityMax;
   }
 
-  public void setMountainRandom(boolean mountainRandom) {
-    this.mountainRandom.set(mountainRandom);
-  }
-
-  public BooleanProperty mountainRandomProperty() {
-    return mountainRandom;
-  }
-
-  public boolean getPlateauRandom() {
-    return plateauRandom.get();
-  }
-
-  public void setPlateauRandom(boolean plateauRandom) {
-    this.plateauRandom.set(plateauRandom);
-  }
-
-  public BooleanProperty plateauRandomProperty() {
-    return plateauRandom;
-  }
-
-  public boolean getRampRandom() {
-    return rampRandom.get();
-  }
-
-  public void setRampRandom(boolean rampRandom) {
-    this.rampRandom.set(rampRandom);
-  }
-
-  public BooleanProperty rampRandomProperty() {
-    return rampRandom;
-  }
-
-  public boolean getMexRandom() {
-    return mexRandom.get();
-  }
-
-  public void setMexRandom(boolean mexRandom) {
-    this.mexRandom.set(mexRandom);
-  }
-
-  public BooleanProperty mexRandomProperty() {
-    return mexRandom;
-  }
-
-  public boolean getReclaimRandom() {
-    return reclaimRandom.get();
-  }
-
-  public void setReclaimRandom(boolean reclaimRandom) {
-    this.reclaimRandom.set(reclaimRandom);
-  }
-
-  public BooleanProperty reclaimRandomProperty() {
-    return reclaimRandom;
+  public void setResourceDensityMax(int max) {
+    this.resourceDensityMax.set(max);
   }
 }

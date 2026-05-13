@@ -1,21 +1,19 @@
 package com.faforever.client.replay;
 
-import com.faforever.client.domain.ReplayBean;
+import com.faforever.client.domain.api.Replay;
+import com.faforever.client.fx.FxApplicationThreadExecutor;
 import com.faforever.client.fx.JavaFxUtil;
 import com.faforever.client.i18n.I18n;
-import com.faforever.client.main.event.DeleteLocalReplayEvent;
 import com.faforever.client.main.event.NavigateEvent;
 import com.faforever.client.main.event.OpenLocalReplayVaultEvent;
 import com.faforever.client.notification.NotificationService;
-import com.faforever.client.preferences.PreferencesService;
+import com.faforever.client.preferences.VaultPrefs;
 import com.faforever.client.query.SearchablePropertyMappings;
 import com.faforever.client.reporting.ReportingService;
 import com.faforever.client.theme.UiService;
 import com.faforever.client.vault.VaultEntityController;
 import com.faforever.client.vault.search.SearchController.SearchConfig;
 import com.faforever.commons.api.dto.Game;
-import com.google.common.eventbus.EventBus;
-import com.google.common.eventbus.Subscribe;
 import javafx.scene.Node;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
@@ -24,65 +22,55 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.util.List;
-import java.util.concurrent.ExecutionException;
 
 @Slf4j
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
-public class LocalReplayVaultController extends VaultEntityController<ReplayBean> {
+public class LocalReplayVaultController extends VaultEntityController<Replay> {
 
   private final ReplayService replayService;
-  private final EventBus eventBus;
+  private final VaultPrefs vaultPrefs;
+
   private ReplayDetailController replayDetailController;
 
 
-  public LocalReplayVaultController(ReplayService replayService, UiService uiService, NotificationService notificationService, I18n i18n, EventBus eventBus, PreferencesService preferencesService, ReportingService reportingService) {
-    super(uiService, notificationService, i18n, preferencesService, reportingService);
+  public LocalReplayVaultController(ReplayService replayService, UiService uiService,
+                                    NotificationService notificationService, I18n i18n,
+                                    ReportingService reportingService, VaultPrefs vaultPrefs,
+                                    FxApplicationThreadExecutor fxApplicationThreadExecutor) {
+    super(uiService, notificationService, i18n, reportingService, vaultPrefs, fxApplicationThreadExecutor);
     this.replayService = replayService;
-    this.eventBus = eventBus;
+    this.vaultPrefs = vaultPrefs;
   }
 
   @Override
-  public void initialize() {
-    super.initialize();
+  protected void onInitialize() {
+    super.onInitialize();
     uploadButton.setVisible(false);
+
+    backButton.visibleProperty().unbind();
     backButton.setVisible(false);
-    searchBox.setVisible(false);
-    searchSeparator.setVisible(false);
-    this.eventBus.register(this);
   }
 
   @Override
-  protected void onDisplayDetails(ReplayBean replay) {
+  protected void onDisplayDetails(Replay replay) {
     JavaFxUtil.assertApplicationThread();
     replayDetailController.setReplay(replay);
     replayDetailController.getRoot().setVisible(true);
     replayDetailController.getRoot().requestFocus();
   }
 
-  @Subscribe
-  public void onLocalReplayDeleted(DeleteLocalReplayEvent event) throws ExecutionException, InterruptedException {
-    if (replayService.deleteReplayFile(event.getReplayFile())) {
-      onPageChange(searchController.getLastSearchConfig(), false);
-    }
-  }
-
   @Override
-  protected void loadShowRoom() {
+  protected void loadShowRooms() {
     onPageChange(null, true);
   }
 
   @Override
   protected void enterResultState() {
     state.set(State.RESULT);
-
-    showRoomGroup.setVisible(false);
-    searchResultGroup.setVisible(true);
-    loadingPane.setVisible(false);
-    backButton.setVisible(false);
-    paginationGroup.setVisible(true);
   }
 
+  @Override
   protected void setSupplier(SearchConfig searchConfig) {
     try {
       currentSupplier = replayService.loadLocalReplayPage(pageSize, pagination.getCurrentPageIndex() + 1);
@@ -91,18 +79,19 @@ public class LocalReplayVaultController extends VaultEntityController<ReplayBean
     }
   }
 
-  protected Node getEntityCard(ReplayBean replay) {
+  @Override
+  protected ReplayCardController createEntityCard() {
     ReplayCardController controller = uiService.loadFxml("theme/vault/replay/replay_card.fxml");
-    controller.setReplay(replay);
     controller.setOnOpenDetailListener(this::onDisplayDetails);
-    return controller.getRoot();
+    controller.setOnDeleteListener(() -> onPageChange(searchController.getLastSearchConfig(), false));
+    return controller;
+  }
+  @Override
+  protected List<ShowRoomCategory<Replay>> getShowRoomCategories() {
+    return List.of();
   }
 
   @Override
-  protected List<ShowRoomCategory> getShowRoomCategories() {
-    return null;
-  }
-
   public void onUploadButtonClicked() {
     // do nothing
   }
@@ -115,13 +104,15 @@ public class LocalReplayVaultController extends VaultEntityController<ReplayBean
   @Override
   protected Node getDetailView() {
     replayDetailController = uiService.loadFxml("theme/vault/replay/replay_detail.fxml");
+    replayDetailController.setOnDeleteListener(() -> onPageChange(searchController.getLastSearchConfig(), false));
     return replayDetailController.getRoot();
   }
 
+  @Override
   protected void initSearchController() {
     searchController.setRootType(Game.class);
     searchController.setSearchableProperties(SearchablePropertyMappings.GAME_PROPERTY_MAPPING);
-    searchController.setSortConfig(preferencesService.getPreferences().getVault().onlineReplaySortConfigProperty());
+    searchController.setSortConfig(vaultPrefs.onlineReplaySortConfigProperty());
     searchController.setOnlyShowLastYearCheckBoxVisible(true);
   }
 

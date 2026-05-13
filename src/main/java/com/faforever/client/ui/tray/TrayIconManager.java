@@ -1,11 +1,11 @@
 package com.faforever.client.ui.tray;
 
-import com.faforever.client.fx.JavaFxUtil;
+import com.faforever.client.fx.FxApplicationThreadExecutor;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.ui.StageHolder;
 import com.faforever.client.ui.tray.event.UpdateApplicationBadgeEvent;
-import com.google.common.eventbus.EventBus;
-import com.google.common.eventbus.Subscribe;
+import com.faforever.client.ui.tray.event.UpdateApplicationBadgeEvent.Delta;
+import com.faforever.client.ui.tray.event.UpdateApplicationBadgeEvent.NewValue;
 import javafx.embed.swing.SwingFXUtils;
 import javafx.geometry.VPos;
 import javafx.scene.SnapshotParameters;
@@ -17,15 +17,15 @@ import javafx.scene.paint.Color;
 import javafx.scene.text.FontSmoothingType;
 import javafx.scene.text.TextAlignment;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.InitializingBean;
 import org.springframework.stereotype.Component;
 
 import java.awt.Font;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.List;
-import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static java.awt.RenderingHints.KEY_ANTIALIASING;
@@ -33,42 +33,34 @@ import static java.awt.RenderingHints.VALUE_ANTIALIAS_ON;
 
 @Component
 @RequiredArgsConstructor
-public class TrayIconManager implements InitializingBean {
+public class TrayIconManager {
 
   private final I18n i18n;
-  private final EventBus eventBus;
-  private int badgeCount;
+  private final FxApplicationThreadExecutor fxApplicationThreadExecutor;
 
-  @Override
-  public void afterPropertiesSet() {
-    eventBus.register(this);
-  }
+  private int badgeCount;
 
   /**
    * Generates and returns a tray icon. If {@code badgeCount} is greater than 0, a badge (circle) with the badge count
    * generated on top of the icon.
    */
-  @Subscribe
   public void onSetApplicationBadgeEvent(UpdateApplicationBadgeEvent event) {
-    JavaFxUtil.runLater(() -> {
-      if (event.getDelta().isPresent()) {
-        badgeCount += event.getDelta().get();
-      } else if (event.getNewValue().isPresent()) {
-        badgeCount = event.getNewValue().get();
-      } else {
-        throw new IllegalStateException("No delta nor new value is available");
-      }
+    switch (event) {
+      case Delta(Integer value) -> badgeCount += value;
+      case NewValue(Integer value) -> badgeCount = value;
+    }
 
+    fxApplicationThreadExecutor.execute(() -> {
       List<Image> icons;
       if (badgeCount < 1) {
         icons = IntStream.range(4, 9)
             .mapToObj(power -> generateTrayIcon((int) Math.pow(2, power)))
-            .collect(Collectors.toList());
+            .toList();
       } else {
         icons = IntStream.range(4, 9)
             .mapToObj(power -> generateTrayIcon((int) Math.pow(2, power)))
             .map(image -> addBadge(image, badgeCount))
-            .collect(Collectors.toList());
+            .toList();
       }
       StageHolder.getStage().getIcons().setAll(icons);
     });
@@ -107,11 +99,15 @@ public class TrayIconManager implements InitializingBean {
     graphicsContext2D.setTextAlign(TextAlignment.CENTER);
     graphicsContext2D.setTextBaseline(VPos.CENTER);
     graphicsContext2D.setFontSmoothingType(FontSmoothingType.LCD);
-    graphicsContext2D.setFont(javafx.scene.text.Font.loadFont(TrayIconManager.class.getResourceAsStream("/font/dfc-icons.ttf"), dimension));
+    try (InputStream inputStream = TrayIconManager.class.getResourceAsStream("/font/dfc-icons.ttf")) {
+      graphicsContext2D.setFont(javafx.scene.text.Font.loadFont(inputStream, dimension));
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
     graphicsContext2D.setFill(Color.BLACK);
     graphicsContext2D.fillOval(0, 0, dimension, dimension);
     graphicsContext2D.setFill(Color.WHITE);
-    graphicsContext2D.fillText("\uE901", dimension / 2, dimension / 2);
+    graphicsContext2D.fillText("\uE901", dimension / 2d, dimension / 2d);
 
     SnapshotParameters snapshotParameters = new SnapshotParameters();
     snapshotParameters.setFill(javafx.scene.paint.Color.TRANSPARENT);

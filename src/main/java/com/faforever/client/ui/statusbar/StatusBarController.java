@@ -1,12 +1,15 @@
 package com.faforever.client.ui.statusbar;
 
 import com.faforever.client.chat.ChatService;
-import com.faforever.client.fx.Controller;
+import com.faforever.client.fx.FxApplicationThreadExecutor;
 import com.faforever.client.fx.JavaFxUtil;
+import com.faforever.client.fx.NodeController;
+import com.faforever.client.fx.SimpleChangeListener;
 import com.faforever.client.i18n.I18n;
+import com.faforever.client.net.ConnectionState;
 import com.faforever.client.task.TaskService;
 import com.faforever.client.update.Version;
-import com.faforever.client.user.UserService;
+import com.faforever.client.user.LoginService;
 import com.google.common.base.Strings;
 import javafx.beans.Observable;
 import javafx.beans.binding.Bindings;
@@ -16,7 +19,9 @@ import javafx.scene.Node;
 import javafx.scene.control.Label;
 import javafx.scene.control.MenuButton;
 import javafx.scene.control.ProgressBar;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
@@ -25,14 +30,16 @@ import java.util.Collection;
 
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
-public class StatusBarController implements Controller<Node> {
+@RequiredArgsConstructor
+public class StatusBarController extends NodeController<Node> {
   private static final PseudoClass CONNECTIVITY_CONNECTED_PSEUDO_CLASS = PseudoClass.getPseudoClass("connected");
   private static final PseudoClass CONNECTIVITY_DISCONNECTED_PSEUDO_CLASS = PseudoClass.getPseudoClass("disconnected");
 
-  private final UserService userService;
+  private final LoginService loginService;
   private final I18n i18n;
   private final ChatService chatService;
   private final TaskService taskService;
+  private final FxApplicationThreadExecutor fxApplicationThreadExecutor;
 
   public Label chatConnectionStatusIcon;
   public Label fafConnectionStatusIcon;
@@ -42,20 +49,14 @@ public class StatusBarController implements Controller<Node> {
   public Pane taskPane;
   public Label taskProgressLabel;
   public Label versionLabel;
-
-  public StatusBarController(UserService userService, I18n i18n, ChatService chatService, TaskService taskService) {
-    this.userService = userService;
-    this.i18n = i18n;
-    this.chatService = chatService;
-    this.taskService = taskService;
-  }
+  public HBox root;
 
   @Override
-  public void initialize() {
+  protected void onInitialize() {
     setCurrentWorkerInStatusBar(null);
     versionLabel.setText(Version.getCurrentVersion());
 
-    JavaFxUtil.addListener(userService.connectionStateProperty(), (observable, oldValue, newValue) -> JavaFxUtil.runLater(() -> {
+    JavaFxUtil.addListener(loginService.connectionStateProperty(), (SimpleChangeListener<ConnectionState>) newValue -> fxApplicationThreadExecutor.execute(() -> {
       switch (newValue) {
         case DISCONNECTED -> {
           fafConnectionButton.setText(i18n.get("statusBar.fafDisconnected"));
@@ -75,7 +76,7 @@ public class StatusBarController implements Controller<Node> {
       }
     }));
 
-    JavaFxUtil.addListener(chatService.connectionStateProperty(), (observable, oldValue, newValue) -> JavaFxUtil.runLater(() -> {
+    JavaFxUtil.addListener(chatService.connectionStateProperty(), (SimpleChangeListener<ConnectionState>) newValue -> fxApplicationThreadExecutor.execute(() -> {
       chatConnectionStatusIcon.pseudoClassStateChanged(CONNECTIVITY_CONNECTED_PSEUDO_CLASS, false);
       chatConnectionStatusIcon.pseudoClassStateChanged(CONNECTIVITY_DISCONNECTED_PSEUDO_CLASS, false);
       switch (newValue) {
@@ -91,7 +92,7 @@ public class StatusBarController implements Controller<Node> {
       }
     }));
 
-    JavaFxUtil.addListener(taskService.getActiveWorkers(), (Observable observable) -> {
+    JavaFxUtil.addListener(taskService.getActiveWorkers(), (Observable _) -> {
       Collection<Worker<?>> runningWorkers = taskService.getActiveWorkers();
       if (runningWorkers.isEmpty()) {
         setCurrentWorkerInStatusBar(null);
@@ -103,14 +104,14 @@ public class StatusBarController implements Controller<Node> {
 
   @Override
   public Node getRoot() {
-    return null;
+    return root;
   }
 
   /**
    * @param worker the task to set, {@code null} to unset
    */
   private void setCurrentWorkerInStatusBar(Worker<?> worker) {
-    JavaFxUtil.runLater(() -> {
+    fxApplicationThreadExecutor.execute(() -> {
       if (worker == null) {
         taskPane.setVisible(false);
         taskProgressBar.progressProperty().unbind();
@@ -135,7 +136,7 @@ public class StatusBarController implements Controller<Node> {
   }
 
   public void onFafReconnectClicked() {
-    userService.reconnectToLobby();
+    loginService.reconnectToLobby();
   }
 
   public void onChatReconnectClicked() {

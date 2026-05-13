@@ -1,11 +1,8 @@
 package com.faforever.client.notification;
 
-import com.faforever.client.builders.PreferencesBuilder;
-import com.faforever.client.preferences.NotificationsPrefs;
-import com.faforever.client.preferences.Preferences;
-import com.faforever.client.preferences.PreferencesService;
+import com.faforever.client.preferences.NotificationPrefs;
 import com.faforever.client.preferences.ToastPosition;
-import com.faforever.client.test.UITest;
+import com.faforever.client.test.PlatformTest;
 import com.faforever.client.theme.UiService;
 import javafx.geometry.Pos;
 import javafx.scene.layout.Pane;
@@ -13,6 +10,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.nullValue;
@@ -22,51 +20,46 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-public class TransientNotificationsControllerTest extends UITest {
+public class TransientNotificationsControllerTest extends PlatformTest {
 
   @InjectMocks
   private TransientNotificationsController instance;
 
   @Mock
-  private PreferencesService preferencesService;
-  @Mock
   private UiService uiService;
-  private NotificationsPrefs notificationPrefs;
+  @Spy
+  private NotificationPrefs notificationPrefs;
 
   @BeforeEach
   public void setUp() throws Exception {
-    Preferences preferences = PreferencesBuilder.create().defaultValues().get();
-    notificationPrefs = preferences.getNotification();
-    when(preferencesService.getPreferences()).thenReturn(preferences);
-
     loadFxml("theme/transient_notifications.fxml", clazz -> instance);
   }
 
   @Test
   public void testToastPositionTopLeft() throws Exception {
     notificationPrefs.setToastPosition(ToastPosition.TOP_LEFT);
-    instance.initialize();
+    reinitialize(instance);
     assertThat(instance.transientNotificationsRoot.getAlignment(), is(Pos.TOP_LEFT));
   }
 
   @Test
   public void testToastPositionTopRight() throws Exception {
     notificationPrefs.setToastPosition(ToastPosition.TOP_RIGHT);
-    instance.initialize();
+    reinitialize(instance);
     assertThat(instance.transientNotificationsRoot.getAlignment(), is(Pos.TOP_RIGHT));
   }
 
   @Test
   public void testToastPositionBottomRight() throws Exception {
     notificationPrefs.setToastPosition(ToastPosition.BOTTOM_RIGHT);
-    instance.initialize();
+    reinitialize(instance);
     assertThat(instance.transientNotificationsRoot.getAlignment(), is(Pos.BOTTOM_RIGHT));
   }
 
   @Test
   public void testToastPositionBottomLeft() throws Exception {
     notificationPrefs.setToastPosition(ToastPosition.BOTTOM_LEFT);
-    instance.initialize();
+    reinitialize(instance);
     assertThat(instance.transientNotificationsRoot.getAlignment(), is(Pos.BOTTOM_LEFT));
   }
 
@@ -83,10 +76,11 @@ public class TransientNotificationsControllerTest extends UITest {
     when(uiService.loadFxml("theme/transient_notification.fxml")).thenReturn(controller);
 
     TransientNotification notification1 = new TransientNotification("title1", "text1");
-    instance.addNotification(notification1);
+    runOnFxThreadAndWait(() -> instance.addNotification(notification1));
 
     TransientNotification notification2 = new TransientNotification("title2", "text2");
-    instance.addNotification(notification2);
+    runOnFxThreadAndWait(() -> instance.addNotification(notification2));
+
 
     assertThat(instance.transientNotificationsRoot.getChildren(), hasSize(2));
     verify(controller).setNotification(notification1);

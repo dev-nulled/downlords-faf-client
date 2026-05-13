@@ -3,14 +3,17 @@ package com.faforever.client.api;
 import com.faforever.client.config.ClientProperties;
 import com.faforever.client.config.ClientProperties.Api;
 import com.faforever.client.io.CountingFileSystemResource;
-import com.faforever.client.user.event.LoggedOutEvent;
+import com.faforever.client.login.TokenRetrievalException;
 import com.faforever.commons.api.dto.ApiException;
 import com.faforever.commons.api.dto.Clan;
 import com.faforever.commons.api.dto.CoopResult;
+import com.faforever.commons.api.dto.CoopScenario;
+import com.faforever.commons.api.dto.CoturnServer;
 import com.faforever.commons.api.dto.Game;
 import com.faforever.commons.api.dto.GameReviewsSummary;
 import com.faforever.commons.api.dto.LeaderboardEntry;
 import com.faforever.commons.api.dto.LeaderboardRatingJournal;
+import com.faforever.commons.api.dto.LeagueScoreJournal;
 import com.faforever.commons.api.dto.LeagueSeason;
 import com.faforever.commons.api.dto.LeagueSeasonDivisionSubdivision;
 import com.faforever.commons.api.dto.LeagueSeasonScore;
@@ -34,23 +37,24 @@ import com.github.jasminb.jsonapi.JSONAPIDocument;
 import com.github.jasminb.jsonapi.exceptions.ResourceParseException;
 import com.github.rutledgepaulv.qbuilders.builders.QBuilder;
 import com.github.rutledgepaulv.qbuilders.conditions.Condition;
-import com.google.common.eventbus.EventBus;
-import com.google.common.eventbus.Subscribe;
-import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.VisibleForTesting;
 import org.springframework.beans.factory.InitializingBean;
+import org.springframework.beans.factory.ObjectFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Lazy;
-import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClient.RequestHeadersSpec;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 import org.springframework.web.util.UriComponents;
 import org.springframework.web.util.UriComponentsBuilder;
 import reactor.core.publisher.Flux;
@@ -65,6 +69,7 @@ import java.util.List;
 import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static com.faforever.commons.api.elide.ElideNavigator.qBuilder;
@@ -73,7 +78,6 @@ import static com.faforever.commons.api.elide.ElideNavigator.qBuilder;
 @Lazy
 @Slf4j
 @Component
-@Profile("!offline")
 @RequiredArgsConstructor
 public class FafApiAccessor implements InitializingBean {
 
@@ -87,37 +91,32 @@ public class FafApiAccessor implements InitializingBean {
           List.of("game", "game.featuredMod", "game.playerStats", "game.playerStats.player", "game.playerStats.ratingChanges",
               "game.reviews", "game.reviews.player", "game.mapVersion", "game.mapVersion.map", "game.mapVersion.map")),
       java.util.Map.entry(Game.class,
-          List.of("featuredMod", "playerStats", "playerStats.player", "playerStats.ratingChanges", "reviews", "reviews.player",
-              "mapVersion", "mapVersion.map", "mapVersion.map.versions", "reviewsSummary")),
+          List.of("featuredMod", "playerStats", "playerStats.player", "playerStats.ratingChanges",
+              "mapVersion", "mapVersion.map", "mapVersion.map", "reviewsSummary")),
       java.util.Map.entry(LeagueSeason.class, List.of("leaderboard", "league")),
-      java.util.Map.entry(LeagueSeasonScore.class, List.of("leagueSeason", "leagueSeason.leaderboard", "leagueSeason.league",
+      java.util.Map.entry(LeagueSeasonScore.class,
+                          List.of("leagueSeason", "leagueSeason.leaderboard", "leagueSeason.league",
           "leagueSeasonDivisionSubdivision", "leagueSeasonDivisionSubdivision.leagueSeasonDivision")),
-      java.util.Map.entry(LeagueSeasonDivisionSubdivision.class, List.of("leagueSeasonDivision", "leagueSeasonDivision.leagueSeason")),
-      java.util.Map.entry(MapVersion.class,
-          List.of("map", "map.latestVersion", "map.versions",
-              "map.versions.reviews", "map.versions.reviews.player", "map.reviewsSummary", "map.author")),
-      java.util.Map.entry(MapReviewsSummary.class,
-          List.of("map.latestVersion", "map.author", "map.versions", "map.versions.reviews", "map.versions.reviews.player", "map.reviewsSummary")),
-      java.util.Map.entry(Map.class,
-          List.of("latestVersion", "author", "versions", "versions.reviews", "versions.reviews.player", "reviewsSummary")),
-      java.util.Map.entry(MapPoolAssignment.class,
-          List.of("mapVersion", "mapVersion.map", "mapVersion.map.latestVersion", "mapVersion.map.author",
-              "mapVersion.map.reviewsSummary", "mapVersion.map.versions.reviews", "mapVersion.map.versions.reviews.player")),
-      java.util.Map.entry(ModVersion.class,
-          List.of("mod", "mod.latestVersion", "mod.versions",
-              "mod.versions.reviews", "mod.versions.reviews.player", "mod.reviewsSummary", "mod.uploader")),
-      java.util.Map.entry(ModReviewsSummary.class,
-          List.of("mod.latestVersion", "mod.versions", "mod.versions.reviews", "mod.versions.reviews.player", "mod.reviewsSummary", "mod.uploader")),
-      java.util.Map.entry(Mod.class,
-          List.of("latestVersion", "versions", "versions.reviews", "versions.reviews.player", "reviewsSummary", "uploader")),
+      java.util.Map.entry(LeagueSeasonDivisionSubdivision.class, List.of("leagueSeasonDivision")),
+      java.util.Map.entry(LeagueScoreJournal.class, List.of("leagueSeason", "leagueSeasonDivisionSubdivisionBefore", "leagueSeasonDivisionSubdivisionAfter",
+          "leagueSeasonDivisionSubdivisionBefore.leagueSeasonDivision", "leagueSeasonDivisionSubdivisionAfter.leagueSeasonDivision")),
+      java.util.Map.entry(MapVersion.class, List.of("map", "map.reviewsSummary", "map.author")),
+      java.util.Map.entry(MapReviewsSummary.class, List.of("map.latestVersion", "map.author", "map.reviewsSummary")),
+      java.util.Map.entry(Map.class, List.of("latestVersion", "author", "reviewsSummary")),
+      java.util.Map.entry(MapPoolAssignment.class, List.of("mapVersion", "mapVersion.map", "mapVersion.map.author", "mapVersion.map.reviewsSummary", "mapPool", "mapPool.matchmakerQueueMapPool")),
+      java.util.Map.entry(ModVersion.class, List.of("mod", "mod.latestVersion", "mod.reviewsSummary", "mod.uploader")),
+      java.util.Map.entry(ModReviewsSummary.class, List.of("mod.latestVersion", "mod.reviewsSummary", "mod.uploader")),
+      java.util.Map.entry(Mod.class, List.of("latestVersion", "reviewsSummary", "uploader")),
       java.util.Map.entry(ModerationReport.class, List.of("reporter", "lastModerator", "reportedUsers", "game", "game.playerStats", "game.playerStats.player")),
       java.util.Map.entry(MatchmakerQueue.class, List.of("leaderboard")),
       java.util.Map.entry(TutorialCategory.class, List.of("tutorials", "tutorials.mapVersion.map", "tutorials.mapVersion.map.latestVersion",
-          "tutorials.mapVersion.map.author"))
+          "tutorials.mapVersion.map.author")),
+      java.util.Map.entry(CoopScenario.class, List.of("maps"))
   );
 
   @VisibleForTesting
   static final java.util.Map<Class<? extends ElideEntity>, List<Condition<?>>> FILTERS = java.util.Map.ofEntries(
+      java.util.Map.entry(CoturnServer.class, List.of(qBuilder().bool("active").isTrue())),
       java.util.Map.entry(ModVersion.class, List.of(qBuilder().bool("hidden").isFalse())),
       java.util.Map.entry(Mod.class, List.of(qBuilder().bool("latestVersion.hidden").isFalse())),
       java.util.Map.entry(ModReviewsSummary.class, List.of(qBuilder().bool("mod.latestVersion.hidden").isFalse())),
@@ -128,58 +127,55 @@ public class FafApiAccessor implements InitializingBean {
 
   private static final String JSONAPI_MEDIA_TYPE = "application/vnd.api+json;charset=utf-8";
 
-  private final EventBus eventBus;
   private final ClientProperties clientProperties;
-  private final OAuthTokenFilter oAuthTokenFilter;
-  private final WebClient.Builder webClientBuilder;
+  @Qualifier("apiWebClient")
+  private final ObjectFactory<WebClient> apiWebClientFactory;
+
+  private WebClient apiWebClient;
+  private Retry apiRetrySpec;
 
   private CountDownLatch authorizedLatch = new CountDownLatch(1);
-  private WebClient webClient;
-  @Getter
-  private int maxPageSize;
-  private Retry apiRetrySpec;
 
   @Override
   public void afterPropertiesSet() {
-    eventBus.register(this);
     Api api = clientProperties.getApi();
     apiRetrySpec = Retry.backoff(api.getRetryAttempts(), Duration.ofSeconds(api.getRetryBackoffSeconds()))
         .jitter(api.getRetryJitter())
-        .filter(error -> error instanceof UnreachableApiException)
-        .doBeforeRetry(retry -> log.warn("Could not retrieve value from api retrying: Attempt #{} of {}", retry.totalRetries(), api.getRetryAttempts()))
-        .onRetryExhaustedThrow((retryBackoffSpec, retrySignal) ->
-            new UnreachableApiException(String.format("API is unreachable after %d attempts", retryBackoffSpec.maxAttempts), retrySignal.failure()));
+        .filter(error -> error instanceof UnreachableApiException || error instanceof RateLimitApiException)
+        .doBeforeRetry(retry -> log.warn("Could not retrieve value from api retrying: Attempt #{} of {}", retry.totalRetries(), api.getRetryAttempts()));
   }
 
   public void authorize() {
-    Api apiProperties = clientProperties.getApi();
-    maxPageSize = apiProperties.getMaxPageSize();
-
-    webClient = webClientBuilder
-        .baseUrl(apiProperties.getBaseUrl())
-        .filter(oAuthTokenFilter)
-        .build();
+    apiWebClient = apiWebClientFactory.getObject();
 
     authorizedLatch.countDown();
   }
 
-  @Subscribe
-  public void onLoggedOutEvent(LoggedOutEvent event) {
+  public void reset() {
     authorizedLatch = new CountDownLatch(1);
   }
 
-  @Subscribe
-  public void onSessionExpiredEvent(SessionExpiredEvent event) {
-    authorizedLatch = new CountDownLatch(1);
+  public int getMaxPageSize() {
+    return clientProperties.getApi().getMaxPageSize();
   }
 
   public Mono<MeResult> getMe() {
-    return retrieveMonoWithErrorHandling(MeResult.class, webClient.get().uri("/me"))
-        .cache()
-        .doOnNext(object -> log.trace("Retrieved {} from /me with type MeResult", object));
+    return retrieveMonoWithErrorHandling(MeResult.class, apiWebClient.get()
+        .uri("/me")).doOnNext(object -> log.trace("Retrieved {} from /me with type MeResult", object));
   }
 
-  public Mono<Void> uploadFile(String endpoint, Path file, ByteCountListener listener, java.util.Map<String, java.util.Map<String, ?>> params) {
+  public <T> Mono<T> getApiObject(String path, Class<T> clazz) {
+    RequestHeadersSpec<?> requestSpec = apiWebClient.get().uri(path);
+    return retrieveMonoWithErrorHandling(clazz, requestSpec).doOnNext(object -> log.trace("Retrieved {} from {} with type {}", object, path, clazz));
+  }
+
+  public <T> Flux<T> getApiObjects(String path, Class<T> clazz) {
+    RequestHeadersSpec<?> requestSpec = apiWebClient.get().uri(path);
+    return retrieveFluxWithErrorHandling(clazz, requestSpec).doOnNext(object -> log.trace("Retrieved {} from {} with type {}", object, path, clazz));
+  }
+
+  public Mono<Void> uploadFile(String endpoint, Path file, ByteCountListener listener,
+                               java.util.Map<String, java.util.Map<String, ?>> params) {
     MultiValueMap<String, Object> multipartContent = createFileMultipart(file, listener);
     params.forEach(multipartContent::add);
     return postMultipartForm(endpoint, multipartContent);
@@ -193,33 +189,41 @@ public class FafApiAccessor implements InitializingBean {
   }
 
   public Mono<Void> postMultipartForm(String endpointPath, MultiValueMap<String, Object> request) {
-    return retrieveMonoWithErrorHandling(Void.class, webClient.post().uri(endpointPath)
+    return retrieveMonoWithErrorHandling(Void.class, apiWebClient.post()
+        .uri(endpointPath)
         .contentType(MediaType.MULTIPART_FORM_DATA)
-        .bodyValue(request))
-        .doOnSuccess(aVoid -> log.trace("Posted {} to {}", request, endpointPath));
+        .bodyValue(request)).doOnSuccess(aVoid -> log.trace("Posted {} to {}", request, endpointPath));
+  }
+
+  public <T> Mono<Void> postJson(String endpointPath, T request) {
+    return retrieveMonoWithErrorHandling(Void.class, apiWebClient.post()
+                                                                 .uri(endpointPath)
+                                                                 .contentType(MediaType.APPLICATION_JSON)
+                                                                 .bodyValue(request)).doOnSuccess(
+        aVoid -> log.trace("Posted json {} to {}", request, endpointPath));
   }
 
   public <T extends ElideEntity> Mono<T> post(ElideNavigatorOnCollection<T> navigator, T request) {
     Class<T> type = navigator.getDtoClass();
     String endpointPath = navigator.build();
-    return retrieveMonoWithErrorHandling(type, webClient.post().uri(endpointPath)
+    return retrieveMonoWithErrorHandling(type, apiWebClient.post()
+        .uri(endpointPath)
         .contentType(MediaType.parseMediaType(JSONAPI_MEDIA_TYPE))
-        .bodyValue(request))
-        .doOnNext(object -> log.trace("Posted {} to {} with type {}", object, endpointPath, type));
+        .bodyValue(request)).doOnNext(object -> log.trace("Posted {} to {} with type {}", object, endpointPath, type));
   }
 
   public <T extends ElideEntity> Mono<Void> patch(ElideNavigatorOnId<T> navigator, T request) {
     String endpointPath = navigator.build();
-    return retrieveMonoWithErrorHandling(Void.class, webClient.patch().uri(endpointPath)
+    return retrieveMonoWithErrorHandling(Void.class, apiWebClient.patch()
+        .uri(endpointPath)
         .contentType(MediaType.parseMediaType(JSONAPI_MEDIA_TYPE))
-        .bodyValue(request))
-        .doOnSuccess(aVoid -> log.trace("Patched {} at {}", request, endpointPath));
+        .bodyValue(request)).doOnSuccess(aVoid -> log.trace("Patched {} at {}", request, endpointPath));
   }
 
   public Mono<Void> delete(ElideNavigatorOnId<?> navigator) {
     String endpointPath = navigator.build();
-    return retrieveMonoWithErrorHandling(Void.class, webClient.delete().uri(endpointPath))
-        .doOnSuccess(aVoid -> log.trace("Deleted {}", endpointPath));
+    return retrieveMonoWithErrorHandling(Void.class, apiWebClient.delete()
+        .uri(endpointPath)).doOnSuccess(aVoid -> log.trace("Deleted {}", endpointPath));
   }
 
   public <T extends ElideEntity> Mono<T> getOne(ElideNavigatorOnId<T> navigator) {
@@ -227,13 +231,17 @@ public class FafApiAccessor implements InitializingBean {
 
     Class<T> type = navigator.getDtoClass();
     String endpointPath = navigator.build();
-    return retrieveMonoWithErrorHandling(type, webClient.get().uri(endpointPath))
-        .cache()
+    return retrieveMonoWithErrorHandling(type, apiWebClient.get().uri(endpointPath)).onErrorResume(
+                                                                                        WebClientResponseException.NotFound.class, throwable -> {
+                                                                                          log.warn("No {} found for path {}", type, endpointPath);
+                                                                                          return Mono.empty();
+                                                                                        }).cache()
         .doOnNext(object -> log.trace("Retrieved {} from {} with type {}", object, endpointPath, type));
   }
 
-  public <T> Flux<T> getMany(Class<T> type, String endpointPath, int count, java.util.Map<String, Serializable> params) {
-    java.util.Map<String, List<String>> multiValues = params.entrySet().stream()
+  public <T> Flux<T> getAll(Class<T> type, String endpointPath, int count, java.util.Map<String, Serializable> params) {
+    java.util.Map<String, List<String>> multiValues = params.entrySet()
+        .stream()
         .collect(Collectors.toMap(Entry::getKey, entry -> List.of(String.valueOf(entry.getValue()))));
 
     UriComponents uriComponents = UriComponentsBuilder.fromPath(endpointPath)
@@ -245,40 +253,42 @@ public class FafApiAccessor implements InitializingBean {
 
     String url = uriComponents.toUriString();
 
-    return retrieveFluxWithErrorHandling(type, webClient.get().uri(url))
-        .cache()
+    return retrieveFluxWithErrorHandling(type, apiWebClient.get().uri(url)).cache()
         .doOnNext(list -> log.trace("Retrieved {} from {}", list, url));
   }
 
-  public <T extends ElideEntity> Flux<T> getMany(ElideNavigatorOnCollection<T> navigator) {
-    return getMany(navigator, "");
+  public <T extends ElideEntity> Flux<T> getAll(ElideNavigatorOnCollection<T> navigator) {
+    return getAll(navigator, "");
   }
 
-  public <T extends ElideEntity> Flux<T> getMany(ElideNavigatorOnCollection<T> navigator, String customFilter) {
-    enrichBuilder(navigator);
-    enrichCollectionFilter(navigator);
-    String endpointPath;
-    if (!customFilter.isEmpty()) {
-      endpointPath = enrichWithCustomFilter(navigator.build(), customFilter);
-    } else {
-      endpointPath = navigator.build();
-    }
-
-    return retrieveFluxWithErrorHandling(navigator.getDtoClass(), webClient.get().uri(endpointPath))
-        .cache()
+  public <T extends ElideEntity> Flux<T> getAll(ElideNavigatorOnCollection<T> navigator, String customFilter) {
+    String endpointPath = navigator.build();
+    AtomicInteger pageNumber = new AtomicInteger();
+    navigator.pageNumber(pageNumber.incrementAndGet());
+    return getManyWithPageCount(navigator, customFilter).expand(itemsPage -> {
+                                                          int nextPage = pageNumber.incrementAndGet();
+                                                          if (nextPage <= itemsPage.getT2()) {
+                                                            navigator.pageNumber(nextPage);
+                                                            return getManyWithPageCount(navigator, customFilter);
+                                                          } else {
+                                                            return Mono.empty();
+                                                          }
+                                                        }, 1).flatMapIterable(Tuple2::getT1).cache()
         .doOnNext(object -> log.trace("Retrieved {} from {}", object, endpointPath));
   }
 
-  public <T extends ElideEntity> Mono<Tuple2<List<T>, Integer>> getManyWithPageCount(ElideNavigatorOnCollection<T> navigator) {
+  public <T extends ElideEntity> Mono<Tuple2<List<T>, Integer>> getManyWithPageCount(
+      ElideNavigatorOnCollection<T> navigator) {
     return getManyWithPageCount(navigator, "");
   }
 
-  public <T extends ElideEntity> Mono<Tuple2<List<T>, Integer>> getManyWithPageCount(ElideNavigatorOnCollection<T> navigator, String customFilter) {
+  public <T extends ElideEntity> Mono<Tuple2<List<T>, Integer>> getManyWithPageCount(
+      ElideNavigatorOnCollection<T> navigator, String customFilter) {
     navigator.pageTotals(true);
     enrichCollectionFilter(navigator);
     enrichBuilder(navigator);
     String endpointPath = navigator.build();
-    if (!customFilter.isEmpty()) {
+    if (!customFilter.isBlank()) {
       endpointPath = enrichWithCustomFilter(endpointPath, customFilter);
     }
 
@@ -287,27 +297,25 @@ public class FafApiAccessor implements InitializingBean {
 
   @NotNull
   private <T extends ElideEntity> Mono<Tuple2<List<T>, Integer>> getFromEndpointWithPageCount(String endpointPath) {
-    return retrieveMonoWithErrorHandling(JSONAPIDocument.class, webClient.get().uri(endpointPath))
-        .map(jsonapiDocument -> (JSONAPIDocument<List<T>>) jsonapiDocument)
-        .flatMap(document -> Mono.zip(
-            Mono.fromCallable(document::get),
-            Mono.fromCallable(document::getMeta)
-                .map(meta -> ((java.util.Map<String, Integer>) meta.get("page")).get("totalPages"))))
+    return retrieveMonoWithErrorHandling(JSONAPIDocument.class, apiWebClient.get()
+        .uri(endpointPath)).map(jsonapiDocument -> (JSONAPIDocument<List<T>>) jsonapiDocument)
+        .flatMap(document -> Mono.zip(Mono.fromCallable(document::get), Mono.fromCallable(document::getMeta)
+            .map(meta -> ((java.util.Map<String, Integer>) meta.get("page")).get("totalPages"))))
         .switchIfEmpty(Mono.zip(Mono.just(List.of()), Mono.just(0)))
         .cache()
         .doOnNext(tuple -> log.trace("Retrieved {} from {}", tuple.getT1(), endpointPath));
   }
 
   private <T> Mono<T> retrieveMonoWithErrorHandling(Class<T> type, WebClient.RequestHeadersSpec<?> requestSpec) {
-    return retrieveWithErrorHandling(requestSpec)
-        .bodyToMono(type)
-        .retryWhen(apiRetrySpec);
+    return retrieveWithErrorHandling(requestSpec).bodyToMono(type)
+        .retryWhen(apiRetrySpec)
+        .doOnError(TokenRetrievalException.class, throwable -> authorizedLatch = new CountDownLatch(1));
   }
 
   private <T> Flux<T> retrieveFluxWithErrorHandling(Class<T> type, WebClient.RequestHeadersSpec<?> requestSpec) {
-    return retrieveWithErrorHandling(requestSpec)
-        .bodyToFlux(type)
-        .retryWhen(apiRetrySpec);
+    return retrieveWithErrorHandling(requestSpec).bodyToFlux(type)
+        .retryWhen(apiRetrySpec)
+        .doOnError(TokenRetrievalException.class, throwable -> authorizedLatch = new CountDownLatch(1));
   }
 
   private WebClient.ResponseSpec retrieveWithErrorHandling(WebClient.RequestHeadersSpec<?> requestSpec) {
@@ -317,24 +325,24 @@ public class FafApiAccessor implements InitializingBean {
       log.warn("Api thread interrupted while waiting for authorization, will retry", e);
       return retrieveWithErrorHandling(requestSpec);
     }
-    return requestSpec
-        .retrieve()
-        .onStatus(HttpStatus::isError, response -> {
-          HttpStatus httpStatus = response.statusCode();
-          if (httpStatus.equals(HttpStatus.BAD_REQUEST) || httpStatus.equals(HttpStatus.UNPROCESSABLE_ENTITY)) {
+    return requestSpec.retrieve().onStatus(HttpStatusCode::isError, response -> {
+      HttpStatusCode httpStatus = response.statusCode();
+      return switch (httpStatus) {
+        case HttpStatus.BAD_REQUEST, HttpStatus.UNPROCESSABLE_CONTENT ->
             /* onStatus expects a mono which emits an exception so here we map it to an Exception, however
               this map is never executed since bodyToMono will throw its own ResourceParseException if there are
               any errors in the JSONAPIDocument which we expect with a BAD REQUEST and UNPROCESSABLE response so this
               mapping only exists to satisfy the typing of onStatus*/
-            return response.bodyToMono(JSONAPIDocument.class)
-                .flatMap(jsonapiDocument -> response.createException())
-                .onErrorMap(ResourceParseException.class, exception -> new ApiException(exception.getErrors().getErrors()));
-          } else if (httpStatus.equals(HttpStatus.SERVICE_UNAVAILABLE)) {
-            return response.createException().map(error -> new UnreachableApiException("API is unreachable", error));
-          } else {
-            return response.createException();
-          }
-        });
+            response.bodyToMono(JSONAPIDocument.class)
+                    .flatMap(jsonapiDocument -> response.createException())
+                    .onErrorMap(ResourceParseException.class,
+                                exception -> new ApiException(exception.getErrors().getErrors()));
+        case HttpStatus.SERVICE_UNAVAILABLE ->
+            response.createException().map(error -> new UnreachableApiException("API is unreachable", error));
+        case HttpStatus.TOO_MANY_REQUESTS -> response.createException().map(RateLimitApiException::new);
+        default -> response.createException();
+      };
+    });
   }
 
   private void enrichBuilder(ElideEndpointBuilder<?> endpointBuilder) {
@@ -344,12 +352,16 @@ public class FafApiAccessor implements InitializingBean {
   }
 
   private void enrichCollectionFilter(ElideNavigatorOnCollection<?> navigator) {
+    if (!navigator.isRoot()) {
+      return;
+    }
+
     List<Condition<?>> additionalConditions = FILTERS.getOrDefault(navigator.getDtoClass(), List.of());
     if (!additionalConditions.isEmpty()) {
       Optional<Condition<?>> currentFilter = navigator.getFilter();
-      currentFilter.ifPresentOrElse(condition -> navigator.setFilter(new QBuilder().and(additionalConditions).and().and(List.of(condition))),
-          () -> navigator.setFilter(new QBuilder().and(additionalConditions))
-      );
+      currentFilter.ifPresentOrElse(condition -> navigator.setFilter(new QBuilder().and(additionalConditions)
+          .and()
+          .and(List.of(condition))), () -> navigator.setFilter(new QBuilder().and(additionalConditions)));
     }
   }
 

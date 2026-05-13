@@ -3,7 +3,7 @@ package com.faforever.client.util;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.preferences.ChatPrefs;
 import com.faforever.client.preferences.DateInfo;
-import com.faforever.client.preferences.PreferencesService;
+import com.faforever.client.preferences.LocalizationPrefs;
 import com.faforever.client.preferences.TimeInfo;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Lazy;
@@ -11,7 +11,6 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.time.OffsetDateTime;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.FormatStyle;
@@ -27,62 +26,27 @@ import java.util.TimeZone;
 public class TimeService {
 
   private final I18n i18n;
-  private final PreferencesService preferencesService;
+  private final ChatPrefs chatPrefs;
+  private final LocalizationPrefs localizationPrefs;
 
-  /**
-   * A string as "10 minutes ago"
-   */
-  public String timeAgo(Temporal temporal) {
-    if (temporal == null) {
-      return "";
-    }
+  private static final DateTimeFormatter FORMATTER_DMY_SHORT = DateTimeFormatter.ofPattern("d/M/yy");
+  private static final DateTimeFormatter FORMATTER_DMY_MEDIUM = DateTimeFormatter.ofPattern("d MMM, yyyy");
+  private static final DateTimeFormatter FORMATTER_DMY_LONG = DateTimeFormatter.ofPattern("d MMMM, yyyy");
+  private static final DateTimeFormatter FORMATTER_DMY_FULL = DateTimeFormatter.ofPattern("EEEE, d MMMM, yyyy");
 
-    Duration ago = Duration.between(temporal, OffsetDateTime.now());
-
-    if (Duration.ofMinutes(1).compareTo(ago) > 0) {
-      return i18n.getQuantized("secondAgo", "secondsAgo", ago.getSeconds());
-    }
-    if (Duration.ofHours(1).compareTo(ago) > 0) {
-      return i18n.getQuantized("minuteAgo", "minutesAgo", ago.toMinutes());
-    }
-    if (Duration.ofDays(1).compareTo(ago) > 0) {
-      return i18n.getQuantized("hourAgo", "hoursAgo", ago.toHours());
-    }
-    if (Duration.ofDays(30).compareTo(ago) > 0) {
-      return i18n.getQuantized("dayAgo", "daysAgo", ago.toDays());
-    }
-    if (Duration.ofDays(365).compareTo(ago) > 0) {
-      return i18n.getQuantized("monthAgo", "monthsAgo", ago.toDays() / 30);
-    }
-
-    return i18n.getQuantized("yearAgo", "yearsAgo", ago.toDays() / 365);
-  }
-
-  /**
-   * Returns {@link #timeAgo(Temporal)} if the specified instant is less than one day ago, otherwise a date string.
-   */
-  public String lessThanOneDayAgo(Temporal temporal) {
-    if (temporal == null) {
-      return "";
-    }
-
-    Duration ago = Duration.between(temporal, OffsetDateTime.now());
-
-    if (ago.compareTo(Duration.ofDays(1)) <= 0) {
-      return timeAgo(temporal);
-    }
-
-    return asDate(temporal);
-  }
+  private static final DateTimeFormatter FORMATTER_MDY_SHORT = DateTimeFormatter.ofPattern("M/d/yy");
+  private static final DateTimeFormatter FORMATTER_MDY_MEDIUM = DateTimeFormatter.ofPattern("MMM d, yyyy");
+  private static final DateTimeFormatter FORMATTER_MDY_LONG = DateTimeFormatter.ofPattern("MMMM d, yyyy");
+  private static final DateTimeFormatter FORMATTER_MDY_FULL = DateTimeFormatter.ofPattern("EEEE, MMMM d, yyyy");
 
   public String asDateTime(TemporalAccessor temporalAccessor) {
     if (temporalAccessor == null) {
       return i18n.get("noDateAvailable");
     }
     return DateTimeFormatter.ofLocalizedDateTime(FormatStyle.SHORT)
-        .withLocale(getCurrentDateLocale())
-        .withZone(TimeZone.getDefault().toZoneId())
-        .format(temporalAccessor);
+                            .withLocale(getCurrentDateLocale())
+                            .withZone(TimeZone.getDefault().toZoneId())
+                            .format(temporalAccessor);
   }
 
   public String asDate(TemporalAccessor temporalAccessor) {
@@ -93,43 +57,62 @@ public class TimeService {
     if (temporalAccessor == null) {
       return i18n.get("noDateAvailable");
     }
-    return DateTimeFormatter.ofLocalizedDate(formatStyle)
-        .withLocale(getCurrentDateLocale())
-        .withZone(TimeZone.getDefault().toZoneId())
-        .format(temporalAccessor);
+
+    DateInfo dateInfo = localizationPrefs.getDateFormat();
+    DateTimeFormatter formatter = switch (dateInfo) {
+      case AUTO -> DateTimeFormatter.ofLocalizedDate(formatStyle);
+      case DAY_MONTH_YEAR -> getDMYFormatter(formatStyle);
+      case MONTH_DAY_YEAR -> getMDYFormatter(formatStyle);
+    };
+
+    return formatter.withLocale(i18n.getUserSpecificLocale())
+                    .withZone(TimeZone.getDefault().toZoneId())
+                    .format(temporalAccessor);
   }
 
-  
+
   public String asShortTime(Temporal temporal) {
     if (temporal == null) {
       return "";
     }
     return DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)
-        .withLocale(getCurrentTimeLocale())
-        .format(ZonedDateTime.ofInstant(Instant.from(temporal), TimeZone.getDefault().toZoneId()));
-  }
-
-  
-  public String asIsoTime(Temporal temporal) {
-    return DateTimeFormatter.ISO_TIME.format(temporal);
+                            .withLocale(getCurrentTimeLocale())
+                            .format(ZonedDateTime.ofInstant(Instant.from(temporal), TimeZone.getDefault().toZoneId()));
   }
 
   private Locale getCurrentTimeLocale() {
-    ChatPrefs chatPrefs = preferencesService.getPreferences().getChat();
     if (chatPrefs.getTimeFormat().equals(TimeInfo.AUTO)) {
       return i18n.getUserSpecificLocale();
     }
-    return preferencesService.getPreferences().getChat().getTimeFormat().getUsedLocale();
+    return chatPrefs.getTimeFormat().getUsedLocale();
 
   }
 
   private Locale getCurrentDateLocale() {
-    DateInfo dateInfo = preferencesService.getPreferences().getLocalization().getDateFormat();
+    DateInfo dateInfo = localizationPrefs.getDateFormat();
     if (dateInfo.equals(DateInfo.AUTO)) {
       return i18n.getUserSpecificLocale();
     }
     return dateInfo.getUsedLocale();
 
+  }
+
+  private DateTimeFormatter getDMYFormatter(FormatStyle style) {
+    return switch (style) {
+      case SHORT -> FORMATTER_DMY_SHORT;
+      case MEDIUM -> FORMATTER_DMY_MEDIUM;
+      case LONG -> FORMATTER_DMY_LONG;
+      case FULL -> FORMATTER_DMY_FULL;
+    };
+  }
+
+  private DateTimeFormatter getMDYFormatter(FormatStyle style) {
+    return switch (style) {
+      case SHORT -> FORMATTER_MDY_SHORT;
+      case MEDIUM -> FORMATTER_MDY_MEDIUM;
+      case LONG -> FORMATTER_MDY_LONG;
+      case FULL -> FORMATTER_MDY_FULL;
+    };
   }
 
   /**
@@ -149,6 +132,27 @@ public class TimeService {
     }
 
     return i18n.get("duration.hourMinutes", duration.toMinutes() / 60, duration.toMinutes() % 60);
+  }
+
+  /**
+   * Returns the localized time of duration, ignoring precision, ex minutes without seconds or hours without
+   * minutes and seconds
+   */
+  public String shortDurationWithoutPrecision(Duration duration) {
+    if (duration == null) {
+      return "";
+    }
+
+    if (Duration.ofMinutes(1).compareTo(duration) > 0) {
+      return i18n.get("duration.minute");
+    }
+    if (Duration.ofHours(1).compareTo(duration) > 0) {
+      return i18n.get("duration.minutes", duration.toMinutes());
+    }
+    if (Duration.ofDays(1).compareTo(duration) > 0) {
+      return i18n.get("duration.hours", duration.toHours());
+    }
+    return i18n.get("duration.days", duration.toDays());
   }
 
   /**

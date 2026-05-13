@@ -7,7 +7,6 @@ import com.faforever.commons.api.elide.ElideNavigatorOnCollection;
 import com.faforever.commons.api.elide.ElideNavigatorOnId;
 import com.github.rutledgepaulv.qbuilders.conditions.Condition;
 import com.github.rutledgepaulv.qbuilders.visitors.RSQLVisitor;
-import lombok.Value;
 import org.hamcrest.Matcher;
 import org.hamcrest.Matchers;
 import org.mockito.ArgumentMatcher;
@@ -27,82 +26,76 @@ public final class ElideMatchers {
   public static final String INCLUDE = "include=";
   public static final String SORT = "sort=";
 
-  public static <T extends ElideEntity> ArgumentMatcher<ElideNavigator<T>> hasDtoClass(Class<? extends ElideEntity> clazz) {
+  public static <T extends ElideEntity> ArgumentMatcher<ElideNavigator<T>> hasDtoClass(
+      Class<? extends ElideEntity> clazz) {
     return builder -> builder != null && builder.getDtoClass().equals(clazz);
   }
 
-  public static ElideParamMatcher filterPresent() {
+  public static ArgumentMatcher<ElideNavigatorOnCollection<?>> filterPresent() {
     return new ElideParamMatcher(containsString("filter="));
   }
 
-  public static ElideParamMatcher hasFilter(Condition<?> condition) {
+  public static ArgumentMatcher<ElideNavigatorOnCollection<?>> hasFilter(Condition<?> condition) {
     return new ElideParamMatcher(containsString(String.format("filter=%s", condition.query(new RSQLVisitor()))));
   }
 
-  public static ElideParamListMatcher<ElideNavigatorOnCollection<?>> hasSort(String sortProperty, boolean ascending) {
+  public static ArgumentMatcher<ElideNavigatorOnCollection<?>> hasSort(String sortProperty, boolean ascending) {
     return new ElideParamListMatcher<>(contains((ascending ? "" : "-") + sortProperty), SORT);
   }
 
-  public static ElideParamListMatcher<?> hasIncludes(List<String> includes) {
-    return new ElideParamListMatcher<>(containsInAnyOrder(includes.stream().map(Matchers::equalTo).collect(Collectors.toList())), INCLUDE);
+  public static ArgumentMatcher<?> hasIncludes(List<String> includes) {
+    return new ElideParamListMatcher<>(containsInAnyOrder(includes.stream()
+        .map(Matchers::equalTo)
+        .collect(Collectors.toList())), INCLUDE);
   }
 
-  public static ElideParamMatcher hasPageSize(int pageSize) {
+  public static ArgumentMatcher<ElideNavigatorOnCollection<?>> hasPageSize(int pageSize) {
     return new ElideParamMatcher(containsString(String.format("page[size]=%d", pageSize)));
   }
 
-  public static ElideParamMatcher hasPageNumber(int pageNumber) {
+  public static ArgumentMatcher<ElideNavigatorOnCollection<?>> hasPageNumber(int pageNumber) {
     return new ElideParamMatcher(containsString(String.format("page[number]=%d", pageNumber)));
   }
 
-  public static ElideParamMatcher hasPageTotals() {
+  public static ArgumentMatcher<ElideNavigatorOnCollection<?>> hasPageTotals() {
     return new ElideParamMatcher(containsString("page[totals]"));
   }
 
-  public static ElideIdMatcher hasId(int id) {
+  public static ArgumentMatcher<ElideNavigatorOnId<?>> hasId(int id) {
     return new ElideIdMatcher(matchesPattern(String.format("^/data/\\w+/%d.*", id)));
   }
 
-  public static ElideRelationshipMatcher hasRelationship(String relationship) {
+  public static ArgumentMatcher<ElideNavigatorOnCollection<?>> hasRelationship(String relationship) {
     return new ElideRelationshipMatcher(matchesPattern(String.format("^/data/\\w+/\\d+/%s.*", relationship)));
   }
 
-  @Value
-  public static class ElideParamMatcher implements ArgumentMatcher<ElideNavigatorOnCollection<?>> {
-    Matcher<String> matcher;
-
+  private record ElideParamMatcher(Matcher<String> matcher) implements ArgumentMatcher<ElideNavigatorOnCollection<?>> {
     @Override
     public boolean matches(ElideNavigatorOnCollection<?> argument) {
       return argument != null && matcher.matches(argument.build());
     }
   }
 
-  @Value
-  public static class ElideIdMatcher implements ArgumentMatcher<ElideNavigatorOnId<?>> {
-    Matcher<String> matcher;
-
+  private record ElideIdMatcher(Matcher<String> matcher) implements ArgumentMatcher<ElideNavigatorOnId<?>> {
     @Override
     public boolean matches(ElideNavigatorOnId<?> argument) {
       return argument != null && matcher.matches(argument.build());
     }
   }
 
-  @Value
-  public static class ElideRelationshipMatcher implements ArgumentMatcher<ElideNavigatorOnCollection<?>> {
-    Matcher<String> matcher;
 
+  private record ElideRelationshipMatcher(
+      Matcher<String> matcher) implements ArgumentMatcher<ElideNavigatorOnCollection<?>> {
     @Override
     public boolean matches(ElideNavigatorOnCollection<?> argument) {
       return argument != null && matcher.matches(argument.build());
     }
   }
 
-  @Value
-  private static class ElideParamListMatcher<T extends ElideEndpointBuilder<?>> implements ArgumentMatcher<T> {
+  private record ElideParamListMatcher<T extends ElideEndpointBuilder<?>>(Matcher<Iterable<? extends String>> matcher,
+                                                                          String paramPrefix) implements ArgumentMatcher<T> {
     private static final String PARAM_DELIMITER = "&";
     private static final String PROPERTY_DELIMITER = ",";
-    Matcher<Iterable<? extends String>> matcher;
-    String paramPrefix;
 
     @Override
     public boolean matches(T argument) {

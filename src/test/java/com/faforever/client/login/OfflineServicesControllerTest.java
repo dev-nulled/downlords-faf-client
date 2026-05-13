@@ -1,6 +1,6 @@
 package com.faforever.client.login;
 
-import com.faforever.client.test.UITest;
+import com.faforever.client.test.PlatformTest;
 import com.faforever.client.theme.UiService;
 import javafx.scene.control.Label;
 import org.junit.jupiter.api.BeforeEach;
@@ -10,11 +10,12 @@ import org.mockito.Mock;
 
 import java.time.OffsetDateTime;
 
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.testfx.assertions.api.Assertions.assertThat;
 
-class OfflineServicesControllerTest extends UITest {
+class OfflineServicesControllerTest extends PlatformTest {
   @InjectMocks
   private OfflineServicesController instance;
 
@@ -25,7 +26,7 @@ class OfflineServicesControllerTest extends UITest {
 
   @BeforeEach
   void setUp() throws Exception {
-    when(offlineServiceController.getRoot()).thenReturn(new Label());
+    lenient().when(offlineServiceController.getRoot()).thenReturn(new Label());
 
     loadFxml("theme/login/offline_services.fxml", param -> instance);
   }

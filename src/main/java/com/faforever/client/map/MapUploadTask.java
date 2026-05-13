@@ -2,7 +2,7 @@ package com.faforever.client.map;
 
 import com.faforever.client.api.FafApiAccessor;
 import com.faforever.client.i18n.I18n;
-import com.faforever.client.preferences.PreferencesService;
+import com.faforever.client.preferences.DataPrefs;
 import com.faforever.client.task.CompletableTask;
 import com.faforever.client.task.ResourceLocks;
 import com.faforever.client.util.Validator;
@@ -10,11 +10,11 @@ import com.faforever.commons.io.ByteCountListener;
 import com.faforever.commons.io.Zipper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.InitializingBean;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
-import javax.inject.Inject;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -30,19 +30,19 @@ import static java.nio.file.Files.newOutputStream;
 @Slf4j
 public class MapUploadTask extends CompletableTask<Void> implements InitializingBean {
 
-  private final PreferencesService preferencesService;
   private final FafApiAccessor fafApiAccessor;
   private final I18n i18n;
+  private final DataPrefs dataPrefs;
 
   private Path mapPath;
   private Boolean isRanked;
 
-  @Inject
-  public MapUploadTask(PreferencesService preferencesService, FafApiAccessor fafApiAccessor, I18n i18n) {
+  @Autowired
+  public MapUploadTask(FafApiAccessor fafApiAccessor, I18n i18n, DataPrefs dataPrefs) {
     super(Priority.HIGH);
-    this.preferencesService = preferencesService;
     this.fafApiAccessor = fafApiAccessor;
     this.i18n = i18n;
+    this.dataPrefs = dataPrefs;
   }
 
   @Override
@@ -56,7 +56,7 @@ public class MapUploadTask extends CompletableTask<Void> implements Initializing
     Validator.notNull(isRanked, "isRanked must not be null");
 
     ResourceLocks.acquireUploadLock();
-    Path cacheDirectory = preferencesService.getPreferences().getData().getCacheDirectory();
+    Path cacheDirectory = dataPrefs.getCacheDirectory();
     Files.createDirectories(cacheDirectory);
     Path tmpFile = createTempFile(cacheDirectory, "map", ".zip");
 

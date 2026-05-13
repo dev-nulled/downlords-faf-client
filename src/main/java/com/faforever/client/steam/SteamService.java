@@ -2,16 +2,33 @@ package com.faforever.client.steam;
 
 import com.codedisaster.steamworks.SteamAPI;
 import com.codedisaster.steamworks.SteamException;
+import com.faforever.client.preferences.GeneralPrefs;
+import com.faforever.client.preferences.Preferences;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.InitializingBean;
-import org.springframework.stereotype.Component;
+import org.springframework.context.annotation.Profile;
+import org.springframework.stereotype.Service;
 
-@Component
+import static com.faforever.client.FafClientApplication.PROFILE_MAC;
+
+@Service
 @Slf4j
+@Profile("!" + PROFILE_MAC)
 public class SteamService implements InitializingBean, DisposableBean {
 
+  private final GeneralPrefs generalPrefs;
+
+  public SteamService(Preferences preferences) {
+    this.generalPrefs = preferences.getGeneral();
+  }
+
+  @Override
   public void afterPropertiesSet() {
+    if (generalPrefs.getDisableSteamStart()) {
+      return;
+    }
+
     try {
       log.info("Starting the Steam API");
       SteamAPI.loadLibraries();
@@ -25,6 +42,7 @@ public class SteamService implements InitializingBean, DisposableBean {
     }
   }
 
+  @Override
   public void destroy() {
     log.info("Stopping the Steam API");
     if (SteamAPI.isSteamRunning()) {

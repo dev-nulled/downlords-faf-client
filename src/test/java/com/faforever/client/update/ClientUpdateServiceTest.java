@@ -1,24 +1,29 @@
 package com.faforever.client.update;
 
-import com.faforever.client.builders.PreferencesBuilder;
 import com.faforever.client.fx.PlatformService;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.notification.NotificationService;
 import com.faforever.client.notification.PersistentNotification;
+import com.faforever.client.os.OperatingSystem;
+import com.faforever.client.os.OsPosix;
 import com.faforever.client.preferences.Preferences;
-import com.faforever.client.preferences.PreferencesService;
 import com.faforever.client.task.TaskService;
 import com.faforever.client.test.ServiceTest;
 import com.faforever.client.update.ClientUpdateService.InstallerExecutionException;
+import com.faforever.client.user.LoginService;
 import com.faforever.commons.io.Bytes;
-import com.google.common.eventbus.EventBus;
+import javafx.beans.property.BooleanProperty;
+import javafx.beans.property.SimpleBooleanProperty;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.springframework.context.ApplicationContext;
+import org.mockito.MockedStatic;
+import org.mockito.Spy;
+import org.springframework.beans.factory.ObjectFactory;
 
 import java.net.URL;
 import java.nio.file.Files;
@@ -29,17 +34,20 @@ import static com.faforever.client.notification.Severity.INFO;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doReturn;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 public class ClientUpdateServiceTest extends ServiceTest {
 
-  @InjectMocks
   private ClientUpdateService instance;
 
   @TempDir
   public Path fafBinDirectory;
+  @Spy
+  private OperatingSystem operatingSystem = new OsPosix();
   @Mock
   private NotificationService notificationService;
   @Mock
@@ -47,33 +55,39 @@ public class ClientUpdateServiceTest extends ServiceTest {
   @Mock
   private TaskService taskService;
   @Mock
-  private ApplicationContext applicationContext;
-  @Mock
   private PlatformService platformService;
   @Mock
-  private PreferencesService preferencesService;
+  private ObjectFactory<CheckForBetaUpdateTask> checkForBetaUpdateTaskFactory;
+  @Mock
+  private ObjectFactory<CheckForUpdateTask> checkForUpdateTaskFactory;
+  @Mock
+  private ObjectFactory<DownloadUpdateTask> downloadUpdateTaskFactory;
+  @Mock
+  private LoginService loginService;
+
   @Mock
   private CheckForUpdateTask checkForUpdateTask;
   @Mock
   private CheckForBetaUpdateTask checkForBetaUpdateTask;
-  @Mock
-  private EventBus eventBus;
-
+  @Spy
   private Preferences preferences;
+
+  private final BooleanProperty loggedIn = new SimpleBooleanProperty();
 
   @BeforeEach
   public void setUp() throws Exception {
     UpdateInfo normalUpdateInfo = new UpdateInfo("v0.4.9.1-alpha", "test.exe", new URL("http://www.example.com"), 56098816, new URL("http://www.example.com"), false);
     UpdateInfo betaUpdateInfo = new UpdateInfo("v0.4.9.0-RC1", "test.exe", new URL("http://www.example.com"), 56098816, new URL("http://www.example.com"), true);
-    preferences = PreferencesBuilder.create().defaultValues().get();
 
-    doReturn(checkForUpdateTask).when(applicationContext).getBean(CheckForUpdateTask.class);
-    doReturn(checkForBetaUpdateTask).when(applicationContext).getBean(CheckForBetaUpdateTask.class);
-    when(taskService.submitTask(any(CheckForUpdateTask.class))).thenReturn(checkForUpdateTask);
-    when(taskService.submitTask(any(CheckForBetaUpdateTask.class))).thenReturn(checkForBetaUpdateTask);
-    when(checkForUpdateTask.getFuture()).thenReturn(CompletableFuture.completedFuture(normalUpdateInfo));
-    when(checkForBetaUpdateTask.getFuture()).thenReturn(CompletableFuture.completedFuture(betaUpdateInfo));
-    when(preferencesService.getPreferences()).thenReturn(preferences);
+    lenient().when(loginService.loggedInProperty()).thenReturn(loggedIn);
+    lenient().when(checkForUpdateTaskFactory.getObject()).thenReturn(checkForUpdateTask);
+    lenient().when(checkForBetaUpdateTaskFactory.getObject()).thenReturn(checkForBetaUpdateTask);
+    lenient().when(taskService.submitTask(any(CheckForUpdateTask.class))).thenReturn(checkForUpdateTask);
+    lenient().when(taskService.submitTask(any(CheckForBetaUpdateTask.class))).thenReturn(checkForBetaUpdateTask);
+    lenient().when(checkForUpdateTask.getFuture()).thenReturn(CompletableFuture.completedFuture(normalUpdateInfo));
+    lenient().when(checkForBetaUpdateTask.getFuture()).thenReturn(CompletableFuture.completedFuture(betaUpdateInfo));
+
+    instance = new ClientUpdateService(operatingSystem, taskService, notificationService, i18n, platformService, loginService, preferences, checkForBetaUpdateTaskFactory, checkForUpdateTaskFactory, downloadUpdateTaskFactory);
 
     instance.afterPropertiesSet();
   }
@@ -83,10 +97,15 @@ public class ClientUpdateServiceTest extends ServiceTest {
    */
   @Test
   public void testCheckForUpdateInBackgroundUpdateAvailable() throws Exception {
-    VersionTest.setCurrentVersion("v0.4.8.0-alpha");
-
     preferences.setPreReleaseCheckEnabled(false);
-    instance.checkForUpdateInBackground();
+
+    try (MockedStatic<Version> mockedVersion = mockStatic(Version.class)) {
+      mockedVersion.when(Version::getCurrentVersion).thenReturn("v0.4.8.0-alpha");
+      mockedVersion.when(() -> Version.shouldUpdate(anyString(), anyString())).thenCallRealMethod();
+      mockedVersion.when(() -> Version.removePrefix(anyString())).thenCallRealMethod();
+      mockedVersion.when(() -> Version.followsSemverPattern(anyString())).thenCallRealMethod();
+      instance.checkForUpdateInBackground();
+    }
 
     verify(taskService).submitTask(checkForUpdateTask);
 
@@ -96,18 +115,26 @@ public class ClientUpdateServiceTest extends ServiceTest {
     PersistentNotification persistentNotification = captor.getValue();
 
     verify(i18n).get("clientUpdateAvailable.notification", "v0.4.9.0-RC1", Bytes.formatSize(56079360L, i18n.getUserSpecificLocale()));
-    assertThat(persistentNotification.getSeverity(), is(INFO));
+    assertThat(persistentNotification.severity(), is(INFO));
   }
 
   /**
    * Newer prerelease version is available on server.
    */
-  @Test
-  public void testCheckForBetaUpdateInBackgroundUpdateAvailable() throws Exception {
-    VersionTest.setCurrentVersion("v0.4.8.0-alpha");
+  @ParameterizedTest
+  @ValueSource(booleans = {true, false})
+  public void testCheckForBetaUpdateInBackgroundUpdateAvailable(boolean supportsUpdateInstall) throws Exception {
+    when(operatingSystem.supportsUpdateInstall()).thenReturn(supportsUpdateInstall);
 
     preferences.setPreReleaseCheckEnabled(true);
-    instance.checkForUpdateInBackground();
+
+    try (MockedStatic<Version> mockedVersion = mockStatic(Version.class)) {
+      mockedVersion.when(Version::getCurrentVersion).thenReturn("v0.4.8.0-alpha");
+      mockedVersion.when(() -> Version.shouldUpdate(anyString(), anyString())).thenCallRealMethod();
+      mockedVersion.when(() -> Version.removePrefix(anyString())).thenCallRealMethod();
+      mockedVersion.when(() -> Version.followsSemverPattern(anyString())).thenCallRealMethod();
+      instance.checkForUpdateInBackground();
+    }
 
     verify(taskService).submitTask(checkForUpdateTask);
 
@@ -117,7 +144,7 @@ public class ClientUpdateServiceTest extends ServiceTest {
     PersistentNotification persistentNotification = captor.getValue();
 
     verify(i18n).get("clientUpdateAvailable.prereleaseNotification", "v0.4.9.1-alpha", Bytes.formatSize(56079360L, i18n.getUserSpecificLocale()));
-    assertThat(persistentNotification.getSeverity(), is(INFO));
+    assertThat(persistentNotification.severity(), is(INFO));
   }
 
   @Test
@@ -125,7 +152,8 @@ public class ClientUpdateServiceTest extends ServiceTest {
     Path faExePath = Files.createFile(fafBinDirectory.resolve("ForgedAlliance.exe"));
     try {
       instance.install(faExePath);
-    } catch (InstallerExecutionException ignored) {}
+    } catch (InstallerExecutionException _) {
+    }
     verify(platformService).setUnixExecutableAndWritableBits(faExePath);
   }
 }

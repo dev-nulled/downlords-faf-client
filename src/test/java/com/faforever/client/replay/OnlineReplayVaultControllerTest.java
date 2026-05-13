@@ -1,56 +1,66 @@
 package com.faforever.client.replay;
 
-import com.faforever.client.domain.ReplayBean;
-import com.faforever.client.fx.JavaFxUtil;
+import com.faforever.client.domain.api.Replay;
+import com.faforever.client.featuredmod.FeaturedModService;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.leaderboard.LeaderboardService;
 import com.faforever.client.main.event.OpenOnlineReplayVaultEvent;
 import com.faforever.client.main.event.ShowReplayEvent;
-import com.faforever.client.mod.ModService;
 import com.faforever.client.notification.NotificationService;
-import com.faforever.client.preferences.Preferences;
-import com.faforever.client.preferences.PreferencesService;
+import com.faforever.client.preferences.ReplaySearchPrefs;
+import com.faforever.client.preferences.VaultPrefs;
 import com.faforever.client.query.CategoryFilterController;
 import com.faforever.client.query.LogicalNodeController;
+import com.faforever.client.query.RangeFilterController;
 import com.faforever.client.query.SpecificationController;
+import com.faforever.client.query.TextFilterController;
+import com.faforever.client.query.ToggleFilterController;
 import com.faforever.client.reporting.ReportingService;
-import com.faforever.client.test.UITest;
+import com.faforever.client.test.PlatformTest;
 import com.faforever.client.theme.UiService;
 import com.faforever.client.vault.VaultEntityController.SearchType;
 import com.faforever.client.vault.VaultEntityShowRoomController;
 import com.faforever.client.vault.search.SearchController;
 import com.faforever.client.vault.search.SearchController.SearchConfig;
 import com.faforever.client.vault.search.SearchController.SortConfig;
-import javafx.scene.control.Button;
-import javafx.scene.control.Label;
+import javafx.beans.property.SimpleBooleanProperty;
+import javafx.beans.property.SimpleDoubleProperty;
+import javafx.beans.property.SimpleListProperty;
+import javafx.beans.property.SimpleStringProperty;
 import javafx.scene.layout.Pane;
-import javafx.scene.layout.VBox;
+import org.instancio.Instancio;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.testfx.util.WaitForAsyncUtils;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
-import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-public class OnlineReplayVaultControllerTest extends UITest {
+public class OnlineReplayVaultControllerTest extends PlatformTest {
 
   @InjectMocks
   private OnlineReplayVaultController instance;
 
   @Mock
-  private ModService modService;
+  private FeaturedModService featuredModService;
   @Mock
   private LeaderboardService leaderboardService;
   @Mock
@@ -70,40 +80,62 @@ public class OnlineReplayVaultControllerTest extends UITest {
   @Mock
   private SearchController searchController;
   @Mock
-  private PreferencesService preferencesService;
+  private ReplayCardController replayCardController;
+
   @Mock
   private ReportingService reportingService;
   @Mock
   private CategoryFilterController categoryFilterController;
   @Mock
+  private TextFilterController textFilterController;
+  @Mock
+  private RangeFilterController rangeFilterController;
+  @Mock
+  private ToggleFilterController toggleFilterController;
+  @Mock
   private VaultEntityShowRoomController vaultEntityShowRoomController;
+  @Spy
+  private VaultPrefs vaultPrefs;
+  private ReplaySearchPrefs replaySearchPrefs;
 
   @Captor
   private ArgumentCaptor<Consumer<SearchConfig>> searchListenerCaptor;
   private SortConfig sortOrder;
   private SearchConfig standardSearchConfig;
-  private final ReplayBean testReplay = new ReplayBean();
+  private final Replay testReplay = Instancio.create(Replay.class);
 
   @BeforeEach
   public void setUp() throws Exception {
-    when(replayDetailController.getRoot()).thenReturn(new Pane());
+    lenient().when(replayDetailController.getRoot()).thenReturn(new Pane());
 
-    when(uiService.loadFxml("theme/vault/replay/replay_detail.fxml")).thenAnswer(invocation -> replayDetailController);
+    lenient().when(featuredModService.getFeaturedMods()).thenReturn(Flux.empty());
+    lenient().when(leaderboardService.getLeaderboards()).thenReturn(Flux.empty());
+    lenient().when(replayService.getNewestReplaysWithPageCount(anyInt(), anyInt()))
+             .thenReturn(Mono.zip(Mono.just(List.<Replay>of()), Mono.just(0)));
+    lenient().when(replayService.getHighestRatedReplaysWithPageCount(anyInt(), anyInt()))
+             .thenReturn(Mono.zip(Mono.just(List.<Replay>of()), Mono.just(0)));
+    lenient().when(replayService.findById(anyInt())).thenReturn(Mono.just(testReplay));
+    lenient().when(replayService.getOwnReplaysWithPageCount(anyInt(), anyInt()))
+             .thenReturn(Mono.zip(Mono.just(List.<Replay>of()), Mono.just(0)));
+    lenient().when(uiService.loadFxml("theme/vault/replay/replay_detail.fxml")).thenReturn(replayDetailController);
+    lenient().when(uiService.loadFxml("theme/vault/vault_entity_show_room.fxml"))
+             .thenReturn(vaultEntityShowRoomController);
+    lenient().when(i18n.get(anyString())).thenReturn("test");
+    lenient().when(searchController.addCategoryFilter(any(), any(), anyMap())).thenReturn(categoryFilterController);
+    lenient().when(searchController.addCategoryFilter(any(), any(), anyList())).thenReturn(categoryFilterController);
+    lenient().when(categoryFilterController.getCheckedItems()).thenReturn(new SimpleListProperty<String>());
+    lenient().when(searchController.addTextFilter(anyString(), anyString(), anyBoolean())).thenReturn(textFilterController);
+    lenient().when(textFilterController.textFieldProperty()).thenReturn(new SimpleStringProperty());
+    lenient().when(searchController.addRangeFilter(anyString(), anyString(), anyDouble(), anyDouble(), anyInt(), anyInt(), anyInt())).thenReturn(rangeFilterController);
+    lenient().when(searchController.addRangeFilter(anyString(), anyString(), anyDouble(), anyDouble(), anyInt(), anyInt(), anyInt(), any())).thenReturn(rangeFilterController);
+    lenient().when(rangeFilterController.lowValueProperty()).thenReturn(new SimpleDoubleProperty());
+    lenient().when(rangeFilterController.highValueProperty()).thenReturn(new SimpleDoubleProperty());
+    lenient().when(searchController.addToggleFilter(anyString(), anyString(), anyString())).thenReturn(toggleFilterController);
+    lenient().when(toggleFilterController.selectedProperty()).thenReturn(new SimpleBooleanProperty());
 
-    when(modService.getFeaturedMods()).thenReturn(CompletableFuture.completedFuture(List.of()));
-    when(leaderboardService.getLeaderboards()).thenReturn(CompletableFuture.completedFuture(List.of()));
-    when(replayService.getNewestReplaysWithPageCount(anyInt(), anyInt())).thenReturn(Mono.zip(Mono.just(List.<ReplayBean>of()), Mono.just(0)).toFuture());
-    when(replayService.getHighestRatedReplaysWithPageCount(anyInt(), anyInt())).thenReturn(Mono.zip(Mono.just(List.<ReplayBean>of()), Mono.just(0)).toFuture());
-    when(replayService.findById(anyInt())).thenReturn(CompletableFuture.completedFuture(Optional.of(testReplay)));
-    when(replayService.getOwnReplaysWithPageCount(anyInt(), anyInt())).thenReturn(Mono.zip(Mono.just(List.<ReplayBean>of()), Mono.just(0)).toFuture());
-    when(preferencesService.getPreferences()).thenReturn(new Preferences());
-    when(uiService.loadFxml("theme/vault/vault_entity_show_room.fxml")).thenReturn(vaultEntityShowRoomController);
-    when(vaultEntityShowRoomController.getRoot()).thenReturn(new VBox(), new VBox(), new VBox());
-    when(vaultEntityShowRoomController.getLabel()).thenReturn(new Label());
-    when(vaultEntityShowRoomController.getMoreButton()).thenReturn(new Button());
-    when(i18n.get(anyString())).thenReturn("test");
-
-    sortOrder = preferencesService.getPreferences().getVault().getOnlineReplaySortConfig();
+    replaySearchPrefs = new ReplaySearchPrefs();
+    lenient().when(vaultPrefs.getReplaySearch()).thenReturn(replaySearchPrefs);
+    sortOrder = new VaultPrefs().getOnlineReplaySortConfig();
     standardSearchConfig = new SearchConfig(sortOrder, "query");
 
     loadFxml("theme/vault/vault_entity.fxml", clazz -> {
@@ -150,15 +182,15 @@ public class OnlineReplayVaultControllerTest extends UITest {
 
   @Test
   public void testShowReplayEventWhenInitialized() {
-    JavaFxUtil.runLater(() -> instance.display(new OpenOnlineReplayVaultEvent()));
-    JavaFxUtil.runLater(() -> instance.display(new ShowReplayEvent(123)));
+    runOnFxThreadAndWait(() -> instance.display(new OpenOnlineReplayVaultEvent()));
+    runOnFxThreadAndWait(() -> instance.display(new ShowReplayEvent(123)));
     WaitForAsyncUtils.waitForFxEvents();
     verify(replayDetailController).setReplay(testReplay);
   }
 
   @Test
   public void showReplayButReplayNotPresent() {
-    when(replayService.findById(anyInt())).thenReturn(CompletableFuture.completedFuture(Optional.empty()));
+    when(replayService.findById(anyInt())).thenReturn(Mono.empty());
     runOnFxThreadAndWait(() -> instance.display(new ShowReplayEvent(123)));
     verify(notificationService).addImmediateWarnNotification(anyString(), anyInt());
   }

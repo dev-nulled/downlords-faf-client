@@ -1,10 +1,10 @@
 package com.faforever.client.fx.contextmenu;
 
-import com.faforever.client.domain.PlayerBean;
-import com.faforever.client.game.PlayerStatus;
+import com.faforever.client.domain.server.PlayerInfo;
+import com.faforever.client.game.PlayerGameStatus;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.notification.NotificationService;
-import com.faforever.client.replay.LiveReplayService;
+import com.faforever.client.replay.ReplayRunner;
 import com.faforever.client.util.Assert;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,17 +16,17 @@ import org.springframework.stereotype.Component;
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
 @RequiredArgsConstructor
-public class WatchGameMenuItem extends AbstractMenuItem<PlayerBean> {
+public class WatchGameMenuItem extends AbstractMenuItem<PlayerInfo> {
 
   private final I18n i18n;
-  private final LiveReplayService liveReplayService;
+  private final ReplayRunner replayRunner;
   private final NotificationService notificationService;
 
   @Override
   protected void onClicked() {
     Assert.checkNullIllegalState(object, "no player has been set");
     try {
-      liveReplayService.runLiveReplay(object.getGame().getId());
+      replayRunner.runWithLiveReplay(object.getGame());
     } catch (Exception e) {
       log.error("Cannot display live replay", e);
       notificationService.addImmediateErrorNotification(e, "replays.live.loadFailure.message");
@@ -39,8 +39,8 @@ public class WatchGameMenuItem extends AbstractMenuItem<PlayerBean> {
   }
 
   @Override
-  protected boolean isItemVisible() {
-    return object != null && object.getStatus() == PlayerStatus.PLAYING;
+  protected boolean isDisplayed() {
+    return object != null && object.getGameStatus() == PlayerGameStatus.PLAYING;
   }
 
   @Override

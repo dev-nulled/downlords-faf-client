@@ -1,12 +1,11 @@
 package com.faforever.client.tutorial;
 
-import com.faforever.client.domain.TutorialBean;
-import com.faforever.client.fx.AbstractViewController;
+import com.faforever.client.domain.api.Tutorial;
+import com.faforever.client.fx.NodeController;
 import com.faforever.client.fx.WebViewConfigurer;
 import com.faforever.client.i18n.I18n;
 import com.faforever.client.map.MapService;
 import com.faforever.client.map.MapService.PreviewSize;
-import javafx.beans.binding.Bindings;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
@@ -20,7 +19,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
-public class TutorialDetailController extends AbstractViewController<Node> {
+public class TutorialDetailController extends NodeController<Node> {
   private final I18n i18n;
   private final MapService mapService;
   private final WebViewConfigurer webViewConfigurer;
@@ -32,7 +31,7 @@ public class TutorialDetailController extends AbstractViewController<Node> {
   public WebView descriptionWebView;
   public Label titleLabel;
   public Button launchButton;
-  private TutorialBean tutorial;
+  private Tutorial tutorial;
 
   public TutorialDetailController(I18n i18n, MapService mapService, WebViewConfigurer webViewConfigurer, TutorialService tutorialService) {
     this.i18n = i18n;
@@ -42,7 +41,7 @@ public class TutorialDetailController extends AbstractViewController<Node> {
   }
 
   @Override
-  public void initialize() {
+  protected void onInitialize() {
     mapContainer.managedProperty().bind(mapContainer.visibleProperty());
     descriptionWebView.setContextMenuEnabled(false);
     webViewConfigurer.configureWebView(descriptionWebView);
@@ -60,24 +59,23 @@ public class TutorialDetailController extends AbstractViewController<Node> {
     }
   }
 
-  public TutorialBean getTutorial() {
+  public Tutorial getTutorial() {
     return tutorial;
   }
 
-  public void setTutorial(TutorialBean tutorial) {
+  public void setTutorial(Tutorial tutorial) {
     this.tutorial = tutorial;
-    titleLabel.textProperty().bind(tutorial.titleProperty());
-    if (tutorial.getMapVersion() != null) {
-      mapNameLabel.textProperty().bind(Bindings.createStringBinding(() -> i18n.get("tutorial.mapName", tutorial.getMapVersion().getMap().getDisplayName()),
-          tutorial.mapVersionProperty(),
-          tutorial.getMapVersion().getMap().displayNameProperty()));
-      mapImage.setImage(mapService.loadPreview(tutorial.getMapVersion(), PreviewSize.LARGE));
+    titleLabel.setText(tutorial.title());
+    if (tutorial.mapVersion() != null) {
+      mapNameLabel.setText(i18n.get("tutorial.mapName", tutorial.mapVersion().map().displayName()));
+
+      mapImage.setImage(mapService.loadPreview(tutorial.mapVersion(), PreviewSize.LARGE));
       mapContainer.setVisible(true);
     } else {
       mapContainer.setVisible(false);
     }
 
-    descriptionWebView.getEngine().loadContent(tutorial.getDescription());
-    launchButton.visibleProperty().bind(tutorial.launchableProperty());
+    descriptionWebView.getEngine().loadContent(tutorial.description());
+    launchButton.setVisible(tutorial.launchable());
   }
 }

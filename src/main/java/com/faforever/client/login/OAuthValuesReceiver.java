@@ -2,9 +2,8 @@ package com.faforever.client.login;
 
 import com.faforever.client.fx.PlatformService;
 import com.faforever.client.i18n.I18n;
-import com.faforever.client.user.UserService;
+import com.faforever.client.user.LoginService;
 import lombok.RequiredArgsConstructor;
-import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -12,16 +11,16 @@ import org.springframework.web.util.UriComponentsBuilder;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.net.SocketException;
 import java.net.URI;
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
-import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.regex.Matcher;
@@ -35,61 +34,55 @@ public class OAuthValuesReceiver {
 
   private static final Pattern CODE_PATTERN = Pattern.compile("code=([^ &]+)");
   private static final Pattern STATE_PATTERN = Pattern.compile("state=([^ &]+)");
-  private static final List<String> ALLOWED_HOSTS = List.of("localhost", "127.0.0.1");
+  private static final Pattern ERROR_PATTERN = Pattern.compile("error=([^ &]+)");
+  private static final Pattern ERROR_SCOPE_DENIED = Pattern.compile("scope_denied");
+  private static final Pattern ERROR_NO_CSRF = Pattern.compile("No\\+CSRF\\+value");
 
   private final PlatformService platformService;
-  private final UserService userService;
+  private final LoginService loginService;
   private final I18n i18n;
 
   private CountDownLatch redirectUriLatch;
-  private CompletableFuture<Values> valuesFuture;
   private URI redirectUri;
   private String state;
   private String codeVerifier;
+  private CompletableFuture<Values> valuesFuture;
 
-  public CompletableFuture<Values> receiveValues(List<URI> redirectUriCandidates, String state, String codeVerifier) {
-    this.state = state;
-    this.codeVerifier = codeVerifier;
-    if (valuesFuture == null || valuesFuture.isDone()) {
-      if (redirectUriCandidates == null || redirectUriCandidates.isEmpty()) {
-        throw new IllegalArgumentException("No redirect uris provided");
-      }
-
-      redirectUriLatch = new CountDownLatch(1);
-      valuesFuture = CompletableFuture.supplyAsync(() -> {
-        List<URI> filteredRedirectUris = redirectUriCandidates.stream()
-            .filter(uri -> ALLOWED_HOSTS.contains(uri.getHost()))
-            .toList();
-        for (URI uri : filteredRedirectUris) {
-          try {
-            return readWithUri(uri);
-          } catch (SocketException e) {
-            log.info("Port `{}` is probably already in use", uri.getPort(), e);
-          } catch (IOException e) {
-            throw new IllegalStateException("Could not read from port once opened", e);
-          }
-        }
-        throw new IllegalStateException("Could not read from any redirect URI: " + redirectUriCandidates);
-      });
-    } else {
-      CompletableFuture.runAsync(() -> {
-        try {
-          redirectUriLatch.await();
-        } catch (InterruptedException ignored) {}
-        platformService.showDocument(userService.getHydraUrl(this.state, this.codeVerifier, this.redirectUri));
-      });
+  public CompletableFuture<Values> receiveValues(String state, String codeVerifier) {
+    if (valuesFuture != null && !valuesFuture.isDone()) {
+      return valuesFuture;
     }
 
+    redirectUriLatch = new CountDownLatch(1);
+    valuesFuture = CompletableFuture.supplyAsync(() -> readValues(state, codeVerifier));
     return valuesFuture;
+
   }
 
-  private Values readWithUri(URI uri) throws IOException {
-    // Usually, a random port can't be used since the redirect URI, including port, must be registered on the server
-    try (ServerSocket serverSocket = new ServerSocket(Math.max(0, uri.getPort()), 1, InetAddress.getLoopbackAddress())) {
-      redirectUri = UriComponentsBuilder.fromUri(uri).port(serverSocket.getLocalPort()).build().toUri();
+  public CompletableFuture<Void> openBrowserToLogin() {
+    if (redirectUriLatch == null) {
+      throw new IllegalStateException("Redirect socket is not open");
+    }
 
-      platformService.showDocument(userService.getHydraUrl(this.state, this.codeVerifier, redirectUri));
+    return CompletableFuture.runAsync(() -> {
+      try {
+        redirectUriLatch.await();
+      } catch (InterruptedException _) {}
+      platformService.showDocument(loginService.getHydraUrl(this.state, this.codeVerifier, redirectUri));
+    });
+  }
+
+  private Values readValues(String state, String codeVerifier) {
+    this.state = state;
+    this.codeVerifier = codeVerifier;
+    try (ServerSocket serverSocket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+      redirectUri = UriComponentsBuilder.fromUriString("http://127.0.0.1")
+                                        .port(serverSocket.getLocalPort())
+                                        .build()
+                                        .toUri();
       redirectUriLatch.countDown();
+
+      platformService.showDocument(loginService.getHydraUrl(this.state, this.codeVerifier, redirectUri));
 
       Socket socket = serverSocket.accept();
       BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
@@ -100,6 +93,7 @@ public class OAuthValuesReceiver {
 
       // Do not try with resources as the socket needs to stay open.
       try {
+        checkForError(request);
         Values values = readValues(request, redirectUri);
         success = true;
         return values;
@@ -107,6 +101,10 @@ public class OAuthValuesReceiver {
         writeResponse(socket, success);
         reader.close();
       }
+    } catch (IOException e) {
+      throw new IllegalStateException("Could not get code", e);
+    } finally {
+      redirectUriLatch = null;
     }
   }
 
@@ -116,13 +114,16 @@ public class OAuthValuesReceiver {
       String html;
 
       if (success) {
-        html = new String(OAuthValuesReceiver.class.getResourceAsStream("/login_success.html").readAllBytes())
-            .replace("${title}", i18n.get("login.browser.success.title"))
-            .replace("${message}", i18n.get("login.browser.success.message"));
+        try (InputStream inputStream = OAuthValuesReceiver.class.getResourceAsStream("/login_success.html")) {
+          html = new String(inputStream.readAllBytes()).replace("${title}", i18n.get("login.browser.success.title"))
+                                                       .replace("${message}",
+                                                                i18n.get("login.browser.success.message"));
+        }
       } else {
-        html = new String(OAuthValuesReceiver.class.getResourceAsStream("/login_failed.html").readAllBytes())
-            .replace("${title}", i18n.get("login.browser.failed.title"))
-            .replace("${message}", i18n.get("login.browser.failed.message"));
+        try (InputStream inputStream = OAuthValuesReceiver.class.getResourceAsStream("/login_failed.html")) {
+          html = new String(inputStream.readAllBytes()).replace("${title}", i18n.get("login.browser.failed.title"))
+                                                       .replace("${message}", i18n.get("login.browser.failed.message"));
+        }
       }
 
       writer
@@ -143,18 +144,32 @@ public class OAuthValuesReceiver {
     return new Values(code, state, redirectUri);
   }
 
+  private String formatRequest(String request) {
+    return URLDecoder.decode(request, StandardCharsets.UTF_8);
+  }
+
   private String extractValue(String request, Pattern pattern) {
     Matcher matcher = pattern.matcher(request);
     if (!matcher.find()) {
-      throw new IllegalStateException("Could not extract value with pattern '" + pattern + "' from: " + request);
+      throw new IllegalStateException("Could not extract value with pattern '" + pattern + "' from: " + formatRequest(request));
     }
     return matcher.group(1);
   }
 
-  @Value
-  public static class Values {
-    String code;
-    String state;
-    URI redirectUri;
+  private void checkForError(String request) {
+    Matcher matcher = ERROR_PATTERN.matcher(request);
+    if (matcher.find()) {
+      String errorMessage = "Login failed with error '" + matcher.group(1) + "'. The full request is: " + formatRequest(request);
+      if (ERROR_SCOPE_DENIED.matcher(request).find()) {
+        throw new KnownLoginErrorException(errorMessage, "login.scopeDenied");
+      }
+
+      if (ERROR_NO_CSRF.matcher(request).find()) {
+        throw new KnownLoginErrorException(errorMessage, "login.noCSRF");
+      }
+      throw new IllegalStateException(errorMessage);
+    }
   }
+
+  public record Values(String code, String state, URI redirectUri) {}
 }

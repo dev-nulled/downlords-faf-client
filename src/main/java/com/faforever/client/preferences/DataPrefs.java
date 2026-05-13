@@ -1,20 +1,15 @@
 package com.faforever.client.preferences;
 
-import com.sun.jna.platform.win32.Shell32Util;
-import com.sun.jna.platform.win32.ShlObj;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleObjectProperty;
-import lombok.AccessLevel;
-import lombok.experimental.FieldDefaults;
 
 import java.nio.file.Path;
 
-@FieldDefaults(makeFinal=true, level= AccessLevel.PRIVATE)
+
 public class DataPrefs {
-  private static final Path DEFAULT_FAF_DATA_DIRECTORY;
-  private static final String USER_HOME_SUB_FOLDER = ".faforever";
   private static final String BIN_SUB_FOLDER = "bin";
   private static final String REPLAYS_SUB_FOLDER = "replays";
+  private static final String REPLAY_DATA_SUB_FOLDER = "replaydata";
   private static final String CORRUPTED_REPLAYS_SUB_FOLDER = "corrupt";
   private static final String CACHE_SUB_FOLDER = "cache";
   private static final String FEATURED_MOD_CACHE_SUB_FOLDER = "featured_mod";
@@ -23,15 +18,7 @@ public class DataPrefs {
   private static final String LANGUAGES_SUB_FOLDER = "languages";
   public static final String GENERATOR_EXECUTABLE_SUB_DIRECTORY = "map_generator";
 
-  static {
-    if (org.bridj.Platform.isWindows()) {
-      DEFAULT_FAF_DATA_DIRECTORY = Path.of(Shell32Util.getFolderPath(ShlObj.CSIDL_COMMON_APPDATA), "FAForever");
-    } else {
-      DEFAULT_FAF_DATA_DIRECTORY = Path.of(System.getProperty("user.home")).resolve(USER_HOME_SUB_FOLDER);
-    }
-  }
-
-  ObjectProperty<Path> baseDataDirectory = new SimpleObjectProperty<>(DEFAULT_FAF_DATA_DIRECTORY);
+  private final ObjectProperty<Path> baseDataDirectory = new SimpleObjectProperty<>();
 
   public Path getBaseDataDirectory() {
     return baseDataDirectory.get();
@@ -47,6 +34,14 @@ public class DataPrefs {
 
   public Path getBinDirectory() {
     return getBaseDataDirectory().resolve(BIN_SUB_FOLDER);
+  }
+
+  public Path getReplayDataDirectory() {
+    return getBaseDataDirectory().resolve(REPLAY_DATA_SUB_FOLDER);
+  }
+
+  public Path getReplayBinDirectory() {
+    return getBaseDataDirectory().resolve(REPLAY_DATA_SUB_FOLDER).resolve(BIN_SUB_FOLDER);
   }
 
   public Path getCacheDirectory() {

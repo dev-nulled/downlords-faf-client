@@ -3,7 +3,7 @@ package com.faforever.client.achievements;
 import com.faforever.client.builders.AchievementDefinitionBuilder;
 import com.faforever.client.builders.PlayerAchievementBuilder;
 import com.faforever.client.i18n.I18n;
-import com.faforever.client.test.UITest;
+import com.faforever.client.test.PlatformTest;
 import com.faforever.commons.api.dto.AchievementDefinition;
 import com.faforever.commons.api.dto.AchievementState;
 import com.faforever.commons.api.dto.AchievementType;
@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 
-import static com.faforever.client.theme.UiService.DEFAULT_ACHIEVEMENT_IMAGE;
+import static com.faforever.client.theme.ThemeService.DEFAULT_ACHIEVEMENT_IMAGE;
 import static org.hamcrest.CoreMatchers.instanceOf;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.notNullValue;
@@ -23,9 +23,10 @@ import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
-public class AchievementItemControllerTest extends UITest {
+public class AchievementItemControllerTest extends PlatformTest {
 
   @InjectMocks
   private AchievementItemController instance;
@@ -37,7 +38,8 @@ public class AchievementItemControllerTest extends UITest {
 
   @BeforeEach
   public void setUp() throws Exception {
-    when(i18n.number(anyInt())).thenAnswer(invocation -> String.format("%d", (int) invocation.getArgument(0)));
+    lenient().when(i18n.number(anyInt()))
+        .thenAnswer(invocation -> String.format("%d", (int) invocation.getArgument(0)));
 
     loadFxml("theme/achievement_item.fxml", clazz -> instance);
   }

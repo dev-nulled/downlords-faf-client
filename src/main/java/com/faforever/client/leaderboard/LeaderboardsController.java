@@ -1,45 +1,51 @@
 package com.faforever.client.leaderboard;
 
-import com.faforever.client.fx.AbstractViewController;
-import com.faforever.client.fx.JavaFxUtil;
+import com.faforever.client.domain.api.League;
+import com.faforever.client.fx.FxApplicationThreadExecutor;
+import com.faforever.client.fx.NodeController;
 import com.faforever.client.i18n.I18n;
-import com.faforever.client.main.event.NavigateEvent;
-import com.faforever.client.main.event.OpenLeaderboardEvent;
+import com.faforever.client.navigation.NavigationHandler;
 import com.faforever.client.notification.NotificationService;
-import com.faforever.client.theme.UiService;
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.eventbus.EventBus;
 import javafx.scene.Node;
-import javafx.scene.control.Tab;
-import javafx.scene.control.TabPane;
+import javafx.scene.control.Toggle;
+import javafx.scene.control.ToggleButton;
+import javafx.scene.control.ToggleGroup;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
+import reactor.core.publisher.Mono;
 
-import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 
 @Slf4j
 @Component
 @RequiredArgsConstructor
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
-public class LeaderboardsController extends AbstractViewController<Node> {
-  private final EventBus eventBus;
+public class LeaderboardsController extends NodeController<Node> {
   private final I18n i18n;
   private final LeaderboardService leaderboardService;
   private final NotificationService notificationService;
-  private final UiService uiService;
+  private final FxApplicationThreadExecutor fxApplicationThreadExecutor;
+  private final NavigationHandler navigationHandler;
 
-  public TabPane leaderboardRoot;
+  public VBox leaderboardRoot;
+  public HBox navigationBox;
+  public StackPane contentPane;
+  public LeaderboardController leaderboardController;
 
-  private boolean isHandlingEvent;
-  @VisibleForTesting
-  protected final List<LeaderboardController> controllers = new ArrayList<>();
-  private Tab lastTab;
+  private final ToggleGroup navigation = new ToggleGroup();
+  private final Map<Toggle, League> toggleLeagueMap = new HashMap<>();
 
   @Override
   public Node getRoot() {
@@ -47,60 +53,55 @@ public class LeaderboardsController extends AbstractViewController<Node> {
   }
 
   @Override
-  public void initialize() {
-    leaderboardService.getLeagues().thenAccept(leagues -> {
-      leagues.forEach(league ->
-          leaderboardService.getLatestSeason(league).thenAccept(season -> {
-            LeaderboardController controller = uiService.loadFxml("theme/leaderboard/leaderboard.fxml");
-            controller.setSeason(season);
-            controller.getRoot().setText(i18n.getOrDefault(league.getTechnicalName(), String.format("leaderboard.%s", league.getTechnicalName())));
-            controller.getRoot().setUserData(league.getId());
-            JavaFxUtil.runLater(() -> leaderboardRoot.getTabs().add(controller.getRoot()));
-            controllers.add(controller);
-          }).thenRun(() -> JavaFxUtil.runLater(() -> {
-            leaderboardRoot.getTabs().sort(Comparator.comparing(tab -> (int) tab.getUserData()));
-            leaderboardRoot.getSelectionModel().select(0);
-            lastTab = leaderboardRoot.getTabs().get(0);
-          })).exceptionally(throwable -> {
-            log.error("Error while loading seasons", throwable);
-            notificationService.addImmediateErrorNotification(throwable, "leaderboard.failedToLoadLeaderboards");
-            return null;
-          })
-      );
-      if (leagues.isEmpty()) {
-        log.warn("Api returned no leagues");
-        notificationService.addImmediateWarnNotification("leaderboard.noLeaderboards");
+  protected void onInitialize() {
+    navigation.selectedToggleProperty().when(showing).subscribe((oldToggle, newToggle) -> {
+      if (newToggle != null) {
+        setLeague(toggleLeagueMap.get(newToggle));
+      } else {
+        navigation.selectToggle(oldToggle);
       }
-    }).exceptionally(throwable -> {
-      log.error("Error while loading leagues", throwable);
-      notificationService.addImmediateErrorNotification(throwable, "leaderboard.failedToLoadLeaderboards");
-      return null;
     });
 
-    leaderboardRoot.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> {
-      if (isHandlingEvent) {
-        return;
-      }
-      eventBus.post(new OpenLeaderboardEvent(newValue));
-    });
+    leaderboardService.getLeagues()
+                      .collectSortedList(Comparator.comparing(League::technicalName))
+                      .map(leagues -> leagues.stream().map(league -> {
+                        String buttonText = i18n.getOrDefault(league.technicalName(), String.format("leaderboard.%s",
+                                                                                                    league.technicalName()));
+                        ToggleButton toggleButton = new ToggleButton(buttonText);
+                        toggleButton.setToggleGroup(navigation);
+                        toggleButton.getStyleClass().add("main-navigation-button");
+                        toggleLeagueMap.put(toggleButton, league);
+                        return toggleButton;
+                      }).collect(Collectors.toList()))
+                      .switchIfEmpty(Mono.error(new IllegalStateException("No leagues loaded")))
+                      .doOnNext(leagueButtons -> {
+                        League lastLeagueTab = navigationHandler.getLastLeagueTab();
+                        Toggle startingToggle = toggleLeagueMap.entrySet()
+                                                               .stream()
+                                                               .filter(entry -> Objects.equals(lastLeagueTab,
+                                                                                               entry.getValue()))
+                                                               .findFirst()
+                                                               .map(Entry::getKey)
+                                                               .orElse(leagueButtons.getFirst());
+                        navigation.selectToggle(startingToggle);
+                      })
+                      .publishOn(fxApplicationThreadExecutor.asScheduler())
+                      .subscribe(buttons -> navigationBox.getChildren().setAll(buttons), throwable -> {
+                        log.error("Error while loading leagues", throwable);
+                        notificationService.addImmediateErrorNotification(throwable,
+                                                                          "leaderboard.failedToLoadLeaderboards");
+                      });
   }
 
-  @Override
-  protected void onDisplay(NavigateEvent navigateEvent) {
-    isHandlingEvent = true;
-
-    try {
-      if (navigateEvent instanceof OpenLeaderboardEvent) {
-        OpenLeaderboardEvent event = (OpenLeaderboardEvent) navigateEvent;
-        controllers.forEach(controller -> {
-          if (controller.getRoot().equals(event.getLeagueTab())) {
-            lastTab = controller.getRoot();
-          }
-        });
-      }
-      leaderboardRoot.getSelectionModel().select(lastTab);
-    } finally {
-      isHandlingEvent = false;
-    }
+  private void setLeague(League league) {
+    navigationHandler.setLastLeagueTab(league);
+    leaderboardService.getSeasons(league)
+                      .collectList()
+                      .publishOn(fxApplicationThreadExecutor.asScheduler())
+                      .subscribe(leaderboardController::setLeagueSeasons, throwable -> {
+                        log.error("Error while loading seasons", throwable);
+                        notificationService.addImmediateErrorNotification(throwable,
+                                                                          "leaderboard.failedToLoadLeaderboards");
+                      });
   }
 }

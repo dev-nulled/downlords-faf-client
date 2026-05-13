@@ -1,11 +1,13 @@
 package com.faforever.client.query;
 
-import com.faforever.client.test.UITest;
+import com.faforever.client.test.PlatformTest;
 import com.github.rutledgepaulv.qbuilders.builders.QBuilder;
 import com.github.rutledgepaulv.qbuilders.conditions.Condition;
 import com.github.rutledgepaulv.qbuilders.properties.concrete.StringProperty;
 import com.github.rutledgepaulv.qbuilders.visitors.RSQLVisitor;
 import javafx.beans.InvalidationListener;
+import javafx.beans.property.BooleanProperty;
+import javafx.beans.property.SimpleBooleanProperty;
 import javafx.scene.layout.GridPane;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 
-public class ToggleFilterControllerTest extends UITest {
+public class ToggleFilterControllerTest extends PlatformTest {
 
   private final String propertyName = "testProp";
   private final String value = "test";
@@ -80,6 +82,18 @@ public class ToggleFilterControllerTest extends UITest {
     Optional<List<Condition>> result = instance.getCondition();
 
     assertTrue(result.isPresent());
-    assertEquals(result.get().get(0).query(new RSQLVisitor()), property.eq(value).query(new RSQLVisitor()));
+    assertEquals(result.get().getFirst().query(new RSQLVisitor()), property.eq(value).query(new RSQLVisitor()));
+  }
+
+  @Test
+  public void testPersistentPropertiesGetsValue() {
+    BooleanProperty property = new SimpleBooleanProperty();
+    property.bind(instance.selectedProperty());
+
+    instance.checkBox.setSelected(true);
+    assertTrue(property.get());
+
+    instance.checkBox.setSelected(false);
+    assertFalse(property.get());
   }
 }

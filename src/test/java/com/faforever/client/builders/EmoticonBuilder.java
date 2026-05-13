@@ -2,11 +2,12 @@ package com.faforever.client.builders;
 
 import com.faforever.client.chat.emoticons.Emoticon;
 
-import java.util.Arrays;
+import java.util.List;
 
 public class EmoticonBuilder {
 
-  private final Emoticon emoticon = new Emoticon();
+  private List<String> shortcodes;
+  private String base64SvgContent;
 
   public static EmoticonBuilder create() {
     return new EmoticonBuilder();
@@ -19,16 +20,16 @@ public class EmoticonBuilder {
   }
 
   public EmoticonBuilder shortcodes(String... shortcodes) {
-    emoticon.setShortcodes(Arrays.asList(shortcodes));
+    this.shortcodes = List.of(shortcodes);
     return this;
   }
 
   public EmoticonBuilder base64SvgContent(String base64SvgContent) {
-    emoticon.setBase64SvgContent(base64SvgContent);
+    this.base64SvgContent = base64SvgContent;
     return this;
   }
 
   public Emoticon get() {
-    return emoticon;
+    return new Emoticon(shortcodes, base64SvgContent);
   }
 }

@@ -2,24 +2,41 @@ package com.faforever.client.preferences;
 
 import com.faforever.client.vault.search.SearchController.SortConfig;
 import com.faforever.client.vault.search.SearchController.SortOrder;
+import com.fasterxml.jackson.annotation.JsonMerge;
 import javafx.beans.property.MapProperty;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleMapProperty;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableMap;
-import lombok.AccessLevel;
-import lombok.experimental.FieldDefaults;
+import lombok.Getter;
 
-@FieldDefaults(makeFinal=true, level= AccessLevel.PRIVATE)
 public class VaultPrefs {
-  ObjectProperty<SortConfig> onlineReplaySortConfig = new SimpleObjectProperty<>(new SortConfig("startTime", SortOrder.DESC));
-  ObjectProperty<SortConfig> mapSortConfig = new SimpleObjectProperty<>(new SortConfig("gamesPlayed", SortOrder.DESC));
-  ObjectProperty<SortConfig> modVaultConfig = new SimpleObjectProperty<>(new SortConfig("latestVersion.createTime", SortOrder.DESC));
-  MapProperty<String, String> savedReplayQueries = new SimpleMapProperty<>(FXCollections.observableHashMap());
-  MapProperty<String, String> savedMapQueries = new SimpleMapProperty<>(FXCollections.observableHashMap());
-  MapProperty<String, String> savedModQueries = new SimpleMapProperty<>(FXCollections.observableHashMap());
-
+  private final ObjectProperty<SortConfig> onlineReplaySortConfig = new SimpleObjectProperty<>(
+      new SortConfig("startTime", SortOrder.DESC));
+  private final ObjectProperty<SortConfig> mapSortConfig = new SimpleObjectProperty<>(
+      new SortConfig("gamesPlayed", SortOrder.DESC));
+  private final ObjectProperty<SortConfig> modVaultConfig = new SimpleObjectProperty<>(
+      new SortConfig("latestVersion.createTime", SortOrder.DESC));
+  private final MapProperty<String, String> savedReplayQueries = new SimpleMapProperty<>(
+      FXCollections.observableHashMap());
+  private final MapProperty<String, String> savedMapQueries = new SimpleMapProperty<>(
+      FXCollections.observableHashMap());
+  private final MapProperty<String, String> savedModQueries = new SimpleMapProperty<>(
+      FXCollections.observableHashMap());
+  @JsonMerge
+  @Getter
+  private final ReplaySearchPrefs replaySearch = new ReplaySearchPrefs();
+  @JsonMerge
+  @Getter
+  private final LiveReplaySearchPrefs liveReplaySearch = new LiveReplaySearchPrefs();
+  @JsonMerge
+  @Getter
+  private final MapSearchPrefs mapSearch = new MapSearchPrefs();
+  @JsonMerge
+  @Getter
+  private final ModSearchPrefs modSearch = new ModSearchPrefs();
+  
   public SortConfig getOnlineReplaySortConfig() {
     return onlineReplaySortConfig.get();
   }

@@ -1,18 +1,13 @@
 package com.faforever.client.chat;
 
-import com.faforever.client.builders.ChatChannelUserBuilder;
-import com.faforever.client.chat.event.ChatMessageEvent;
 import com.faforever.client.net.ConnectionState;
-import com.faforever.client.notification.NotificationService;
-import com.faforever.client.test.UITest;
+import com.faforever.client.test.PlatformTest;
 import com.faforever.client.theme.UiService;
-import com.faforever.client.user.UserService;
-import com.faforever.commons.api.dto.MeResult;
-import com.google.common.eventbus.EventBus;
-import com.google.common.eventbus.Subscribe;
-import javafx.beans.InvalidationListener;
+import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.collections.MapChangeListener;
+import javafx.collections.ObservableList;
+import javafx.collections.ObservableMap;
 import javafx.scene.control.Tab;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -20,192 +15,183 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.springframework.util.ReflectionUtils;
-import org.testfx.util.WaitForAsyncUtils;
+import org.mockito.Spy;
 
-import java.time.Instant;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
+import java.util.Set;
 
-import static com.natpryce.hamcrest.reflection.HasAnnotationMatcher.hasAnnotation;
-import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.CoreMatchers.nullValue;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.hasSize;
+import static javafx.collections.FXCollections.observableHashMap;
+import static javafx.collections.FXCollections.synchronizedObservableMap;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.doReturn;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-// TODO those unit tests need to be improved (missing verifications)
-public class ChatControllerTest extends UITest {
-
-  public static final String TEST_USER_NAME = "junit";
-  private static final String TEST_CHANNEL_NAME = "#testChannel";
-  private static final long TIMEOUT = 1000;
+public class ChatControllerTest extends PlatformTest {
 
   @Mock
-  private ChannelTabController channelTabController;
-  @Mock
-  private PrivateChatTabController privateChatTabController;
-  @Mock
-  private UserService userService;
+  private AbstractChatTabController tabController;
   @Mock
   private UiService uiService;
   @Mock
   private ChatService chatService;
-  @Mock
-  private NotificationService notificationService;
-  @Mock
-  private EventBus eventBus;
+  @Spy
+  private ChatNavigation chatNavigation;
   @Captor
   private ArgumentCaptor<MapChangeListener<String, ChatChannel>> channelsListener;
-  @Captor
-  private ArgumentCaptor<MapChangeListener<String, ChatChannelUser>> onUsersListenerCaptor;
+  private final ObservableMap<String, ChatChannel> channels = synchronizedObservableMap(observableHashMap());
 
+  private final ObjectProperty<ConnectionState> connectionState = new SimpleObjectProperty<>(ConnectionState.DISCONNECTED);
   @InjectMocks
   private ChatController instance;
-  private SimpleObjectProperty<ConnectionState> connectionState;
+  private ObservableList<Tab> openedTabs;
 
   @BeforeEach
   public void setUp() throws Exception {
-    connectionState = new SimpleObjectProperty<>(ConnectionState.DISCONNECTED);
+    lenient().when(chatService.connectionStateProperty()).thenReturn(connectionState);
+    lenient().when(uiService.loadFxml("theme/chat/private_chat_tab.fxml")).thenReturn(tabController);
+    lenient().when(uiService.loadFxml("theme/chat/channel_tab.fxml")).thenReturn(tabController);
+    lenient().when(tabController.getRoot()).thenAnswer(invocation -> new Tab());
 
-    when(uiService.loadFxml("theme/chat/private_chat_tab.fxml")).thenReturn(privateChatTabController);
-    when(uiService.loadFxml("theme/chat/channel_tab.fxml")).thenReturn(channelTabController);
-    when(userService.getUsername()).thenReturn(TEST_USER_NAME);
-    when(userService.getOwnUser()).thenReturn(new MeResult());
-    when(chatService.connectionStateProperty()).thenReturn(connectionState);
 
     loadFxml("theme/chat/chat.fxml", clazz -> instance);
+    openedTabs = instance.tabPane.getTabs();
+  }
 
+  private void setChannelsListener() {
     verify(chatService).addChannelsListener(channelsListener.capture());
+    channels.addListener(channelsListener.getValue());
   }
 
   @Test
-  public void testOnMessageForChannel() {
-    Tab tab = new Tab(TEST_CHANNEL_NAME);
-    tab.setId(TEST_CHANNEL_NAME);
-    when(channelTabController.getRoot()).thenReturn(tab);
-
-    ChatMessage chatMessage = new ChatMessage(TEST_CHANNEL_NAME, Instant.now(), TEST_USER_NAME, "message");
-    instance.onChatMessage(new ChatMessageEvent(chatMessage));
-    WaitForAsyncUtils.waitForFxEvents();
-
-    verify(channelTabController).onChatMessage(chatMessage);
-    verify(privateChatTabController, never()).onChatMessage(chatMessage);
+  public void testOnlyOneAddChannelTabAfterInitialized() {
+    assertEquals(1, openedTabs.size());
+    assertFalse(openedTabs.getFirst().isClosable());
   }
 
   @Test
-  public void testOnDisconnected() throws Exception {
-    connectionState.set(ConnectionState.DISCONNECTED);
+  public void testOnChannelJoined() {
+    setChannelsListener();
+
+    requestChannel("aeolus", true);
+    requestChannel("channel");
+    requestChannel("player");
+
+    assertContainsTab("aeolus");
+    assertContainsTab("channel");
+    assertContainsTab("player");
   }
 
   @Test
-  public void testOnPrivateMessage() throws Exception {
-    when(privateChatTabController.getRoot()).thenReturn(new Tab());
-    ChatMessage chatMessage = new ChatMessage(null, Instant.now(), TEST_USER_NAME, "message");
-    instance.onChatMessage(new ChatMessageEvent(chatMessage));
-    WaitForAsyncUtils.waitForFxEvents();
+  public void testAddedTabShouldBeSelected() {
+    setChannelsListener();
+    requestChannel("channel");
 
-    verify(privateChatTabController).onChatMessage(chatMessage);
-    verify(channelTabController, never()).onChatMessage(chatMessage);
+    assertEquals("channel", chatNavigation.getLastOpenedTabId());
+    assertEquals("channel", instance.tabPane.getSelectionModel().getSelectedItem().getId());
   }
 
   @Test
-  public void testGetRoot() throws Exception {
-    assertThat(instance.getRoot(), is(instance.chatRoot));
-    assertThat(instance.getRoot().getParent(), is(nullValue()));
+  public void testSelectedTabShouldBeRemembered() {
+    setChannelsListener();
+    requestChannel("channel1");
+    requestChannel("channel2");
+
+    assertEquals("channel2", chatNavigation.getLastOpenedTabId());
+    assertEquals("channel2", instance.tabPane.getSelectionModel().getSelectedItem().getId());
+
+    runOnFxThreadAndWait(() -> instance.tabPane.getSelectionModel().selectPrevious());
+
+    assertEquals("channel1", chatNavigation.getLastOpenedTabId());
+    assertEquals("channel1", instance.tabPane.getSelectionModel().getSelectedItem().getId());
+  }
+
+  private void assertContainsTab(String channel) {
+    assertTrue(openedTabs.stream().anyMatch(tab -> tab.getId().equals(channel)));
   }
 
   @Test
-  public void testOpenPrivateMessageTabForUser() throws Exception {
-    Tab tab = new Tab();
-    doAnswer(invocation -> {
-      tab.setId(invocation.getArgument(0));
-      return null;
-    }).when(privateChatTabController).setReceiver(anyString());
-    when(privateChatTabController.getRoot()).thenReturn(tab);
-    WaitForAsyncUtils.waitForAsyncFx(TIMEOUT, () ->
-        instance.onInitiatePrivateChatEvent(new InitiatePrivateChatEvent("user")));
+  public void testOnDisconnected() {
+    setChannelsListener();
+
+    connectionState.set(ConnectionState.CONNECTED);
+    requestChannel("aeolus", true);
+
+    runOnFxThreadAndWait(() -> connectionState.set(ConnectionState.DISCONNECTED));
+    assertTrue(instance.disconnectedPane.isVisible());
+    assertFalse(instance.connectingProgressPane.isVisible());
+    assertFalse(instance.tabPane.isVisible());
+    assertEquals(1, openedTabs.size());
+    assertNull(chatNavigation.getLastOpenedTabId());
   }
 
   @Test
-  public void testOpenPrivateMessageTabForSelf() throws Exception {
-    instance.onInitiatePrivateChatEvent(new InitiatePrivateChatEvent(TEST_USER_NAME));
+  public void testOnConnected() {
+    assertEquals(ConnectionState.DISCONNECTED, connectionState.getValue());
+
+    ChatChannel chatChannelMock1 = mock(ChatChannel.class);
+    ChatChannel chatChannelMock2 = mock(ChatChannel.class);
+    when(chatChannelMock1.getName()).thenReturn("1");
+    when(chatChannelMock2.getName()).thenReturn("2");
+    when(chatService.getChannels()).thenReturn(Set.of(chatChannelMock1, chatChannelMock2));
+
+    runOnFxThreadAndWait(() -> connectionState.set(ConnectionState.CONNECTED));
+
+    assertFalse(instance.disconnectedPane.isVisible());
+    assertFalse(instance.connectingProgressPane.isVisible());
+    assertTrue(instance.tabPane.isVisible());
+    assertEquals(3, openedTabs.size());
   }
 
   @Test
-  public void testOnChannelsJoinedRequest() throws Exception {
-    channelJoined(TEST_CHANNEL_NAME);
-    channelJoined(TEST_CHANNEL_NAME);
-
-    connectionState.set(ConnectionState.DISCONNECTED);
+  public void testOnConnecting() {
+    assertEquals(ConnectionState.DISCONNECTED, connectionState.getValue());
+    runOnFxThreadAndWait(() -> connectionState.set(ConnectionState.CONNECTING));
+    assertFalse(instance.disconnectedPane.isVisible());
+    assertTrue(instance.connectingProgressPane.isVisible());
+    assertFalse(instance.tabPane.isVisible());
   }
 
-  private void channelJoined(String channel) {
-    MapChangeListener.Change<? extends String, ? extends ChatChannel> testChannelChange = mock(MapChangeListener.Change.class);
-    channelsListener.getValue().onChanged(testChannelChange);
+  private void requestChannel(String channel) {
+    requestChannel(channel, false);
   }
 
-  @Test
-  public void testOnJoinChannelButtonClicked() throws Exception {
-    assertEquals(instance.tabPane.getTabs().size(), 1);
-
-    Tab tab = new Tab();
-    tab.setId(TEST_CHANNEL_NAME);
-
-    when(channelTabController.getRoot()).thenReturn(tab);
-    when(userService.getUsername()).thenReturn(TEST_USER_NAME);
-    doAnswer(invocation -> {
-      MapChangeListener.Change<? extends String, ? extends ChatChannel> change = mock(MapChangeListener.Change.class);
-      when(change.wasAdded()).thenReturn(true);
-      doReturn(new ChatChannel(invocation.getArgument(0))).when(change).getValueAdded();
-      channelsListener.getValue().onChanged(change);
-      return null;
-    }).when(chatService).joinChannel(anyString());
-
-    instance.channelNameTextField.setText(TEST_CHANNEL_NAME);
-    instance.onJoinChannelButtonClicked();
-
-    verify(chatService).joinChannel(TEST_CHANNEL_NAME);
-    verify(chatService).addUsersListener(eq(TEST_CHANNEL_NAME), onUsersListenerCaptor.capture());
-
-    MapChangeListener.Change<? extends String, ? extends ChatChannelUser> change = mock(MapChangeListener.Change.class);
-    when(change.wasAdded()).thenReturn(true);
-    doReturn(ChatChannelUserBuilder.create(TEST_USER_NAME, TEST_CHANNEL_NAME).defaultValues().get()).when(change).getValueAdded();
-    onUsersListenerCaptor.getValue().onChanged(change);
-
-    CountDownLatch tabAddedLatch = new CountDownLatch(1);
-    instance.tabPane.getTabs().addListener((InvalidationListener) observable -> tabAddedLatch.countDown());
-    tabAddedLatch.await(2, TimeUnit.SECONDS);
-
-    assertThat(instance.tabPane.getTabs(), hasSize(2));
-    assertThat(instance.tabPane.getTabs().get(0).getId(), is(TEST_CHANNEL_NAME));
+  private void requestChannel(String channel, boolean isDefaultChannel) {
+    ChatChannel chatChannelMock = mock(ChatChannel.class);
+    when(chatChannelMock.getName()).thenReturn(channel);
+    when(chatService.isDefaultChannel(chatChannelMock)).thenReturn(isDefaultChannel);
+    channels.putIfAbsent(channel, chatChannelMock);
+    waitFxEvents();
   }
 
   @Test
-  public void testOnJoinChannelButtonClickedInvalidChannel() throws Exception {
-    assertEquals(instance.tabPane.getTabs().size(), 1);
+  public void testOnChannelLeft() {
+    setChannelsListener();
+    requestChannel("aeolus", true);
+    requestChannel("channel", false);
 
-    Tab tab = new Tab();
-    tab.setId(TEST_CHANNEL_NAME);
-
-    instance.channelNameTextField.setText(TEST_CHANNEL_NAME.replace("#", ""));
-    instance.onJoinChannelButtonClicked();
-
-    verify(chatService).joinChannel(TEST_CHANNEL_NAME);
+    Tab tab = openedTabs.stream().filter(tab1 -> tab1.getId().equals("aeolus")).findFirst().orElseThrow();
+    runOnFxThreadAndWait(() -> openedTabs.remove(tab));
+    assertEquals(2, openedTabs.size());
   }
 
   @Test
-  public void testSubscribeAnnotations() {
-    assertThat(ReflectionUtils.findMethod(
-        instance.getClass(), "onInitiatePrivateChatEvent", InitiatePrivateChatEvent.class),
-        hasAnnotation(Subscribe.class));
+  public void testOnJoinChannelButtonClicked() {
+    runOnFxThreadAndWait(() -> {
+      instance.channelNameTextField.setText("newChannel");
+      instance.onJoinChannelButtonClicked();
+    });
+
+    verify(chatService).joinChannel("#newChannel");
+    assertTrue(instance.channelNameTextField.getText().isEmpty());
+  }
+
+  @Test
+  public void testOnConnectButtonClicked() {
+    runOnFxThreadAndWait(() -> instance.onConnectButtonClicked());
+    verify(chatService).connect();
   }
 }

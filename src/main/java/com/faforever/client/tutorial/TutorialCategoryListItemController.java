@@ -1,8 +1,8 @@
 package com.faforever.client.tutorial;
 
 
-import com.faforever.client.domain.TutorialCategoryBean;
-import com.faforever.client.fx.AbstractViewController;
+import com.faforever.client.domain.api.TutorialCategory;
+import com.faforever.client.fx.NodeController;
 import javafx.scene.Node;
 import javafx.scene.control.Label;
 import javafx.scene.layout.HBox;
@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
-public class TutorialCategoryListItemController extends AbstractViewController<Node> {
+public class TutorialCategoryListItemController extends NodeController<Node> {
   public HBox root;
   public Label titleLabel;
 
@@ -23,7 +23,7 @@ public class TutorialCategoryListItemController extends AbstractViewController<N
     return root;
   }
 
-  public void setCategory(TutorialCategoryBean category) {
-    titleLabel.setText(category.getCategory());
+  public void setCategory(TutorialCategory category) {
+    titleLabel.setText(category.category());
   }
 }
